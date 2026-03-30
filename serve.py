@@ -45,7 +45,8 @@ li{margin-bottom:8px;line-height:1.6;color:#ccc}
       <li><strong>Limite massimo uccisioni</strong> &mdash; il bot si ferma automaticamente raggiunto il limite</li>
       <li><strong>Joystick virtuale</strong> &mdash; imposta il centro del joystick e il bot pattuglia la stanza in automatico (N&rarr;E&rarr;S&rarr;W)</li>
       <li><strong>Rotazione visuale</strong> &mdash; imposta un punto nella zona centrale dello schermo; ogni 4 cicli il bot swipe destra&harr;sinistra per ruotare la telecamera e cercare i mostri</li>
-      <li><strong>Timing sicuro</strong> &mdash; ciclo fisso 800ms: joystick (350ms) &rarr; attacco (+400ms) &rarr; abilit&agrave; (+520/+640ms) &rarr; ciclo successivo (+800ms), nessun conflitto tra gesti</li>
+      <li><strong>Rilevamento mostri via pixel</strong> &mdash; su Android 11+ il bot cattura lo schermo ogni 1.2s, trova i pixel rossi (nomi nemici), calcola il centroide e tocca l&agrave; per selezionare il bersaglio prima di attaccare</li>
+      <li><strong>Timing sicuro</strong> &mdash; ciclo fisso 800ms: movimento (350ms) &rarr; selezione bersaglio (+400ms) &rarr; attacco (+550ms) &rarr; abilit&agrave; (+700ms), nessun conflitto tra gesti</li>
       <li><strong>Overlay draggabile</strong> &mdash; pannello flottante con contatore kills e pulsanti Start/Stop</li>
       <li><strong>Fix crash Android 14</strong> &mdash; <code>foregroundServiceType="specialUse"</code> nel manifest</li>
     </ul>
