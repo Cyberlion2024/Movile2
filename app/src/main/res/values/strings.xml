@@ -8,9 +8,4 @@
     <string name="accessibility_service_description">Accessibility macro service for tap/swipe loop.</string>
     <string name="status_running">Bot running</string>
     <string name="status_stopped">Bot stopped</string>
-    <string name="hint_monster_name">Monster name (exact/partial)</string>
-    <string name="hint_max_kills">Max kills</string>
-    <string name="save_config">Save Bot Config</string>
-    <string name="saved">Saved</string>
-    <string name="learn_perimeter">Learn room perimeter while running</string>
 </resources>
