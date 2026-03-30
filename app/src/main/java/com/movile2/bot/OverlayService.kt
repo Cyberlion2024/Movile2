@@ -32,9 +32,22 @@ class OverlayService : Service() {
     private val ticker = object : Runnable {
         override fun run() {
             val running = BotState.isRunning
-            tvKills?.text  = "Kills: ${BotState.killCount}"
-            tvStatus?.text = if (running) "● RUNNING" else "● STOP"
-            tvStatus?.setTextColor(if (running) Color.GREEN else Color.RED)
+            val defend  = BotState.underAttack
+            tvKills?.text = "Kills: ${BotState.killCount}"
+            when {
+                !running -> {
+                    tvStatus?.text = "● STOP"
+                    tvStatus?.setTextColor(Color.RED)
+                }
+                defend -> {
+                    tvStatus?.text = "🛡 DIFESA"
+                    tvStatus?.setTextColor(Color.YELLOW)
+                }
+                else -> {
+                    tvStatus?.text = "● RUNNING"
+                    tvStatus?.setTextColor(Color.GREEN)
+                }
+            }
             btnToggle?.text = if (running) "⏸ PAUSA" else "▶ START"
             handler.postDelayed(this, 500)
         }

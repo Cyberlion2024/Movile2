@@ -89,7 +89,7 @@ abilita Movile2 Bot (non usare il menu principale Accessibilità)"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:layout_marginBottom="12dp">
+            android:layout_marginBottom="8dp">
 
             <TextView
                 android:layout_width="0dp"
@@ -107,6 +107,132 @@ abilita Movile2 Bot (non usare il menu principale Accessibilità)"
                 android:textColor="#ffffff"
                 android:background="#1e1e3a"
                 android:padding="8dp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="12dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Timer sessione (min, 0=infinito):"
+                android:textColor="#cccccc"
+                android:gravity="center_vertical" />
+
+            <EditText
+                android:id="@+id/etSessionMinutes"
+                android:layout_width="80dp"
+                android:layout_height="wrap_content"
+                android:inputType="number"
+                android:textColor="#ffffff"
+                android:background="#1e1e3a"
+                android:padding="8dp"
+                android:text="0" />
+        </LinearLayout>
+
+        <!-- ── Barra HP ───────────────────────────────────────────────────── -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="❤ Barra HP (top-left)"
+            android:textSize="15sp"
+            android:textColor="#4fc3f7"
+            android:textStyle="bold"
+            android:paddingBottom="4dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Tocca il bordo sinistro della barra HP a vita piena. Il bot monitorerà la tua vita: pozione automatica se scende sotto soglia, modalità difesa se continua a calare."
+            android:textSize="11sp"
+            android:textColor="#aaaaaa"
+            android:paddingBottom="6dp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="8dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Bordo sinistro barra HP:"
+                android:textColor="#cccccc"
+                android:gravity="center_vertical" />
+
+            <TextView
+                android:id="@+id/tvHpBarCoord"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="non impostato"
+                android:textColor="#ef9a9a"
+                android:gravity="center_vertical" />
+
+            <Button
+                android:id="@+id/btnPickHpBar"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Imposta"
+                android:textSize="12sp"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="8dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Larghezza barra piena (px):"
+                android:textColor="#cccccc"
+                android:gravity="center_vertical" />
+
+            <EditText
+                android:id="@+id/etHpBarFullWidth"
+                android:layout_width="80dp"
+                android:layout_height="wrap_content"
+                android:inputType="number"
+                android:textColor="#ffffff"
+                android:background="#1e1e3a"
+                android:padding="8dp"
+                android:text="180" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="12dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Soglia pozione HP (%, es. 85):"
+                android:textColor="#cccccc"
+                android:gravity="center_vertical" />
+
+            <EditText
+                android:id="@+id/etHpPotionThreshold"
+                android:layout_width="80dp"
+                android:layout_height="wrap_content"
+                android:inputType="number"
+                android:textColor="#ffffff"
+                android:background="#1e1e3a"
+                android:padding="8dp"
+                android:text="85" />
         </LinearLayout>
 
         <!-- ── Joystick Movimento ─────────────────────────────────────────── -->
@@ -198,7 +324,7 @@ abilita Movile2 Bot (non usare il menu principale Accessibilità)"
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Tocca il centro dell'area che muove la visuale (zona centrale-destra dello schermo). Ogni 4 cicli il bot ruota automaticamente la telecamera destra↔sinistra."
+            android:text="Tocca il centro dell'area che muove la visuale. Ogni 4 cicli il bot ruota la telecamera destra↔sinistra, ma solo se non ha già un bersaglio visibile."
             android:textSize="11sp"
             android:textColor="#aaaaaa"
             android:paddingBottom="6dp" />
@@ -338,6 +464,7 @@ abilita Movile2 Bot (non usare il menu principale Accessibilità)"
             android:textStyle="bold"
             android:paddingBottom="8dp" />
 
+        <!-- Abilità 1 -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -395,6 +522,7 @@ abilita Movile2 Bot (non usare il menu principale Accessibilità)"
                 android:padding="8dp" />
         </LinearLayout>
 
+        <!-- Abilità 2 -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -432,7 +560,7 @@ abilita Movile2 Bot (non usare il menu principale Accessibilità)"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:layout_marginBottom="12dp">
+            android:layout_marginBottom="8dp">
 
             <TextView
                 android:layout_width="0dp"
@@ -450,6 +578,65 @@ abilita Movile2 Bot (non usare il menu principale Accessibilità)"
                 android:textColor="#ffffff"
                 android:background="#1e1e3a"
                 android:padding="8dp" />
+        </LinearLayout>
+
+        <!-- Abilità 3 (opzionale) -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="8dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Abilità 3 (opzionale):"
+                android:textColor="#cccccc"
+                android:gravity="center_vertical" />
+
+            <TextView
+                android:id="@+id/tvSkill3Coord"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="non impostato"
+                android:textColor="#80cbc4"
+                android:gravity="center_vertical" />
+
+            <Button
+                android:id="@+id/btnPickSkill3"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Imposta"
+                android:textSize="12sp"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="12dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Cooldown Abilità 3 (sec):"
+                android:textColor="#cccccc"
+                android:gravity="center_vertical" />
+
+            <EditText
+                android:id="@+id/etSkill3Cd"
+                android:layout_width="80dp"
+                android:layout_height="wrap_content"
+                android:inputType="number"
+                android:textColor="#ffffff"
+                android:background="#1e1e3a"
+                android:padding="8dp"
+                android:text="8" />
         </LinearLayout>
 
         <!-- ── Pozioni ────────────────────────────────────────────────────── -->

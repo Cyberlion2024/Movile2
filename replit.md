@@ -18,21 +18,29 @@ Android bot app in Kotlin for MMORPG automation using Accessibility Service + Ov
 | `BotConfig.kt` | Data class + SharedPreferences per persistere le impostazioni |
 | `BotState.kt` | Singleton condiviso per stato runtime (isRunning, killCount) |
 
-## Features v3
-- Joystick virtuale: imposta il centro del joystick e il bot pattuglia N→E→S→W
-- Movimento e attacco simultanei: joystickPush(350ms) + tap attacco + skills
-- Mappa area di ricerca con angoli toccabili sullo schermo (fallback senza joystick)
-- Ricerca mostro per nome (via albero accessibilità)
-- Attacco + abilità 1 e 2 con cooldown separati
+## Features v4
+- Joystick virtuale: pattuglia N→E→S→W con raggio configurabile
+- Rilevamento mostri via pixel rossi (nomi nemici): selezione + attacco
+- FIX: rotazione camera saltata se bersaglio già visibile (bug loop ricerca)
+- Monitor barra HP (top-left): pixel rossi della barra vita → pozione auto se < soglia
+- Modalità Difesa: se HP continua a calare → spam attacco su tutto finché si stabilizza
+- 3 abilità con cooldown separati (skill3 opzionale)
+- Timer di sessione: auto-stop dopo X minuti (0 = infinito)
 - Pozioni automatiche + ricarica dall'inventario
 - Limite massimo uccisioni configurabile
 - Fix crash Android 14 (foregroundServiceType = specialUse)
 - Fix accessibilità su MIUI/Samsung (config semplificata)
+- Overlay: mostra stato RUNNING / 🛡 DIFESA / STOP
 
-## State Machine v3
-- HUNT: ciclo fisso 800ms
-  - Cicli normali: joystickPush(350ms) → attacco(+400ms) → skill1(+520ms) → skill2(+640ms)
-  - Ogni 4 cicli: cameraSwipe(250ms) invece del joystick → attacco(+300ms) → skills(+420/+540ms)
+## State Machine v4
+- HUNT: ciclo 800ms
+  - Se underAttack → passa subito a DEFEND
+  - Se HP < soglia e hpBar configurata → POTION
+  - Se bersaglio visibile: selezione pixel → attacco (no rotazione camera)
+  - Ogni 4 cicli (solo se NO bersaglio): cameraSwipe per cercare mostri
+- DEFEND: ciclo 400ms, spam attacco + abilità disponibili
+  - Se HP si stabilizza per 3 cicli → torna a HUNT
+  - Se HP < soglia → POTION poi torna DEFEND
 - POTION: tap slot pozione
 - REFILL: swipe inventario → slot
 
