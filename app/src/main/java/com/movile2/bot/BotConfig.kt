@@ -23,6 +23,14 @@ data class BotConfig(
     val skill3Y: Float = 0f,
     val skill3CooldownMs: Long = 8000L,
 
+    val skill4X: Float = 0f,
+    val skill4Y: Float = 0f,
+    val skill4CooldownMs: Long = 12000L,
+
+    val skill5X: Float = 0f,
+    val skill5Y: Float = 0f,
+    val skill5CooldownMs: Long = 15000L,
+
     val potionX: Float = 0f,
     val potionY: Float = 0f,
     val maxPotionsInSlot: Int = 10,
@@ -66,6 +74,12 @@ data class BotConfig(
                 skill3X           = p.getFloat("skill3X", 0f),
                 skill3Y           = p.getFloat("skill3Y", 0f),
                 skill3CooldownMs  = p.getLong("skill3CooldownMs", 8000L),
+                skill4X           = p.getFloat("skill4X", 0f),
+                skill4Y           = p.getFloat("skill4Y", 0f),
+                skill4CooldownMs  = p.getLong("skill4CooldownMs", 12000L),
+                skill5X           = p.getFloat("skill5X", 0f),
+                skill5Y           = p.getFloat("skill5Y", 0f),
+                skill5CooldownMs  = p.getLong("skill5CooldownMs", 15000L),
                 potionX           = p.getFloat("potionX", 0f),
                 potionY           = p.getFloat("potionY", 0f),
                 maxPotionsInSlot  = p.getInt("maxPotionsInSlot", 10),
@@ -101,6 +115,12 @@ data class BotConfig(
                 putFloat("skill3X", cfg.skill3X)
                 putFloat("skill3Y", cfg.skill3Y)
                 putLong("skill3CooldownMs", cfg.skill3CooldownMs)
+                putFloat("skill4X", cfg.skill4X)
+                putFloat("skill4Y", cfg.skill4Y)
+                putLong("skill4CooldownMs", cfg.skill4CooldownMs)
+                putFloat("skill5X", cfg.skill5X)
+                putFloat("skill5Y", cfg.skill5Y)
+                putLong("skill5CooldownMs", cfg.skill5CooldownMs)
                 putFloat("potionX", cfg.potionX)
                 putFloat("potionY", cfg.potionY)
                 putInt("maxPotionsInSlot", cfg.maxPotionsInSlot)

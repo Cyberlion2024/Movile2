@@ -618,7 +618,7 @@ abilita Movile2 Bot (non usare il menu principale Accessibilità)"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:layout_marginBottom="12dp">
+            android:layout_marginBottom="8dp">
 
             <TextView
                 android:layout_width="0dp"
@@ -637,6 +637,124 @@ abilita Movile2 Bot (non usare il menu principale Accessibilità)"
                 android:background="#1e1e3a"
                 android:padding="8dp"
                 android:text="8" />
+        </LinearLayout>
+
+        <!-- Abilità 4 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="8dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Abilità 4 (opzionale):"
+                android:textColor="#cccccc"
+                android:gravity="center_vertical" />
+
+            <TextView
+                android:id="@+id/tvSkill4Coord"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="non impostato"
+                android:textColor="#80cbc4"
+                android:gravity="center_vertical" />
+
+            <Button
+                android:id="@+id/btnPickSkill4"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Imposta"
+                android:textSize="12sp"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="8dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Cooldown Abilità 4 (sec):"
+                android:textColor="#cccccc"
+                android:gravity="center_vertical" />
+
+            <EditText
+                android:id="@+id/etSkill4Cd"
+                android:layout_width="80dp"
+                android:layout_height="wrap_content"
+                android:inputType="number"
+                android:textColor="#ffffff"
+                android:background="#1e1e3a"
+                android:padding="8dp"
+                android:text="12" />
+        </LinearLayout>
+
+        <!-- Abilità 5 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="8dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Abilità 5 (opzionale):"
+                android:textColor="#cccccc"
+                android:gravity="center_vertical" />
+
+            <TextView
+                android:id="@+id/tvSkill5Coord"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="non impostato"
+                android:textColor="#80cbc4"
+                android:gravity="center_vertical" />
+
+            <Button
+                android:id="@+id/btnPickSkill5"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Imposta"
+                android:textSize="12sp"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="12dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Cooldown Abilità 5 (sec):"
+                android:textColor="#cccccc"
+                android:gravity="center_vertical" />
+
+            <EditText
+                android:id="@+id/etSkill5Cd"
+                android:layout_width="80dp"
+                android:layout_height="wrap_content"
+                android:inputType="number"
+                android:textColor="#ffffff"
+                android:background="#1e1e3a"
+                android:padding="8dp"
+                android:text="15" />
         </LinearLayout>
 
         <!-- ── Pozioni ────────────────────────────────────────────────────── -->

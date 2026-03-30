@@ -22,6 +22,8 @@ class BotAccessibilityService : AccessibilityService() {
     private var lastSkill1Ms = 0L
     private var lastSkill2Ms = 0L
     private var lastSkill3Ms = 0L
+    private var lastSkill4Ms = 0L
+    private var lastSkill5Ms = 0L
     private var potionUsesInSlot = 0
     private var huntCycles = 0
 
@@ -226,6 +228,8 @@ class BotAccessibilityService : AccessibilityService() {
         lastSkill1Ms  = 0L
         lastSkill2Ms  = 0L
         lastSkill3Ms  = 0L
+        lastSkill4Ms  = 0L
+        lastSkill5Ms  = 0L
         phase         = Phase.HUNT
         patrolDir     = 0
         patrolSteps   = 0
@@ -324,11 +328,22 @@ class BotAccessibilityService : AccessibilityService() {
         // Abilità 3 (opzionale, solo se configurata)
         if (cfg.skill3X > 0f && cfg.skill3Y > 0f && now - lastSkill3Ms >= cfg.skill3CooldownMs) {
             handler.postDelayed({
-                if (BotState.isRunning) {
-                    tap(cfg.skill3X, cfg.skill3Y)
-                    lastSkill3Ms = System.currentTimeMillis()
-                }
+                if (BotState.isRunning) { tap(cfg.skill3X, cfg.skill3Y); lastSkill3Ms = System.currentTimeMillis() }
             }, base + 600L)
+        }
+
+        // Abilità 4
+        if (cfg.skill4X > 0f && cfg.skill4Y > 0f && now - lastSkill4Ms >= cfg.skill4CooldownMs) {
+            handler.postDelayed({
+                if (BotState.isRunning) { tap(cfg.skill4X, cfg.skill4Y); lastSkill4Ms = System.currentTimeMillis() }
+            }, base + 700L)
+        }
+
+        // Abilità 5
+        if (cfg.skill5X > 0f && cfg.skill5Y > 0f && now - lastSkill5Ms >= cfg.skill5CooldownMs) {
+            handler.postDelayed({
+                if (BotState.isRunning) { tap(cfg.skill5X, cfg.skill5Y); lastSkill5Ms = System.currentTimeMillis() }
+            }, base + 750L)
         }
 
         huntCycles++
@@ -375,6 +390,16 @@ class BotAccessibilityService : AccessibilityService() {
             handler.postDelayed({
                 if (BotState.isRunning) { tap(cfg.skill3X, cfg.skill3Y); lastSkill3Ms = System.currentTimeMillis() }
             }, 400L)
+        }
+        if (cfg.skill4X > 0f && now - lastSkill4Ms >= cfg.skill4CooldownMs) {
+            handler.postDelayed({
+                if (BotState.isRunning) { tap(cfg.skill4X, cfg.skill4Y); lastSkill4Ms = System.currentTimeMillis() }
+            }, 500L)
+        }
+        if (cfg.skill5X > 0f && now - lastSkill5Ms >= cfg.skill5CooldownMs) {
+            handler.postDelayed({
+                if (BotState.isRunning) { tap(cfg.skill5X, cfg.skill5Y); lastSkill5Ms = System.currentTimeMillis() }
+            }, 600L)
         }
 
         next(DEFEND_CYCLE_MS)
