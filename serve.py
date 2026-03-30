@@ -13,9 +13,9 @@ PAGE = """<!DOCTYPE html>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Segoe UI',sans-serif;background:#0f0f1a;color:#e0e0e0;min-height:100vh;padding:32px 20px}
-.wrap{max-width:820px;margin:0 auto}
+.wrap{max-width:860px;margin:0 auto}
 h1{font-size:2rem;color:#4fc3f7;margin-bottom:6px}
-.sub{color:#888;margin-bottom:30px;font-size:.95rem}
+.sub{color:#888;margin-bottom:24px;font-size:.95rem}
 .card{background:#1a1a2e;border:1px solid #1e3a5f;border-radius:10px;padding:22px;margin-bottom:18px}
 .card h2{color:#4fc3f7;font-size:1.1rem;margin-bottom:14px}
 table{width:100%;border-collapse:collapse;font-size:.9rem}
@@ -23,74 +23,70 @@ td,th{padding:8px 10px;border-bottom:1px solid #1e3a5f;text-align:left}
 th{color:#4fc3f7;font-weight:600}
 code,pre{background:#0a0a14;border-radius:6px;padding:3px 8px;font-size:.88rem;color:#a5d6a7}
 pre{display:block;padding:14px;overflow-x:auto;margin-top:8px}
-.badge{display:inline-block;background:#1e3a5f;color:#4fc3f7;border-radius:20px;padding:3px 12px;font-size:.8rem;margin:2px}
 ol,ul{padding-left:18px}
-ol li,ul li{margin-bottom:8px;line-height:1.6;color:#ccc}
-.step-num{display:inline-block;background:#4fc3f7;color:#0f0f1a;border-radius:50%;width:22px;height:22px;text-align:center;line-height:22px;font-weight:bold;font-size:.8rem;margin-right:8px}
-a{color:#80cbc4;text-decoration:none}
-a:hover{text-decoration:underline}
+li{margin-bottom:8px;line-height:1.6;color:#ccc}
+.badge{display:inline-block;background:#0d3b6e;color:#4fc3f7;border-radius:4px;padding:2px 8px;font-size:.8rem;margin:2px}
+.warn{background:#1a1400;border:1px solid #665500;border-radius:8px;padding:12px 16px;color:#ffcc44;font-size:.9rem;margin-top:10px}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>&#129302; Movile2 Kotlin Overlay Bot</h1>
-  <p class="sub">App Android per automazione con overlay e Accessibility Service</p>
+  <h1>&#129302; Movile2 Bot</h1>
+  <p class="sub">Bot Android per MMORPG &mdash; Kotlin + Accessibility Service</p>
 
   <div class="card">
-    <h2>&#128241; Informazioni App</h2>
-    <table>
-      <tr><th>Campo</th><th>Valore</th></tr>
-      <tr><td>Package</td><td><code>com.movile2.bot</code></td></tr>
-      <tr><td>Linguaggio</td><td>Kotlin</td></tr>
-      <tr><td>Min SDK</td><td>26 (Android 8.0 Oreo)</td></tr>
-      <tr><td>Target SDK</td><td>34 (Android 14)</td></tr>
-      <tr><td>Build System</td><td>Gradle (Kotlin DSL)</td></tr>
-      <tr><td>Version</td><td>1.0</td></tr>
-    </table>
-  </div>
-
-  <div class="card">
-    <h2>&#9881; Componenti</h2>
+    <h2>&#10024; Funzionalit&agrave; v2</h2>
     <ul>
-      <li><strong>MainActivity</strong> &mdash; Gestione permessi: overlay, accessibility, start/stop servizio</li>
-      <li><strong>OverlayService</strong> &mdash; Bottone flottante con notifica persistente (Foreground Service)</li>
-      <li><strong>BotAccessibilityService</strong> &mdash; Loop gesture per attacchi, abilit&agrave; e movimento</li>
+      <li><strong>Mappa area di ricerca</strong> &mdash; imposta i due angoli della stanza toccan do lo schermo direttamente</li>
+      <li><strong>Ricerca per nome mostro</strong> &mdash; scrivi il nome e il bot lo cerca nell'albero UI (funziona se il gioco usa viste Android standard)</li>
+      <li><strong>Griglia di ricerca 5x4</strong> &mdash; il PG percorre sistematicamente tutta l'area in pattern a serpentina</li>
+      <li><strong>Attacco continuo + abilit&agrave; con cooldown</strong> &mdash; configurabili in secondi</li>
+      <li><strong>Pozioni automatiche</strong> &mdash; tap sullo slot, e se finiscono, trascina dall'inventario allo slot</li>
+      <li><strong>Limite massimo uccisioni</strong> &mdash; il bot si ferma automaticamente raggiunto il limite</li>
+      <li><strong>Overlay draggabile</strong> &mdash; pannello flottante con contatore kills e pulsanti Start/Stop</li>
+      <li><strong>Fix crash Android 14</strong> &mdash; <code>foregroundServiceType="specialUse"</code> nel manifest</li>
     </ul>
   </div>
 
   <div class="card">
-    <h2>&#127919; Coordinate Gesture (calibrare per il proprio dispositivo)</h2>
+    <h2>&#128241; Info App</h2>
     <table>
-      <tr><th>Azione</th><th>Coordinate</th><th>File da modificare</th></tr>
-      <tr><td>Attack</td><td>(950, 700)</td><td><code>BotAccessibilityService.kt</code></td></tr>
-      <tr><td>Skill 1</td><td>(850, 650)</td><td><code>BotAccessibilityService.kt</code></td></tr>
-      <tr><td>Skill 2</td><td>(780, 720)</td><td><code>BotAccessibilityService.kt</code></td></tr>
-      <tr><td>Move swipe</td><td>(500,800)&rarr;(500,400)</td><td><code>BotAccessibilityService.kt</code></td></tr>
+      <tr><th>Campo</th><th>Valore</th></tr>
+      <tr><td>Package</td><td><code>com.movile2.bot</code></td></tr>
+      <tr><td>Linguaggio</td><td>Kotlin</td></tr>
+      <tr><td>Min SDK</td><td>26 (Android 8.0)</td></tr>
+      <tr><td>Target SDK</td><td>34 (Android 14)</td></tr>
+      <tr><td>Build System</td><td>Gradle Kotlin DSL</td></tr>
     </table>
   </div>
 
   <div class="card">
-    <h2>&#128640; Come costruire l'APK</h2>
-    <p style="margin-bottom:12px;color:#aaa">Usa <strong>GitHub Actions</strong> (file gi&agrave; configurato nel repo) per build automatico ad ogni push:</p>
+    <h2>&#128274; Prima configurazione sull'Android</h2>
     <ol>
-      <li><span class="step-num">1</span>Push del codice su GitHub</li>
-      <li><span class="step-num">2</span>GitHub Actions esegue automaticamente <code>gradle assembleDebug</code></li>
-      <li><span class="step-num">3</span>Scarica l'APK dagli <strong>Artifacts</strong> del workflow in Actions</li>
+      <li>Installa l'APK &rarr; apri l'app</li>
+      <li>Tocca <strong>1. Permesso Overlay</strong> &rarr; abilita</li>
+      <li>Tocca <strong>2. Accessibilit&agrave;</strong> &rarr; trova <em>Movile2 Bot</em> e abilita</li>
+      <li>Configura le coordinate toccando <strong>Imposta</strong> accanto ad ogni voce</li>
+      <li>Tocca <strong>SALVA IMPOSTAZIONI</strong></li>
+      <li>Tocca <strong>Avvia Overlay</strong> &rarr; passa al gioco</li>
+      <li>Usa il pannello flottante per START/STOP</li>
     </ol>
-    <p style="margin-top:14px;color:#aaa">Oppure su macchina locale con Android SDK:</p>
-    <pre>gradle assembleDebug
-# Output: app/build/outputs/apk/debug/app-debug.apk</pre>
+    <div class="warn">
+      ⚠ <strong>MIUI / Samsung:</strong> Se l'accessibilit&agrave; dice "impostazione non disponibile",
+      vai in <em>Impostazioni &rsaquo; Accessibilit&agrave; &rsaquo; App installate</em> (non il menu principale)
+      e abilita Movile2 Bot da l&igrave;.
+    </div>
   </div>
 
   <div class="card">
-    <h2>&#128274; Setup sull'Android</h2>
+    <h2>&#128640; Build APK via GitHub Actions</h2>
     <ol>
-      <li>Installa l'APK sul dispositivo</li>
-      <li>Apri l'app &rarr; tocca <strong>Grant Overlay Permission</strong></li>
-      <li>Tocca <strong>Open Accessibility Settings</strong> &rarr; abilita <em>Movile2 Bot</em></li>
-      <li>Tocca <strong>Start Overlay</strong> &rarr; passa al gioco</li>
-      <li>Usa il bottone flottante per ON/OFF</li>
+      <li>Fai push su GitHub</li>
+      <li>GitHub Actions esegue <code>gradle assembleDebug</code> automaticamente</li>
+      <li>Scarica l'APK da <strong>Actions &rsaquo; Artifacts</strong></li>
     </ol>
+    <pre>gradle assembleDebug
+# Output: app/build/outputs/apk/debug/app-debug.apk</pre>
   </div>
 </div>
 </body>

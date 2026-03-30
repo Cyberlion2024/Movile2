@@ -1,27 +1,111 @@
 package com.movile2.bot
 
+import android.app.Activity
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
-import android.widget.Button
+import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 
 class MainActivity : AppCompatActivity() {
 
+    private lateinit var cfg: BotConfig
+
+    private lateinit var etMonsterName: EditText
+    private lateinit var etMaxKills: EditText
+    private lateinit var etAttackDelay: EditText
+    private lateinit var tvAttackCoord: TextView
+    private lateinit var tvSkill1Coord: TextView
+    private lateinit var etSkill1Cd: EditText
+    private lateinit var tvSkill2Coord: TextView
+    private lateinit var etSkill2Cd: EditText
+    private lateinit var tvPotionCoord: TextView
+    private lateinit var etMaxPotions: EditText
+    private lateinit var tvBackupPotionCoord: TextView
+    private lateinit var tvSearchTL: TextView
+    private lateinit var tvSearchBR: TextView
+
+    private var pendingKey = ""
+
+    companion object {
+        private const val REQ = 101
+        private const val K_ATTACK  = "attack"
+        private const val K_SK1     = "sk1"
+        private const val K_SK2     = "sk2"
+        private const val K_POTION  = "potion"
+        private const val K_BACKUP  = "backup"
+        private const val K_TL      = "tl"
+        private const val K_BR      = "br"
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+        cfg = BotConfig.load(this)
+        bind()
+        populate()
+        hooks()
+    }
+
+    private fun bind() {
+        etMonsterName       = findViewById(R.id.etMonsterName)
+        etMaxKills          = findViewById(R.id.etMaxKills)
+        etAttackDelay       = findViewById(R.id.etAttackDelay)
+        tvAttackCoord       = findViewById(R.id.tvAttackCoord)
+        tvSkill1Coord       = findViewById(R.id.tvSkill1Coord)
+        etSkill1Cd          = findViewById(R.id.etSkill1Cd)
+        tvSkill2Coord       = findViewById(R.id.tvSkill2Coord)
+        etSkill2Cd          = findViewById(R.id.etSkill2Cd)
+        tvPotionCoord       = findViewById(R.id.tvPotionCoord)
+        etMaxPotions        = findViewById(R.id.etMaxPotions)
+        tvBackupPotionCoord = findViewById(R.id.tvBackupPotionCoord)
+        tvSearchTL          = findViewById(R.id.tvSearchTL)
+        tvSearchBR          = findViewById(R.id.tvSearchBR)
+    }
+
+    private fun populate() {
+        etMonsterName.setText(cfg.monsterName)
+        etMaxKills.setText(cfg.maxKills.toString())
+        etAttackDelay.setText(cfg.attackDelayMs.toString())
+        tvAttackCoord.text        = xy(cfg.attackX, cfg.attackY)
+        tvSkill1Coord.text        = xy(cfg.skill1X, cfg.skill1Y)
+        etSkill1Cd.setText((cfg.skill1CooldownMs / 1000).toString())
+        tvSkill2Coord.text        = xy(cfg.skill2X, cfg.skill2Y)
+        etSkill2Cd.setText((cfg.skill2CooldownMs / 1000).toString())
+        tvPotionCoord.text        = xy(cfg.potionX, cfg.potionY)
+        etMaxPotions.setText(cfg.maxPotionsInSlot.toString())
+        tvBackupPotionCoord.text  = xy(cfg.backupPotionX, cfg.backupPotionY)
+        tvSearchTL.text           = xy(cfg.searchLeft, cfg.searchTop)
+        tvSearchBR.text           = xy(cfg.searchRight, cfg.searchBottom)
+    }
+
+    private fun hooks() {
+        fun pick(key: String, label: String, tv: TextView) {
+            pendingKey = key
+            startActivityForResult(
+                Intent(this, CoordinatePickerActivity::class.java)
+                    .putExtra(CoordinatePickerActivity.EXTRA_LABEL, label), REQ
+            )
+            tv.text = "tocca lo schermo…"
+        }
+
+        findViewById<Button>(R.id.btnPickAttack)      .setOnClickListener { pick(K_ATTACK, "Bottone Attacco",         tvAttackCoord) }
+        findViewById<Button>(R.id.btnPickSkill1)      .setOnClickListener { pick(K_SK1,   "Abilità 1",               tvSkill1Coord) }
+        findViewById<Button>(R.id.btnPickSkill2)      .setOnClickListener { pick(K_SK2,   "Abilità 2",               tvSkill2Coord) }
+        findViewById<Button>(R.id.btnPickPotion)      .setOnClickListener { pick(K_POTION,"Slot Pozione",            tvPotionCoord) }
+        findViewById<Button>(R.id.btnPickBackup)      .setOnClickListener { pick(K_BACKUP,"Pozione di Riserva",      tvBackupPotionCoord) }
+        findViewById<Button>(R.id.btnPickSearchTL)    .setOnClickListener { pick(K_TL,   "Angolo Alto-Sinistra",    tvSearchTL) }
+        findViewById<Button>(R.id.btnPickSearchBR)    .setOnClickListener { pick(K_BR,   "Angolo Basso-Destra",     tvSearchBR) }
+
+        findViewById<Button>(R.id.btnSave).setOnClickListener { save() }
 
         findViewById<Button>(R.id.btnOverlayPermission).setOnClickListener {
-            if (!Settings.canDrawOverlays(this)) {
-                val intent = Intent(
-                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                    Uri.parse("package:$packageName")
-                )
-                startActivity(intent)
-            }
+            if (!Settings.canDrawOverlays(this))
+                startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
+            else
+                toast("Permesso overlay già attivo ✓")
         }
 
         findViewById<Button>(R.id.btnAccessibility).setOnClickListener {
@@ -29,16 +113,47 @@ class MainActivity : AppCompatActivity() {
         }
 
         findViewById<Button>(R.id.btnStartOverlay).setOnClickListener {
-            val intent = Intent(this, OverlayService::class.java)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                startForegroundService(intent)
-            } else {
-                startService(intent)
-            }
+            save()
+            val i = Intent(this, OverlayService::class.java)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(i) else startService(i)
         }
 
         findViewById<Button>(R.id.btnStopOverlay).setOnClickListener {
             stopService(Intent(this, OverlayService::class.java))
         }
     }
+
+    @Suppress("DEPRECATION")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != REQ || resultCode != Activity.RESULT_OK || data == null) return
+        val x = data.getFloatExtra(CoordinatePickerActivity.RESULT_X, 0f)
+        val y = data.getFloatExtra(CoordinatePickerActivity.RESULT_Y, 0f)
+        cfg = when (pendingKey) {
+            K_ATTACK -> cfg.copy(attackX = x, attackY = y).also       { tvAttackCoord.text = xy(x, y) }
+            K_SK1    -> cfg.copy(skill1X = x, skill1Y = y).also       { tvSkill1Coord.text = xy(x, y) }
+            K_SK2    -> cfg.copy(skill2X = x, skill2Y = y).also       { tvSkill2Coord.text = xy(x, y) }
+            K_POTION -> cfg.copy(potionX = x, potionY = y).also       { tvPotionCoord.text = xy(x, y) }
+            K_BACKUP -> cfg.copy(backupPotionX = x, backupPotionY = y).also { tvBackupPotionCoord.text = xy(x, y) }
+            K_TL     -> cfg.copy(searchLeft = x, searchTop = y).also  { tvSearchTL.text = xy(x, y) }
+            K_BR     -> cfg.copy(searchRight = x, searchBottom = y).also { tvSearchBR.text = xy(x, y) }
+            else     -> cfg
+        }
+    }
+
+    private fun save() {
+        cfg = cfg.copy(
+            monsterName      = etMonsterName.text.toString().trim(),
+            maxKills         = etMaxKills.text.toString().toIntOrNull()  ?: cfg.maxKills,
+            attackDelayMs    = etAttackDelay.text.toString().toLongOrNull() ?: cfg.attackDelayMs,
+            skill1CooldownMs = (etSkill1Cd.text.toString().toLongOrNull() ?: (cfg.skill1CooldownMs / 1000)) * 1000,
+            skill2CooldownMs = (etSkill2Cd.text.toString().toLongOrNull() ?: (cfg.skill2CooldownMs / 1000)) * 1000,
+            maxPotionsInSlot = etMaxPotions.text.toString().toIntOrNull() ?: cfg.maxPotionsInSlot,
+        )
+        BotConfig.save(this, cfg)
+        toast("Impostazioni salvate ✓")
+    }
+
+    private fun xy(x: Float, y: Float) = "(${x.toInt()}, ${y.toInt()})"
+    private fun toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
 }

@@ -1,35 +1,518 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:padding="24dp">
+    android:background="#0f0f1a">
 
-    <Button
-        android:id="@+id/btnOverlayPermission"
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="@string/open_overlay_permission" />
+        android:orientation="vertical"
+        android:padding="16dp">
 
-    <Button
-        android:id="@+id/btnAccessibility"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
-        android:text="@string/open_accessibility_settings" />
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Movile2 Bot"
+            android:textSize="22sp"
+            android:textColor="#4fc3f7"
+            android:textStyle="bold"
+            android:paddingBottom="4dp" />
 
-    <Button
-        android:id="@+id/btnStartOverlay"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
-        android:text="@string/start_overlay" />
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Imposta prima i permessi, poi configura le coordinate"
+            android:textSize="12sp"
+            android:textColor="#888888"
+            android:paddingBottom="12dp" />
 
-    <Button
-        android:id="@+id/btnStopOverlay"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
-        android:text="@string/stop_overlay" />
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="8dp">
 
-</LinearLayout>
+            <Button
+                android:id="@+id/btnOverlayPermission"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="1. Permesso Overlay"
+                android:textSize="12sp" />
+
+            <Button
+                android:id="@+id/btnAccessibility"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="8dp"
+                android:text="2. Accessibilità"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="⚠ Su MIUI/Samsung: Impostazioni › Accessibilità › App installate ›
+abilita Movile2 Bot (non usare il menu principale Accessibilità)"
+            android:textSize="11sp"
+            android:textColor="#ffcc00"
+            android:padding="8dp"
+            android:background="#1a1a00"
+            android:layout_marginBottom="12dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="🎯 Mostro e Limite"
+            android:textSize="15sp"
+            android:textColor="#4fc3f7"
+            android:textStyle="bold"
+            android:paddingTop="4dp"
+            android:paddingBottom="8dp" />
+
+        <EditText
+            android:id="@+id/etMonsterName"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Nome mostro (es: Goblin, Orc…)"
+            android:textColorHint="#666"
+            android:textColor="#ffffff"
+            android:background="#1e1e3a"
+            android:padding="10dp"
+            android:layout_marginBottom="8dp"
+            android:inputType="text" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="12dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Max uccisioni:"
+                android:textColor="#cccccc"
+                android:gravity="center_vertical" />
+
+            <EditText
+                android:id="@+id/etMaxKills"
+                android:layout_width="100dp"
+                android:layout_height="wrap_content"
+                android:inputType="number"
+                android:textColor="#ffffff"
+                android:background="#1e1e3a"
+                android:padding="8dp" />
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="🗺 Area di Ricerca nella Stanza"
+            android:textSize="15sp"
+            android:textColor="#4fc3f7"
+            android:textStyle="bold"
+            android:paddingBottom="8dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Tocca i due angoli opposti della stanza sullo schermo del gioco"
+            android:textSize="11sp"
+            android:textColor="#aaaaaa"
+            android:paddingBottom="6dp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="8dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Alto-Sinistra:"
+                android:textColor="#cccccc"
+                android:gravity="center_vertical" />
+
+            <TextView
+                android:id="@+id/tvSearchTL"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="(0, 0)"
+                android:textColor="#80cbc4"
+                android:gravity="center_vertical" />
+
+            <Button
+                android:id="@+id/btnPickSearchTL"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Imposta"
+                android:textSize="12sp"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="12dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Basso-Destra:"
+                android:textColor="#cccccc"
+                android:gravity="center_vertical" />
+
+            <TextView
+                android:id="@+id/tvSearchBR"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="(0, 0)"
+                android:textColor="#80cbc4"
+                android:gravity="center_vertical" />
+
+            <Button
+                android:id="@+id/btnPickSearchBR"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Imposta"
+                android:textSize="12sp"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp" />
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="⚔ Attacco"
+            android:textSize="15sp"
+            android:textColor="#4fc3f7"
+            android:textStyle="bold"
+            android:paddingBottom="8dp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="8dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Bottone attacco:"
+                android:textColor="#cccccc"
+                android:gravity="center_vertical" />
+
+            <TextView
+                android:id="@+id/tvAttackCoord"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="(950, 700)"
+                android:textColor="#80cbc4"
+                android:gravity="center_vertical" />
+
+            <Button
+                android:id="@+id/btnPickAttack"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Imposta"
+                android:textSize="12sp"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="12dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Velocità loop (ms):"
+                android:textColor="#cccccc"
+                android:gravity="center_vertical" />
+
+            <EditText
+                android:id="@+id/etAttackDelay"
+                android:layout_width="100dp"
+                android:layout_height="wrap_content"
+                android:inputType="number"
+                android:textColor="#ffffff"
+                android:background="#1e1e3a"
+                android:padding="8dp" />
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="✨ Abilità"
+            android:textSize="15sp"
+            android:textColor="#4fc3f7"
+            android:textStyle="bold"
+            android:paddingBottom="8dp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="8dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Abilità 1:"
+                android:textColor="#cccccc"
+                android:gravity="center_vertical" />
+
+            <TextView
+                android:id="@+id/tvSkill1Coord"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="(850, 650)"
+                android:textColor="#80cbc4"
+                android:gravity="center_vertical" />
+
+            <Button
+                android:id="@+id/btnPickSkill1"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Imposta"
+                android:textSize="12sp"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="8dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Cooldown Abilità 1 (sec):"
+                android:textColor="#cccccc"
+                android:gravity="center_vertical" />
+
+            <EditText
+                android:id="@+id/etSkill1Cd"
+                android:layout_width="80dp"
+                android:layout_height="wrap_content"
+                android:inputType="number"
+                android:textColor="#ffffff"
+                android:background="#1e1e3a"
+                android:padding="8dp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="8dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Abilità 2:"
+                android:textColor="#cccccc"
+                android:gravity="center_vertical" />
+
+            <TextView
+                android:id="@+id/tvSkill2Coord"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="(780, 720)"
+                android:textColor="#80cbc4"
+                android:gravity="center_vertical" />
+
+            <Button
+                android:id="@+id/btnPickSkill2"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Imposta"
+                android:textSize="12sp"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="12dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Cooldown Abilità 2 (sec):"
+                android:textColor="#cccccc"
+                android:gravity="center_vertical" />
+
+            <EditText
+                android:id="@+id/etSkill2Cd"
+                android:layout_width="80dp"
+                android:layout_height="wrap_content"
+                android:inputType="number"
+                android:textColor="#ffffff"
+                android:background="#1e1e3a"
+                android:padding="8dp" />
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="🧪 Pozioni"
+            android:textSize="15sp"
+            android:textColor="#4fc3f7"
+            android:textStyle="bold"
+            android:paddingBottom="8dp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="8dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Slot pozione:"
+                android:textColor="#cccccc"
+                android:gravity="center_vertical" />
+
+            <TextView
+                android:id="@+id/tvPotionCoord"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="(0, 0)"
+                android:textColor="#80cbc4"
+                android:gravity="center_vertical" />
+
+            <Button
+                android:id="@+id/btnPickPotion"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Imposta"
+                android:textSize="12sp"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="8dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Pozioni per slot:"
+                android:textColor="#cccccc"
+                android:gravity="center_vertical" />
+
+            <EditText
+                android:id="@+id/etMaxPotions"
+                android:layout_width="80dp"
+                android:layout_height="wrap_content"
+                android:inputType="number"
+                android:textColor="#ffffff"
+                android:background="#1e1e3a"
+                android:padding="8dp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="16dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Pozione riserva (inventario):"
+                android:textColor="#cccccc"
+                android:gravity="center_vertical" />
+
+            <TextView
+                android:id="@+id/tvBackupPotionCoord"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="(0, 0)"
+                android:textColor="#80cbc4"
+                android:gravity="center_vertical" />
+
+            <Button
+                android:id="@+id/btnPickBackup"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Imposta"
+                android:textSize="12sp"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp" />
+        </LinearLayout>
+
+        <Button
+            android:id="@+id/btnSave"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="💾 SALVA IMPOSTAZIONI"
+            android:backgroundTint="#1565c0"
+            android:textColor="#ffffff"
+            android:layout_marginBottom="8dp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="16dp">
+
+            <Button
+                android:id="@+id/btnStartOverlay"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="▶ Avvia Overlay"
+                android:backgroundTint="#2e7d32"
+                android:textColor="#ffffff" />
+
+            <Button
+                android:id="@+id/btnStopOverlay"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="8dp"
+                android:text="■ Ferma Overlay"
+                android:backgroundTint="#b71c1c"
+                android:textColor="#ffffff" />
+        </LinearLayout>
+
+    </LinearLayout>
+</ScrollView>

@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Movile2 Bot</string>
-    <string name="start_overlay">Start Overlay</string>
-    <string name="stop_overlay">Stop Overlay</string>
-    <string name="open_overlay_permission">Grant Overlay Permission</string>
-    <string name="open_accessibility_settings">Open Accessibility Settings</string>
-    <string name="accessibility_service_description">Accessibility macro service for tap/swipe loop.</string>
-    <string name="status_running">Bot running</string>
-    <string name="status_stopped">Bot stopped</string>
+    <string name="start_overlay">Avvia Overlay</string>
+    <string name="stop_overlay">Ferma Overlay</string>
+    <string name="open_overlay_permission">1. Permesso Overlay</string>
+    <string name="open_accessibility_settings">2. Apri Accessibilità</string>
+    <string name="accessibility_service_description">Bot automatico per gesture su giochi mobile. Usa tap e swipe per attaccare, usare abilità e pozioni.</string>
+    <string name="status_running">● RUNNING</string>
+    <string name="status_stopped">● STOP</string>
 </resources>

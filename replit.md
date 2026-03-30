@@ -1,46 +1,39 @@
-# Movile2 Kotlin Overlay Bot
+# Movile2 Bot
 
 ## Project Overview
-Android bot application in Kotlin with overlay and accessibility services for mobile game automation.
+Android bot app in Kotlin for MMORPG automation using Accessibility Service + Overlay.
 
 ## Architecture
-- **Type**: Android APK project (Kotlin + Gradle Kotlin DSL)
+- **Type**: Android APK (Kotlin + Gradle Kotlin DSL)
 - **Package**: `com.movile2.bot`
-- **Min SDK**: 26 (Android 8.0 Oreo)
-- **Target SDK**: 34 (Android 14)
+- **Min SDK**: 26 / Target SDK: 34
 
-## Components
-- `app/src/main/java/com/movile2/bot/MainActivity.kt` — Main activity with permission buttons
-- `app/src/main/java/com/movile2/bot/OverlayService.kt` — Foreground service with floating button overlay
-- `app/src/main/java/com/movile2/bot/BotAccessibilityService.kt` — Accessibility service running gesture loop
-- `app/src/main/res/layout/activity_main.xml` — Main activity UI layout
-- `app/src/main/AndroidManifest.xml` — App manifest with permissions
+## Source Files
+| File | Descrizione |
+|---|---|
+| `MainActivity.kt` | Schermata impostazioni con tutti i campi configurabili |
+| `CoordinatePickerActivity.kt` | Activity trasparente per selezionare coordinate toccando lo schermo |
+| `BotAccessibilityService.kt` | Logica principale bot: ricerca a griglia, attacco, abilità, pozioni |
+| `OverlayService.kt` | Pannello flottante draggabile con Start/Stop e contatore kills |
+| `BotConfig.kt` | Data class + SharedPreferences per persistere le impostazioni |
+| `BotState.kt` | Singleton condiviso per stato runtime (isRunning, killCount) |
 
-## Build System
-- Gradle 8.x with Kotlin DSL (`build.gradle.kts`)
-- JDK 17 required for compilation
+## Features v2
+- Mappa area di ricerca con angoli toccabili sullo schermo
+- Ricerca mostro per nome (via albero accessibilità)
+- Griglia 5x4 a serpentina dentro l'area
+- Attacco + abilità 1 e 2 con cooldown separati
+- Pozioni automatiche + ricarica dall'inventario
+- Limite massimo uccisioni configurabile
+- Fix crash Android 14 (foregroundServiceType = specialUse)
+- Fix accessibilità su MIUI/Samsung (config semplificata)
 
 ## Replit Setup
-- **Web server**: `serve.py` — Python HTTP server serving project info page on port 5000
-- **Workflow**: "Start application" runs `python serve.py`
-- **Deployment**: Autoscale, runs `python serve.py`
+- **Web server**: `serve.py` su porta 5000 (pagina informativa)
+- **Workflow**: "Start application" → `python serve.py`
 
-## Building the APK
-The APK cannot be built directly in Replit (requires Android SDK build tools not available here).
+## Build APK
+Push su GitHub → GitHub Actions (`build-apk.yml`) builda automaticamente.
+APK scaricabile da Actions › Artifacts.
 
-### Option 1: GitHub Actions (recommended)
-Push to GitHub — the workflow at `.github/workflows/build-apk.yml` will automatically build the APK and upload it as an artifact.
-
-### Option 2: Local machine
-```bash
-gradle assembleDebug
-# Output: app/build/outputs/apk/debug/app-debug.apk
-```
-Requires: Android SDK, JDK 17, Gradle
-
-## Coordinate Calibration
-Update coordinates in `BotAccessibilityService.kt`:
-- Attack: (950, 700)
-- Skill 1: (850, 650)
-- Skill 2: (780, 720)
-- Move swipe: (500, 800) → (500, 400)
+Local build: `gradle assembleDebug` (richiede Android SDK + JDK 17)
