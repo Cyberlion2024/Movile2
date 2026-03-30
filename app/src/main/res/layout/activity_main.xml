@@ -77,7 +77,7 @@ abilita Movile2 Bot (non usare il menu principale Accessibilità)"
             android:id="@+id/etMonsterName"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="Nome mostro (es: Goblin, Orc…)"
+            android:hint="Nome mostro (opzionale, per ricerca UI)"
             android:textColorHint="#666"
             android:textColor="#ffffff"
             android:background="#1e1e3a"
@@ -109,7 +109,7 @@ abilita Movile2 Bot (non usare il menu principale Accessibilità)"
                 android:padding="8dp" />
         </LinearLayout>
 
-        <!-- ── Joystick ───────────────────────────────────────────────────── -->
+        <!-- ── Joystick Movimento ─────────────────────────────────────────── -->
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -122,7 +122,7 @@ abilita Movile2 Bot (non usare il menu principale Accessibilità)"
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Tocca il centro del joystick mentre sei nel gioco. Il bot pattuglia la stanza in automatico."
+            android:text="Tocca il centro del joystick nel gioco. Il bot pattuglia N→E→S→W automaticamente."
             android:textSize="11sp"
             android:textColor="#aaaaaa"
             android:paddingBottom="6dp" />
@@ -185,20 +185,20 @@ abilita Movile2 Bot (non usare il menu principale Accessibilità)"
                 android:text="55" />
         </LinearLayout>
 
-        <!-- ── Area di Ricerca ────────────────────────────────────────────── -->
+        <!-- ── Rotazione Visuale / Camera ─────────────────────────────────── -->
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="🗺 Area di Ricerca nella Stanza"
+            android:text="👁 Rotazione Visuale"
             android:textSize="15sp"
             android:textColor="#4fc3f7"
             android:textStyle="bold"
-            android:paddingBottom="8dp" />
+            android:paddingBottom="4dp" />
 
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Tocca i due angoli opposti della stanza sullo schermo del gioco"
+            android:text="Tocca il centro dell'area che muove la visuale (zona centrale-destra dello schermo). Ogni 4 cicli il bot ruota automaticamente la telecamera destra↔sinistra."
             android:textSize="11sp"
             android:textColor="#aaaaaa"
             android:paddingBottom="6dp" />
@@ -213,21 +213,21 @@ abilita Movile2 Bot (non usare il menu principale Accessibilità)"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="Alto-Sinistra:"
+                android:text="Punto visuale:"
                 android:textColor="#cccccc"
                 android:gravity="center_vertical" />
 
             <TextView
-                android:id="@+id/tvSearchTL"
+                android:id="@+id/tvCameraCoord"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="(0, 0)"
+                android:text="non impostato"
                 android:textColor="#80cbc4"
                 android:gravity="center_vertical" />
 
             <Button
-                android:id="@+id/btnPickSearchTL"
+                android:id="@+id/btnPickCamera"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="Imposta"
@@ -246,27 +246,19 @@ abilita Movile2 Bot (non usare il menu principale Accessibilità)"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="Basso-Destra:"
+                android:text="Ampiezza swipe (px):"
                 android:textColor="#cccccc"
                 android:gravity="center_vertical" />
 
-            <TextView
-                android:id="@+id/tvSearchBR"
-                android:layout_width="0dp"
+            <EditText
+                android:id="@+id/etCameraSwipeRange"
+                android:layout_width="80dp"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="(0, 0)"
-                android:textColor="#80cbc4"
-                android:gravity="center_vertical" />
-
-            <Button
-                android:id="@+id/btnPickSearchBR"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Imposta"
-                android:textSize="12sp"
-                android:paddingStart="12dp"
-                android:paddingEnd="12dp" />
+                android:inputType="number"
+                android:textColor="#ffffff"
+                android:background="#1e1e3a"
+                android:padding="8dp"
+                android:text="80" />
         </LinearLayout>
 
         <!-- ── Attacco ────────────────────────────────────────────────────── -->

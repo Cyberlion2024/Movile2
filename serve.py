@@ -43,7 +43,9 @@ li{margin-bottom:8px;line-height:1.6;color:#ccc}
       <li><strong>Attacco continuo + abilit&agrave; con cooldown</strong> &mdash; configurabili in secondi</li>
       <li><strong>Pozioni automatiche</strong> &mdash; tap sullo slot, e se finiscono, trascina dall'inventario allo slot</li>
       <li><strong>Limite massimo uccisioni</strong> &mdash; il bot si ferma automaticamente raggiunto il limite</li>
-      <li><strong>Joystick virtuale</strong> &mdash; imposta il centro del joystick e il bot pattuglia la stanza in automatico (N&rarr;E&rarr;S&rarr;W) camminando e attaccando contemporaneamente</li>
+      <li><strong>Joystick virtuale</strong> &mdash; imposta il centro del joystick e il bot pattuglia la stanza in automatico (N&rarr;E&rarr;S&rarr;W)</li>
+      <li><strong>Rotazione visuale</strong> &mdash; imposta un punto nella zona centrale dello schermo; ogni 4 cicli il bot swipe destra&harr;sinistra per ruotare la telecamera e cercare i mostri</li>
+      <li><strong>Timing sicuro</strong> &mdash; ciclo fisso 800ms: joystick (350ms) &rarr; attacco (+400ms) &rarr; abilit&agrave; (+520/+640ms) &rarr; ciclo successivo (+800ms), nessun conflitto tra gesti</li>
       <li><strong>Overlay draggabile</strong> &mdash; pannello flottante con contatore kills e pulsanti Start/Stop</li>
       <li><strong>Fix crash Android 14</strong> &mdash; <code>foregroundServiceType="specialUse"</code> nel manifest</li>
     </ul>

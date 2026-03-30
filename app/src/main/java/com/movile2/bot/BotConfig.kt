@@ -24,14 +24,13 @@ data class BotConfig(
     val backupPotionX: Float = 0f,
     val backupPotionY: Float = 0f,
 
-    val searchLeft: Float = 150f,
-    val searchTop: Float = 200f,
-    val searchRight: Float = 930f,
-    val searchBottom: Float = 850f,
-
     val joystickX: Float = 0f,
     val joystickY: Float = 0f,
     val joystickRadius: Float = 55f,
+
+    val cameraAreaX: Float = 0f,
+    val cameraAreaY: Float = 0f,
+    val cameraSwipeRange: Float = 80f,
 ) {
     companion object {
         private const val PREFS = "bot_config"
@@ -55,13 +54,12 @@ data class BotConfig(
                 maxPotionsInSlot = p.getInt("maxPotionsInSlot", 10),
                 backupPotionX    = p.getFloat("backupPotionX", 0f),
                 backupPotionY    = p.getFloat("backupPotionY", 0f),
-                searchLeft       = p.getFloat("searchLeft", 150f),
-                searchTop        = p.getFloat("searchTop", 200f),
-                searchRight      = p.getFloat("searchRight", 930f),
-                searchBottom     = p.getFloat("searchBottom", 850f),
                 joystickX        = p.getFloat("joystickX", 0f),
                 joystickY        = p.getFloat("joystickY", 0f),
                 joystickRadius   = p.getFloat("joystickRadius", 55f),
+                cameraAreaX      = p.getFloat("cameraAreaX", 0f),
+                cameraAreaY      = p.getFloat("cameraAreaY", 0f),
+                cameraSwipeRange = p.getFloat("cameraSwipeRange", 80f),
             )
         }
 
@@ -83,13 +81,12 @@ data class BotConfig(
                 putInt("maxPotionsInSlot", cfg.maxPotionsInSlot)
                 putFloat("backupPotionX", cfg.backupPotionX)
                 putFloat("backupPotionY", cfg.backupPotionY)
-                putFloat("searchLeft", cfg.searchLeft)
-                putFloat("searchTop", cfg.searchTop)
-                putFloat("searchRight", cfg.searchRight)
-                putFloat("searchBottom", cfg.searchBottom)
                 putFloat("joystickX", cfg.joystickX)
                 putFloat("joystickY", cfg.joystickY)
                 putFloat("joystickRadius", cfg.joystickRadius)
+                putFloat("cameraAreaX", cfg.cameraAreaX)
+                putFloat("cameraAreaY", cfg.cameraAreaY)
+                putFloat("cameraSwipeRange", cfg.cameraSwipeRange)
                 apply()
             }
         }

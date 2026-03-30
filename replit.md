@@ -30,9 +30,18 @@ Android bot app in Kotlin for MMORPG automation using Accessibility Service + Ov
 - Fix accessibilità su MIUI/Samsung (config semplificata)
 
 ## State Machine v3
-- HUNT: joystick patrol → attacco → skills → pozione ogni 30 cicli
+- HUNT: ciclo fisso 800ms
+  - Cicli normali: joystickPush(350ms) → attacco(+400ms) → skill1(+520ms) → skill2(+640ms)
+  - Ogni 4 cicli: cameraSwipe(250ms) invece del joystick → attacco(+300ms) → skills(+420/+540ms)
 - POTION: tap slot pozione
 - REFILL: swipe inventario → slot
+
+## Configurazione consigliata
+1. Centro joystick: tocca il centro del joystick (basso-sinistra)
+2. Punto visuale: tocca la zona centrale-destra dello schermo (area senza UI)
+3. Bottone attacco: il bottone attacco principale (basso-destra)
+4. Abilità 1 e 2: le abilità speciali con cooldown
+5. Slot pozione: il bottone pozione se usato
 
 ## Replit Setup
 - **Web server**: `serve.py` su porta 5000 (pagina informativa)
