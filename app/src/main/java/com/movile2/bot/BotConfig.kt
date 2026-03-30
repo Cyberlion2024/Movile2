@@ -28,6 +28,10 @@ data class BotConfig(
     val searchTop: Float = 200f,
     val searchRight: Float = 930f,
     val searchBottom: Float = 850f,
+
+    val joystickX: Float = 0f,
+    val joystickY: Float = 0f,
+    val joystickRadius: Float = 55f,
 ) {
     companion object {
         private const val PREFS = "bot_config"
@@ -55,6 +59,9 @@ data class BotConfig(
                 searchTop        = p.getFloat("searchTop", 200f),
                 searchRight      = p.getFloat("searchRight", 930f),
                 searchBottom     = p.getFloat("searchBottom", 850f),
+                joystickX        = p.getFloat("joystickX", 0f),
+                joystickY        = p.getFloat("joystickY", 0f),
+                joystickRadius   = p.getFloat("joystickRadius", 55f),
             )
         }
 
@@ -80,6 +87,9 @@ data class BotConfig(
                 putFloat("searchTop", cfg.searchTop)
                 putFloat("searchRight", cfg.searchRight)
                 putFloat("searchBottom", cfg.searchBottom)
+                putFloat("joystickX", cfg.joystickX)
+                putFloat("joystickY", cfg.joystickY)
+                putFloat("joystickRadius", cfg.joystickRadius)
                 apply()
             }
         }

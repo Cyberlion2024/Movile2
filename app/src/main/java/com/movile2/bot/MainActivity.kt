@@ -26,18 +26,21 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvBackupPotionCoord: TextView
     private lateinit var tvSearchTL: TextView
     private lateinit var tvSearchBR: TextView
+    private lateinit var tvJoystickCoord: TextView
+    private lateinit var etJoystickRadius: EditText
 
     private var pendingKey = ""
 
     companion object {
         private const val REQ = 101
-        private const val K_ATTACK  = "attack"
-        private const val K_SK1     = "sk1"
-        private const val K_SK2     = "sk2"
-        private const val K_POTION  = "potion"
-        private const val K_BACKUP  = "backup"
-        private const val K_TL      = "tl"
-        private const val K_BR      = "br"
+        private const val K_ATTACK    = "attack"
+        private const val K_SK1       = "sk1"
+        private const val K_SK2       = "sk2"
+        private const val K_POTION    = "potion"
+        private const val K_BACKUP    = "backup"
+        private const val K_TL        = "tl"
+        private const val K_BR        = "br"
+        private const val K_JOYSTICK  = "joystick"
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -63,6 +66,8 @@ class MainActivity : AppCompatActivity() {
         tvBackupPotionCoord = findViewById(R.id.tvBackupPotionCoord)
         tvSearchTL          = findViewById(R.id.tvSearchTL)
         tvSearchBR          = findViewById(R.id.tvSearchBR)
+        tvJoystickCoord     = findViewById(R.id.tvJoystickCoord)
+        etJoystickRadius    = findViewById(R.id.etJoystickRadius)
     }
 
     private fun populate() {
@@ -79,6 +84,8 @@ class MainActivity : AppCompatActivity() {
         tvBackupPotionCoord.text  = xy(cfg.backupPotionX, cfg.backupPotionY)
         tvSearchTL.text           = xy(cfg.searchLeft, cfg.searchTop)
         tvSearchBR.text           = xy(cfg.searchRight, cfg.searchBottom)
+        tvJoystickCoord.text      = if (cfg.joystickX > 0f) xy(cfg.joystickX, cfg.joystickY) else "non impostato"
+        etJoystickRadius.setText(cfg.joystickRadius.toInt().toString())
     }
 
     private fun hooks() {
@@ -91,13 +98,14 @@ class MainActivity : AppCompatActivity() {
             tv.text = "tocca lo schermo…"
         }
 
-        findViewById<Button>(R.id.btnPickAttack)      .setOnClickListener { pick(K_ATTACK, "Bottone Attacco",         tvAttackCoord) }
-        findViewById<Button>(R.id.btnPickSkill1)      .setOnClickListener { pick(K_SK1,   "Abilità 1",               tvSkill1Coord) }
-        findViewById<Button>(R.id.btnPickSkill2)      .setOnClickListener { pick(K_SK2,   "Abilità 2",               tvSkill2Coord) }
-        findViewById<Button>(R.id.btnPickPotion)      .setOnClickListener { pick(K_POTION,"Slot Pozione",            tvPotionCoord) }
-        findViewById<Button>(R.id.btnPickBackup)      .setOnClickListener { pick(K_BACKUP,"Pozione di Riserva",      tvBackupPotionCoord) }
-        findViewById<Button>(R.id.btnPickSearchTL)    .setOnClickListener { pick(K_TL,   "Angolo Alto-Sinistra",    tvSearchTL) }
-        findViewById<Button>(R.id.btnPickSearchBR)    .setOnClickListener { pick(K_BR,   "Angolo Basso-Destra",     tvSearchBR) }
+        findViewById<Button>(R.id.btnPickAttack)    .setOnClickListener { pick(K_ATTACK,   "Bottone Attacco",      tvAttackCoord) }
+        findViewById<Button>(R.id.btnPickSkill1)    .setOnClickListener { pick(K_SK1,     "Abilità 1",            tvSkill1Coord) }
+        findViewById<Button>(R.id.btnPickSkill2)    .setOnClickListener { pick(K_SK2,     "Abilità 2",            tvSkill2Coord) }
+        findViewById<Button>(R.id.btnPickPotion)    .setOnClickListener { pick(K_POTION,  "Slot Pozione",         tvPotionCoord) }
+        findViewById<Button>(R.id.btnPickBackup)    .setOnClickListener { pick(K_BACKUP,  "Pozione di Riserva",   tvBackupPotionCoord) }
+        findViewById<Button>(R.id.btnPickSearchTL)  .setOnClickListener { pick(K_TL,     "Angolo Alto-Sinistra", tvSearchTL) }
+        findViewById<Button>(R.id.btnPickSearchBR)  .setOnClickListener { pick(K_BR,     "Angolo Basso-Destra",  tvSearchBR) }
+        findViewById<Button>(R.id.btnPickJoystick)  .setOnClickListener { pick(K_JOYSTICK,"Centro Joystick",     tvJoystickCoord) }
 
         findViewById<Button>(R.id.btnSave).setOnClickListener { save() }
 
@@ -130,14 +138,15 @@ class MainActivity : AppCompatActivity() {
         val x = data.getFloatExtra(CoordinatePickerActivity.RESULT_X, 0f)
         val y = data.getFloatExtra(CoordinatePickerActivity.RESULT_Y, 0f)
         cfg = when (pendingKey) {
-            K_ATTACK -> cfg.copy(attackX = x, attackY = y).also       { tvAttackCoord.text = xy(x, y) }
-            K_SK1    -> cfg.copy(skill1X = x, skill1Y = y).also       { tvSkill1Coord.text = xy(x, y) }
-            K_SK2    -> cfg.copy(skill2X = x, skill2Y = y).also       { tvSkill2Coord.text = xy(x, y) }
-            K_POTION -> cfg.copy(potionX = x, potionY = y).also       { tvPotionCoord.text = xy(x, y) }
-            K_BACKUP -> cfg.copy(backupPotionX = x, backupPotionY = y).also { tvBackupPotionCoord.text = xy(x, y) }
-            K_TL     -> cfg.copy(searchLeft = x, searchTop = y).also  { tvSearchTL.text = xy(x, y) }
-            K_BR     -> cfg.copy(searchRight = x, searchBottom = y).also { tvSearchBR.text = xy(x, y) }
-            else     -> cfg
+            K_ATTACK   -> cfg.copy(attackX = x, attackY = y).also       { tvAttackCoord.text = xy(x, y) }
+            K_SK1      -> cfg.copy(skill1X = x, skill1Y = y).also       { tvSkill1Coord.text = xy(x, y) }
+            K_SK2      -> cfg.copy(skill2X = x, skill2Y = y).also       { tvSkill2Coord.text = xy(x, y) }
+            K_POTION   -> cfg.copy(potionX = x, potionY = y).also       { tvPotionCoord.text = xy(x, y) }
+            K_BACKUP   -> cfg.copy(backupPotionX = x, backupPotionY = y).also { tvBackupPotionCoord.text = xy(x, y) }
+            K_TL       -> cfg.copy(searchLeft = x, searchTop = y).also  { tvSearchTL.text = xy(x, y) }
+            K_BR       -> cfg.copy(searchRight = x, searchBottom = y).also { tvSearchBR.text = xy(x, y) }
+            K_JOYSTICK -> cfg.copy(joystickX = x, joystickY = y).also   { tvJoystickCoord.text = xy(x, y) }
+            else       -> cfg
         }
     }
 
@@ -149,6 +158,7 @@ class MainActivity : AppCompatActivity() {
             skill1CooldownMs = (etSkill1Cd.text.toString().toLongOrNull() ?: (cfg.skill1CooldownMs / 1000)) * 1000,
             skill2CooldownMs = (etSkill2Cd.text.toString().toLongOrNull() ?: (cfg.skill2CooldownMs / 1000)) * 1000,
             maxPotionsInSlot = etMaxPotions.text.toString().toIntOrNull() ?: cfg.maxPotionsInSlot,
+            joystickRadius   = etJoystickRadius.text.toString().toFloatOrNull() ?: cfg.joystickRadius,
         )
         BotConfig.save(this, cfg)
         toast("Impostazioni salvate ✓")

@@ -62,6 +62,7 @@ abilita Movile2 Bot (non usare il menu principale Accessibilità)"
             android:background="#1a1a00"
             android:layout_marginBottom="12dp" />
 
+        <!-- ── Mostro e Limite ────────────────────────────────────────────── -->
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -108,6 +109,83 @@ abilita Movile2 Bot (non usare il menu principale Accessibilità)"
                 android:padding="8dp" />
         </LinearLayout>
 
+        <!-- ── Joystick ───────────────────────────────────────────────────── -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="🕹 Joystick Movimento"
+            android:textSize="15sp"
+            android:textColor="#4fc3f7"
+            android:textStyle="bold"
+            android:paddingBottom="4dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Tocca il centro del joystick mentre sei nel gioco. Il bot pattuglia la stanza in automatico."
+            android:textSize="11sp"
+            android:textColor="#aaaaaa"
+            android:paddingBottom="6dp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="8dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Centro joystick:"
+                android:textColor="#cccccc"
+                android:gravity="center_vertical" />
+
+            <TextView
+                android:id="@+id/tvJoystickCoord"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="non impostato"
+                android:textColor="#80cbc4"
+                android:gravity="center_vertical" />
+
+            <Button
+                android:id="@+id/btnPickJoystick"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Imposta"
+                android:textSize="12sp"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="12dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Raggio spinta (px):"
+                android:textColor="#cccccc"
+                android:gravity="center_vertical" />
+
+            <EditText
+                android:id="@+id/etJoystickRadius"
+                android:layout_width="80dp"
+                android:layout_height="wrap_content"
+                android:inputType="number"
+                android:textColor="#ffffff"
+                android:background="#1e1e3a"
+                android:padding="8dp"
+                android:text="55" />
+        </LinearLayout>
+
+        <!-- ── Area di Ricerca ────────────────────────────────────────────── -->
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -191,6 +269,7 @@ abilita Movile2 Bot (non usare il menu principale Accessibilità)"
                 android:paddingEnd="12dp" />
         </LinearLayout>
 
+        <!-- ── Attacco ────────────────────────────────────────────────────── -->
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -257,6 +336,7 @@ abilita Movile2 Bot (non usare il menu principale Accessibilità)"
                 android:padding="8dp" />
         </LinearLayout>
 
+        <!-- ── Abilità ────────────────────────────────────────────────────── -->
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -380,6 +460,7 @@ abilita Movile2 Bot (non usare il menu principale Accessibilità)"
                 android:padding="8dp" />
         </LinearLayout>
 
+        <!-- ── Pozioni ────────────────────────────────────────────────────── -->
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -479,6 +560,7 @@ abilita Movile2 Bot (non usare il menu principale Accessibilità)"
                 android:paddingEnd="12dp" />
         </LinearLayout>
 
+        <!-- ── Salva + Overlay ────────────────────────────────────────────── -->
         <Button
             android:id="@+id/btnSave"
             android:layout_width="match_parent"

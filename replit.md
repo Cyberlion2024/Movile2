@@ -18,15 +18,21 @@ Android bot app in Kotlin for MMORPG automation using Accessibility Service + Ov
 | `BotConfig.kt` | Data class + SharedPreferences per persistere le impostazioni |
 | `BotState.kt` | Singleton condiviso per stato runtime (isRunning, killCount) |
 
-## Features v2
-- Mappa area di ricerca con angoli toccabili sullo schermo
+## Features v3
+- Joystick virtuale: imposta il centro del joystick e il bot pattuglia N→E→S→W
+- Movimento e attacco simultanei: joystickPush(350ms) + tap attacco + skills
+- Mappa area di ricerca con angoli toccabili sullo schermo (fallback senza joystick)
 - Ricerca mostro per nome (via albero accessibilità)
-- Griglia 5x4 a serpentina dentro l'area
 - Attacco + abilità 1 e 2 con cooldown separati
 - Pozioni automatiche + ricarica dall'inventario
 - Limite massimo uccisioni configurabile
 - Fix crash Android 14 (foregroundServiceType = specialUse)
 - Fix accessibilità su MIUI/Samsung (config semplificata)
+
+## State Machine v3
+- HUNT: joystick patrol → attacco → skills → pozione ogni 30 cicli
+- POTION: tap slot pozione
+- REFILL: swipe inventario → slot
 
 ## Replit Setup
 - **Web server**: `serve.py` su porta 5000 (pagina informativa)
