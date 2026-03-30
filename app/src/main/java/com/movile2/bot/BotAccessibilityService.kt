@@ -5,14 +5,13 @@ import android.accessibilityservice.GestureDescription
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.Path
-import android.graphics.Rect
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.view.Display
 import android.view.accessibility.AccessibilityEvent
-import android.view.accessibility.AccessibilityNodeInfo
 import androidx.annotation.RequiresApi
+import androidx.core.content.ContextCompat
 import kotlin.random.Random
 
 class BotAccessibilityService : AccessibilityService() {
@@ -76,8 +75,7 @@ class BotAccessibilityService : AccessibilityService() {
 
     @RequiresApi(Build.VERSION_CODES.R)
     private fun doScreenScan() {
-        val executor = { r: Runnable -> handler.post(r) }
-        takeScreenshot(Display.DEFAULT_DISPLAY, executor, object : TakeScreenshotCallback {
+        takeScreenshot(Display.DEFAULT_DISPLAY, ContextCompat.getMainExecutor(this), object : TakeScreenshotCallback {
             override fun onSuccess(screenshot: ScreenshotResult) {
                 val hw = Bitmap.wrapHardwareBuffer(screenshot.hardwareBuffer, screenshot.colorSpace)
                 val bmp = hw?.copy(Bitmap.Config.ARGB_8888, false)
