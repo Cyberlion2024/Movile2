@@ -52,3 +52,49 @@ Push su GitHub → GitHub Actions (`build-apk.yml`) builda automaticamente.
 APK scaricabile da Actions › Artifacts.
 
 Local build: `gradle assembleDebug` (richiede Android SDK + JDK 17)
+
+---
+
+## Analisi APK del gioco target (Mobile2 Global 2.23)
+
+Analisi eseguita il 30/03/2026 su `Mobile2_Global_2.23_APKPure.xapk`.
+
+### Struttura del gioco
+| Componente | Valore |
+|---|---|
+| Package | `com.vendsoft.mobile2` |
+| Versione | 2.23 |
+| Min SDK | 21 / Target SDK 35 |
+| Engine | **Unreal Engine 4** |
+| Main Activity | `com.epicgames.ue4.GameActivity` |
+| Libreria nativa | `libUE4.so` (182 MB) — tutto il codice di gioco |
+| Game project | `Mobile2Global` |
+| Contenuti | `pakchunk0-Android_ETC2.pak` (UE4 pak file) |
+
+### Struttura XAPK
+- `com.vendsoft.mobile2.apk` — wrapper Java + risorse Android
+- `config.arm64_v8a.apk` — librerie native arm64 (`libUE4.so` ecc.)
+- `config.en.apk` — stringhe localizzate
+- `config.xxhdpi.apk` — drawable xxhdpi
+
+### Implicazioni per il bot
+
+**Accessibility tree**: NON funziona. UE4 non crea alcuna Android View per la UI di gioco. L'intera interfaccia (nomi mostri, HP bar, joystick, skill buttons) è renderizzata da UE4 via OpenGL/Vulkan su una SurfaceView opaca.
+
+**Screen pixel detection**: UNICO modo per "vedere" lo stato del gioco. Il nostro approccio con `takeScreenshot()` + ricerca pixel rossi (nomi nemici) è corretto.
+
+**Gesti touch**: FUNZIONANO. UE4 riceve normalmente i `MotionEvent` Android sulla sua SurfaceView, quindi i gesti dell'Accessibility Service arrivano al gioco.
+
+**Colori rilevabili**:
+- Nomi mostri nemici: rosso vivace (R>180, G<110, B<90) — già implementato
+- Barre HP nemiche: potenziale secondo canale di rilevamento
+
+### Nota FLAG_SECURE
+Se il gioco attiva `FLAG_SECURE`, `takeScreenshot()` restituisce schermo nero. In quel caso il bot opera in modalità cieca (joystick + attacco senza detection visiva).
+
+### Classi Java notevoli nel DEX
+- `com.epicgames.ue4.GameActivity` — activity principale UE4
+- `com.epicgames.ue4.WebViewControl` — WebView per login/browser in-game
+- `com.epicgames.ue4.MediaPlayer14` — riproduzione video
+- `com.vendsoft.mobile2.OBBDownloaderService` — download OBB al primo avvio
+- `com.vendsoft.mobile2.AlarmReceiver` — notifiche locali
