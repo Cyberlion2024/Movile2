@@ -80,11 +80,6 @@ class BotAccessibilityService : AccessibilityService() {
     @Volatile private var autoBarFullW = 0
     @Volatile private var autoPlayerTrackX = 0f
     @Volatile private var autoPlayerTrackY = 0f
-    @Volatile private var lastDamageMs = 0L
-    @Volatile private var lastTargetSeenMs = 0L
-    @Volatile private var lastLootTapMs = 0L
-    @Volatile private var lastTargetX = 0f
-    @Volatile private var lastTargetY = 0f
 
     private val PATROL_STEPS = intArrayOf(5, 4, 5, 4)
     private val PATROL_DIRS  = arrayOf(
