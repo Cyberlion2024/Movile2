@@ -63,6 +63,23 @@ Local build: `gradle assembleDebug` (richiede Android SDK + JDK 17)
 
 ---
 
+## Analisi libUE4.so (31/03/2026)
+
+### Findings chiave
+- **Emulator detection**: BlueStacks, NoxPlayer, MEmu, vPhone, ChromeOS-ARC → solo dispositivi fisici reali
+- **MOB_COLOR confermato**: nomi mob rosso vivace → R>170, G<110, B<110, diff≥45
+- **AttackTimeMsec**: 60ms TAP_MS confermato corretto
+- **AGGRESSIVE_HP_PCT / AGGRESSIVE_SIGHT**: mob con aggro e raggio visione
+- **SKILL_VNUM0-4**: 5 slot abilità confermati (già implementati)
+- **dropLocs / dropedAt**: drop con posizione precisa e lifetime → centroide OK
+- **Origine Metin2** (turco): yang, buyuAttack, buyuDef, coinBonusYuzde
+- **Nessun IP server** trovato nel .so → endpoint nel PAK/OBB
+
+### File generati
+- `mobile2_decompiled/ANALISI_LIBRERIA.md` — analisi completa
+- `mobile2_decompiled/libUE4_strings.txt` — 821.971 stringhe estratte
+- `mobile2_decompiled/xapk_contents/` — tutti gli APK decompressi
+
 ## Analisi APK del gioco target (Mobile2 Global 2.23)
 
 Analisi eseguita il 30/03/2026 su `Mobile2_Global_2.23_APKPure.xapk`.

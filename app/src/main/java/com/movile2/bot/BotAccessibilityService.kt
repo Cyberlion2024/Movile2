@@ -1,5 +1,22 @@
 package com.movile2.bot
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// Analisi libUE4.so (Mobile2 Global 2.23 — ARM64 stripped, 182 MB)
+//
+// Costanti trovate nel codice nativo del gioco:
+//   ATTACK_RANGE, ATTACK_SPEED, AttackTimeMsec  → timing 60ms confermato corretto
+//   AGGRESSIVE_HP_PCT, AGGRESSIVE_SIGHT         → mob aggro attivo; patrol raggio contenuto
+//   MOB_COLOR (nome mob = rosso vivace)          → R>170, G<110, B<110 confermato
+//   SKILL_VNUM0..4, SKILL_LEVEL0..4             → 5 slot abilità confermati
+//   dropLocs, DROP_ITEM, dropedAt               → drop con posizione precisa; centroide OK
+//   yang, buyuAttack, buyuDef, coinBonusYuzde   → gioco derivato da Metin2 (turco)
+//
+// IMPORTANTE — Emulator detection integrata nel gioco:
+//   com.bluestacks.*, com.bignox.*, com.microvirt.*, com.nox.mopen.app,
+//   com.vphone.*, org.chromium.arc
+//   → usare SOLO dispositivi fisici reali, non emulatori noti.
+// ═══════════════════════════════════════════════════════════════════════════════
+
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
 import android.graphics.Bitmap
@@ -20,6 +37,7 @@ class BotAccessibilityService : AccessibilityService() {
     private val handler = Handler(Looper.getMainLooper())
 
     // ── Timing ────────────────────────────────────────────────────────────────
+    // TAP_MS = 60ms confermato da AttackTimeMsec nel codice nativo del gioco
     private val TAP_MS           = 60L
     private val GAP_MS           = 90L
     private val JOYSTICK_MS      = 350L
@@ -30,7 +48,15 @@ class BotAccessibilityService : AccessibilityService() {
     private val CAMERA_EVERY     = 5
     private val COMBAT_GRACE_MS  = 2500L
     private val TARGET_GRACE_MS  = 1800L
-    private val LOOT_TAP_CD_MS   = 1200L
+    private val LOOT_TAP_CD_MS   = 1200L   // dropedAt: i drop hanno lifetime limitato
+
+    // ── Soglie colore pixel (da analisi MOB_COLOR in libUE4.so) ───────────────
+    // Nomi mostri nemici: rosso vivace tipico Metin2 (R alto, G/B bassi)
+    private val MOB_R_MIN  = 170;  private val MOB_G_MAX  = 110;  private val MOB_B_MAX  = 110
+    private val MOB_R_DIFF = 45    // R deve superare G e B di almeno 45
+    // Barra HP (striscia rossa in top-left): rosso meno saturo del nome mob
+    private val HP_R_MIN   = 120;  private val HP_G_MAX   = 110;  private val HP_B_MAX   = 110
+    private val HP_R_DIFF  = 25
 
     // ── Coordinate automatiche (calcolate da risoluzione schermo) ─────────────
     // Layout Mobile2 Global derivato dall'analisi degli screenshot.
@@ -228,7 +254,7 @@ class BotAccessibilityService : AccessibilityService() {
             for (x in 80 until w step 4) {
                 val p = bmp.getPixel(x, y)
                 val r = Color.red(p); val g = Color.green(p); val b = Color.blue(p)
-                if (r > 160 && g < 130 && b < 120 && r > g + 40 && r > b + 40) {
+                if (r > MOB_R_MIN && g < MOB_G_MAX && b < MOB_B_MAX && r > g + MOB_R_DIFF && r > b + MOB_R_DIFF) {
                     sumX += x; sumY += y; count++
                 }
             }
@@ -261,7 +287,7 @@ class BotAccessibilityService : AccessibilityService() {
                 for (x in barX until scanEnd) {
                     val p = bmp.getPixel(x, sy)
                     val r = Color.red(p); val g = Color.green(p); val b = Color.blue(p)
-                    if (r > 120 && g < 110 && b < 110 && r > g + 25 && r > b + 25) redPx++
+                    if (r > HP_R_MIN && g < HP_G_MAX && b < HP_B_MAX && r > g + HP_R_DIFF && r > b + HP_R_DIFF) redPx++
                     totPx++
                 }
             }
@@ -321,7 +347,7 @@ class BotAccessibilityService : AccessibilityService() {
             for (x in 14 until maxX) {
                 val p = bmp.getPixel(x, y)
                 val r = Color.red(p); val g = Color.green(p); val b = Color.blue(p)
-                if (r > 120 && r > g + 25 && r > b + 25) {
+                if (r > HP_R_MIN && r > g + HP_R_DIFF && r > b + HP_R_DIFF) {
                     if (firstRed < 0) firstRed = x; lastRed = x; redCount++
                 }
             }
