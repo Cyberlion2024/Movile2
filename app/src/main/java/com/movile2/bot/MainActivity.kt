@@ -51,6 +51,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var etDefenseRadius: EditText
 
     private var pendingKey = ""
+    private var calibrationQueue: ArrayDeque<Pair<String, String>>? = null
 
     companion object {
         private const val REQ = 101
@@ -279,6 +280,45 @@ class MainActivity : AppCompatActivity() {
             K_PLAYER   -> cfg.copy(playerX = x, playerY = y).also          { tvPlayerCoord.text = xy(x, y) }
             else       -> cfg
         }
+        continueCalibrationIfNeeded()
+    }
+
+    private fun startCalibration() {
+        calibrationQueue = ArrayDeque(
+            listOf(
+                K_ATTACK to "Bottone Attacco (spada grande)",
+                K_SK1 to "Abilità 1",
+                K_SK2 to "Abilità 2",
+                K_SK3 to "Abilità 3",
+                K_SK4 to "Abilità 4",
+                K_SK5 to "Abilità 5",
+                K_POTION to "Pozione rossa",
+                K_BACKUP to "Pozione backup",
+                K_JOYSTICK to "Centro Joystick",
+                K_HP to "Bordo sinistro barra HP",
+                K_PLAYER to "Centro personaggio (petto)"
+            )
+        )
+        toast("Calibrazione avviata: tocca i punti richiesti in sequenza")
+        continueCalibrationIfNeeded()
+    }
+
+    private fun continueCalibrationIfNeeded() {
+        val q = calibrationQueue ?: return
+        if (q.isEmpty()) {
+            calibrationQueue = null
+            BotConfig.save(this, cfg)
+            populate()
+            toast("Calibrazione completata ✓")
+            return
+        }
+        val (key, label) = q.removeFirst()
+        pendingKey = key
+        @Suppress("DEPRECATION")
+        startActivityForResult(
+            Intent(this, CoordinatePickerActivity::class.java)
+                .putExtra(CoordinatePickerActivity.EXTRA_LABEL, label), REQ
+        )
     }
 
     private fun save() {

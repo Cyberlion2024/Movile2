@@ -26,6 +26,7 @@ import kotlin.math.abs
 class BotAccessibilityService : AccessibilityService() {
 
     private val handler = Handler(Looper.getMainLooper())
+    private enum class HudProfile { COMPACT, WIDE }
 
     // ── Timing ───────────────────────────────────────────────────────────────
     private val TAP_MS          = 60L
