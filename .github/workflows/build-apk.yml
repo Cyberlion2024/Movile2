@@ -14,6 +14,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          clean: true
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -40,7 +43,13 @@ jobs:
             ${{ runner.os }}-gradle-
 
       - name: Build Debug APK
-        run: gradle assembleDebug
+        run: gradle --no-build-cache --rerun-tasks assembleDebug
+
+      - name: Debug Kotlin source snapshot
+        run: |
+          echo "Commit: $(git rev-parse --short HEAD)"
+          echo "Checking symbols in BotAccessibilityService.kt"
+          grep -n "ATTACK_SPAM_COUNT\|lastCombatSeenMs" app/src/main/java/com/movile2/bot/BotAccessibilityService.kt || true
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
