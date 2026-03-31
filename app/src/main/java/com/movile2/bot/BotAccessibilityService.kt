@@ -411,6 +411,7 @@ class BotAccessibilityService : AccessibilityService() {
     // ═══════════════════════════════════════════════════════════════════════════
     private fun doHunt(cfg: BotConfig) {
         val now = System.currentTimeMillis()
+        val attackSpam = 3
         val hasTarget = targetX > 0f && targetY > 0f
         val recentCombat = (now - lastDamageMs) < COMBAT_GRACE_MS || (now - lastTargetSeenMs) < TARGET_GRACE_MS
 
