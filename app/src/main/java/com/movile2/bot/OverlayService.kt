@@ -33,7 +33,11 @@ class OverlayService : Service() {
         override fun run() {
             val running = BotState.isRunning
             val defend  = BotState.underAttack
-            tvKills?.text = "Kills: ${BotState.killCount}"
+            val hpPct   = BotState.hpDisplayPct
+
+            val hpStr = if (hpPct >= 0) " HP:${hpPct}%" else ""
+            tvKills?.text = "Kills: ${BotState.killCount}$hpStr"
+
             when {
                 !running -> {
                     tvStatus?.text = "● STOP"

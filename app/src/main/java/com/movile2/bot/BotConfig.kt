@@ -52,6 +52,11 @@ data class BotConfig(
     val hpBarFullWidth: Int = 180,
     // Soglia HP sotto cui usare la pozione (0.0 - 1.0), default 85%
     val hpPotionThreshold: Float = 0.85f,
+
+    // Raggio difesa: posizione del personaggio sullo schermo + raggio in pixel
+    val playerX: Float = 0f,
+    val playerY: Float = 0f,
+    val defenseRadiusPx: Int = 200,
 ) {
     companion object {
         private const val PREFS = "bot_config"
@@ -95,6 +100,9 @@ data class BotConfig(
                 hpBarY            = p.getFloat("hpBarY", 0f),
                 hpBarFullWidth    = p.getInt("hpBarFullWidth", 180),
                 hpPotionThreshold = p.getFloat("hpPotionThreshold", 0.85f),
+                playerX           = p.getFloat("playerX", 0f),
+                playerY           = p.getFloat("playerY", 0f),
+                defenseRadiusPx   = p.getInt("defenseRadiusPx", 200),
             )
         }
 
@@ -136,6 +144,9 @@ data class BotConfig(
                 putFloat("hpBarY", cfg.hpBarY)
                 putInt("hpBarFullWidth", cfg.hpBarFullWidth)
                 putFloat("hpPotionThreshold", cfg.hpPotionThreshold)
+                putFloat("playerX", cfg.playerX)
+                putFloat("playerY", cfg.playerY)
+                putInt("defenseRadiusPx", cfg.defenseRadiusPx)
                 apply()
             }
         }

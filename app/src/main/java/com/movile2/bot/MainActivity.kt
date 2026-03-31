@@ -38,6 +38,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvHpBarCoord: TextView
     private lateinit var etHpBarFullWidth: EditText
     private lateinit var etHpPotionThreshold: EditText
+    private lateinit var tvPlayerCoord: TextView
+    private lateinit var etDefenseRadius: EditText
 
     private var pendingKey = ""
 
@@ -54,6 +56,7 @@ class MainActivity : AppCompatActivity() {
         private const val K_JOYSTICK = "joystick"
         private const val K_CAMERA   = "camera"
         private const val K_HP       = "hp"
+        private const val K_PLAYER   = "player"
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -91,6 +94,8 @@ class MainActivity : AppCompatActivity() {
         tvHpBarCoord         = findViewById(R.id.tvHpBarCoord)
         etHpBarFullWidth     = findViewById(R.id.etHpBarFullWidth)
         etHpPotionThreshold  = findViewById(R.id.etHpPotionThreshold)
+        tvPlayerCoord        = findViewById(R.id.tvPlayerCoord)
+        etDefenseRadius      = findViewById(R.id.etDefenseRadius)
     }
 
     private fun populate() {
@@ -119,6 +124,8 @@ class MainActivity : AppCompatActivity() {
         tvHpBarCoord.text        = if (cfg.hpBarX > 0f) xy(cfg.hpBarX, cfg.hpBarY) else "non impostato"
         etHpBarFullWidth.setText(cfg.hpBarFullWidth.toString())
         etHpPotionThreshold.setText((cfg.hpPotionThreshold * 100).toInt().toString())
+        tvPlayerCoord.text       = if (cfg.playerX > 0f) xy(cfg.playerX, cfg.playerY) else "non impostato"
+        etDefenseRadius.setText(cfg.defenseRadiusPx.toString())
     }
 
     private fun hooks() {
@@ -143,6 +150,7 @@ class MainActivity : AppCompatActivity() {
         findViewById<Button>(R.id.btnPickJoystick).setOnClickListener { pick(K_JOYSTICK, "Centro Joystick",          tvJoystickCoord) }
         findViewById<Button>(R.id.btnPickCamera)  .setOnClickListener { pick(K_CAMERA,   "Punto Centrale Visuale",   tvCameraCoord) }
         findViewById<Button>(R.id.btnPickHpBar)   .setOnClickListener { pick(K_HP,       "Bordo Sinistro Barra HP",  tvHpBarCoord) }
+        findViewById<Button>(R.id.btnPickPlayer)  .setOnClickListener { pick(K_PLAYER,   "Centro Personaggio",        tvPlayerCoord) }
 
         findViewById<Button>(R.id.btnSave).setOnClickListener { save() }
 
@@ -186,6 +194,7 @@ class MainActivity : AppCompatActivity() {
             K_JOYSTICK -> cfg.copy(joystickX = x, joystickY = y).also      { tvJoystickCoord.text = xy(x, y) }
             K_CAMERA   -> cfg.copy(cameraAreaX = x, cameraAreaY = y).also  { tvCameraCoord.text = xy(x, y) }
             K_HP       -> cfg.copy(hpBarX = x, hpBarY = y).also            { tvHpBarCoord.text = xy(x, y) }
+            K_PLAYER   -> cfg.copy(playerX = x, playerY = y).also          { tvPlayerCoord.text = xy(x, y) }
             else       -> cfg
         }
     }
@@ -206,6 +215,7 @@ class MainActivity : AppCompatActivity() {
             cameraSwipeRange  = etCameraSwipeRange.text.toString().toFloatOrNull() ?: cfg.cameraSwipeRange,
             hpBarFullWidth    = etHpBarFullWidth.text.toString().toIntOrNull()  ?: cfg.hpBarFullWidth,
             hpPotionThreshold = (etHpPotionThreshold.text.toString().toFloatOrNull() ?: (cfg.hpPotionThreshold * 100)) / 100f,
+            defenseRadiusPx   = etDefenseRadius.text.toString().toIntOrNull()  ?: cfg.defenseRadiusPx,
         )
         BotConfig.save(this, cfg)
         toast("Impostazioni salvate ✓")
