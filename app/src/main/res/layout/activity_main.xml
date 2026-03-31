@@ -423,7 +423,7 @@ abilita Movile2 Bot (non usare il menu principale Accessibilità)"
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Tocca il centro dell'area che muove la visuale. Ogni 4 cicli il bot ruota la telecamera destra↔sinistra, ma solo se non ha già un bersaglio visibile."
+            android:text="Tocca il centro dell'area che muove la visuale. Ogni 5 cicli il bot ruota la telecamera destra↔sinistra, ma solo se non ha già un bersaglio visibile."
             android:textSize="11sp"
             android:textColor="#aaaaaa"
             android:paddingBottom="6dp" />
