@@ -4,6 +4,7 @@ import android.content.Context
 
 data class BotConfig(
     val monsterName: String = "",
+    val playerName: String = "",
     val maxKills: Int = 50,
     val sessionMinutes: Int = 0,
 
@@ -62,6 +63,7 @@ data class BotConfig(
             val p = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             return BotConfig(
                 monsterName       = p.getString("monsterName", "") ?: "",
+                playerName        = p.getString("playerName", "") ?: "",
                 maxKills          = p.getInt("maxKills", 50),
                 sessionMinutes    = p.getInt("sessionMinutes", 0),
                 attackX           = p.getFloat("attackX", 0f),
@@ -106,6 +108,7 @@ data class BotConfig(
         fun save(ctx: Context, cfg: BotConfig) {
             ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().apply {
                 putString("monsterName", cfg.monsterName)
+                putString("playerName", cfg.playerName)
                 putInt("maxKills", cfg.maxKills)
                 putInt("sessionMinutes", cfg.sessionMinutes)
                 putFloat("attackX", cfg.attackX)
