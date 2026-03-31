@@ -156,19 +156,19 @@ class BotAccessibilityService : AccessibilityService() {
         aBackupPotX = col2;  aBackupPotY = topRowY   // seconda pozione (slot a destra)
 
         // Joystick (cerchio grande in basso a sinistra)
-        aJoystickX  = sw * 0.083f
-        aJoystickY  = sh * 0.844f
-        aJoystickR  = sw * 0.065f
+        aJoystickX  = sw * 0.067f
+        aJoystickY  = sh * 0.815f
+        aJoystickR  = sw * 0.072f
 
         // Area telecamera (trascina centro schermo per ruotare)
-        aCameraX     = sw * 0.500f
-        aCameraY     = sh * 0.375f
-        aCameraRange = sw * 0.140f
+        aCameraX     = sw * 0.53f
+        aCameraY     = sh * 0.43f
+        aCameraRange = sw * 0.165f
 
         // Centro personaggio (bashy: circa centro-sinistra del game world)
-        aPlayerX  = sw * 0.455f
-        aPlayerY  = sh * 0.395f
-        aDefenseR = (sw * 0.165f).toInt()   // raggio difesa ~165px su 1080px
+        aPlayerX  = sw * 0.50f
+        aPlayerY  = sh * 0.51f
+        aDefenseR = (sw * 0.145f).toInt()
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
