@@ -460,7 +460,29 @@ class BotAccessibilityService : AccessibilityService() {
         if (tx > 0f && ty > 0f && (hasTarget || recentCombat)) {
             handler.postDelayed({ if (BotState.isRunning) tap(tx, ty) }, t); t += TAP_MS + GAP_MS
         }
-        handler.postDelayed({ if (BotState.isRunning) tap(ax, ay) }, t); t += TAP_MS + GAP_MS
+        repeat(ATTACK_SPAM_COUNT) {
+            handler.postDelayed({ if (BotState.isRunning) tap(ax, ay) }, t)
+            t += TAP_MS + GAP_MS
+        }
+
+        // Raccolta loot quando non siamo più in combattimento
+        if (!hasTarget && !recentCombat && lootX > 0f && now - lastLootTapMs >= LOOT_TAP_CD_MS) {
+            val lx = lootX; val ly = lootY
+            handler.postDelayed({ if (BotState.isRunning) tap(lx, ly) }, t)
+            lastLootTapMs = now
+            t += TAP_MS + GAP_MS
+        }
+        // fallback raccolta: tap attorno al player quando il combat è finito da poco
+        if (!hasTarget && !recentCombat && now - lastCombatSeenMs < 9000L && now - lastLootTapMs >= LOOT_TAP_CD_MS) {
+            val px = if (cfg.playerX > 0f) cfg.playerX else if (autoPlayerTrackX > 0f) autoPlayerTrackX else aPlayerX
+            val py = if (cfg.playerY > 0f) cfg.playerY else if (autoPlayerTrackY > 0f) autoPlayerTrackY else aPlayerY
+            val r = ri(cfg.defenseRadiusPx, aDefenseR).coerceAtLeast(120)
+            val lx = px + r * 0.35f
+            val ly = py + r * 0.15f
+            handler.postDelayed({ if (BotState.isRunning) tap(lx, ly) }, t)
+            lastLootTapMs = now
+            t += TAP_MS + GAP_MS
+        }
 
         // Raccolta loot quando non siamo più in combattimento
         if (!hasTarget && !recentCombat && lootX > 0f && now - lastLootTapMs >= LOOT_TAP_CD_MS) {
@@ -509,13 +531,19 @@ class BotAccessibilityService : AccessibilityService() {
             defendAngleIdx = (defendAngleIdx + 1) % DEFEND_ANGLES.size
         }
 
-        handler.postDelayed({ if (BotState.isRunning) tap(ax, ay) }, t); t += TAP_MS + GAP_MS
+        repeat(ATTACK_SPAM_COUNT) {
+            handler.postDelayed({ if (BotState.isRunning) tap(ax, ay) }, t)
+            t += TAP_MS + GAP_MS
+        }
 
         val tx = if (targetX > 0f) targetX else lastTargetX
         val ty = if (targetY > 0f) targetY else lastTargetY
         if (tx > 0f && ty > 0f) {
             handler.postDelayed({ if (BotState.isRunning) tap(tx, ty) }, t); t += TAP_MS + GAP_MS
-            handler.postDelayed({ if (BotState.isRunning) tap(ax, ay) }, t); t += TAP_MS + GAP_MS
+            repeat(2) {
+                handler.postDelayed({ if (BotState.isRunning) tap(ax, ay) }, t)
+                t += TAP_MS + GAP_MS
+            }
         }
 
         t = scheduleSkills(cfg, now, t)
