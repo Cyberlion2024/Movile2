@@ -388,7 +388,6 @@ class BotAccessibilityService : AccessibilityService() {
             if (!hpBarConfigured && inCombatCycles >= 5) BotState.underAttack = true
         } else {
             inCombatCycles = 0
-            if (!hpBarConfigured) BotState.underAttack = false
         }
         if (BotState.underAttack || recentCombat) { phase = Phase.DEFEND; handler.post(loop); return }
 
@@ -478,7 +477,8 @@ class BotAccessibilityService : AccessibilityService() {
 
         handler.postDelayed({ if (BotState.isRunning) tap(ax, ay) }, t); t += TAP_MS + GAP_MS
 
-        val tx = targetX; val ty = targetY
+        val tx = if (targetX > 0f) targetX else lastTargetX
+        val ty = if (targetY > 0f) targetY else lastTargetY
         if (tx > 0f && ty > 0f) {
             handler.postDelayed({ if (BotState.isRunning) tap(tx, ty) }, t); t += TAP_MS + GAP_MS
             handler.postDelayed({ if (BotState.isRunning) tap(ax, ay) }, t); t += TAP_MS + GAP_MS
@@ -494,11 +494,14 @@ class BotAccessibilityService : AccessibilityService() {
     private fun doPotion(cfg: BotConfig) {
         val potX = r(cfg.potionX, aPotionX); val potY = r(cfg.potionY, aPotionY)
         tap(potX, potY)
+        lastPotionTapMs = System.currentTimeMillis()
         potionUses++
         val backX = r(cfg.backupPotionX, aBackupPotX)
+        val now = System.currentTimeMillis()
+        val recentCombat = (now - lastDamageMs) < COMBAT_GRACE_MS || (now - lastTargetSeenMs) < TARGET_GRACE_MS
         phase = when {
             potionUses >= cfg.maxPotionsInSlot && backX > 0f -> Phase.REFILL
-            BotState.underAttack -> Phase.DEFEND
+            BotState.underAttack || recentCombat -> Phase.DEFEND
             else -> Phase.HUNT
         }
         handler.postDelayed(loop, TAP_MS + 300L)
