@@ -95,7 +95,31 @@ abilita Movile2 Bot (non usare il menu principale Accessibilità)"
             android:id="@+id/etMonsterName"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="Nome mostro (opzionale, per ricerca UI)"
+            android:hint="Nome mostro (opzionale)"
+            android:textColorHint="#666"
+            android:textColor="#ffffff"
+            android:background="#1e1e3a"
+            android:padding="10dp"
+            android:layout_marginBottom="8dp"
+            android:inputType="text" />
+
+        <EditText
+            android:id="@+id/etPlayerName"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Nome personaggio (opzionale)"
+            android:textColorHint="#666"
+            android:textColor="#ffffff"
+            android:background="#1e1e3a"
+            android:padding="10dp"
+            android:layout_marginBottom="8dp"
+            android:inputType="text" />
+
+        <EditText
+            android:id="@+id/etPlayerName"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Nome personaggio (opzionale, lo inserisci tu)"
             android:textColorHint="#666"
             android:textColor="#ffffff"
             android:background="#1e1e3a"
@@ -177,7 +201,7 @@ abilita Movile2 Bot (non usare il menu principale Accessibilità)"
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="NON serve impostare niente qui. Il bot trova da solo la barra HP rossa in alto a sinistra non appena parte. Se il rilevamento automatico non funzionasse puoi toccare Manuale per impostarlo a mano."
+            android:text="NON serve impostare niente qui. Il bot trova da solo la barra HP rossa in alto a sinistra. Se il rilevamento automatico non funzionasse puoi toccare Manuale per impostarlo a mano."
             android:textSize="11sp"
             android:textColor="#aaaaaa"
             android:paddingBottom="6dp" />
@@ -269,20 +293,12 @@ abilita Movile2 Bot (non usare il menu principale Accessibilità)"
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="🛡 Raggio Difesa (mostri vicini)"
+            android:text="🛡 Raggio Difesa"
             android:textSize="15sp"
             android:textColor="#4fc3f7"
             android:textStyle="bold"
             android:paddingTop="4dp"
             android:paddingBottom="4dp" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Tocca il centro del tuo personaggio sullo schermo. In modalità DIFESA il bot tappa in cerchio intorno a te con il raggio specificato, colpendo i mostri vicini anche senza selezionarli. Senza raggio configurato attacca solo col tasto attacco."
-            android:textSize="11sp"
-            android:textColor="#aaaaaa"
-            android:paddingBottom="6dp" />
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -352,14 +368,6 @@ abilita Movile2 Bot (non usare il menu principale Accessibilità)"
             android:textStyle="bold"
             android:paddingBottom="4dp" />
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Tocca il centro del joystick nel gioco. Il bot pattuglia N→E→S→W automaticamente."
-            android:textSize="11sp"
-            android:textColor="#aaaaaa"
-            android:paddingBottom="6dp" />
-
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -427,14 +435,6 @@ abilita Movile2 Bot (non usare il menu principale Accessibilità)"
             android:textColor="#4fc3f7"
             android:textStyle="bold"
             android:paddingBottom="4dp" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Tocca il centro dell'area che muove la visuale. Ogni 4 cicli il bot ruota la telecamera destra↔sinistra, ma solo se non ha già un bersaglio visibile."
-            android:textSize="11sp"
-            android:textColor="#aaaaaa"
-            android:paddingBottom="6dp" />
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -523,7 +523,7 @@ abilita Movile2 Bot (non usare il menu principale Accessibilità)"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="(950, 700)"
+                android:text="auto"
                 android:textColor="#80cbc4"
                 android:gravity="center_vertical" />
 
@@ -572,396 +572,210 @@ abilita Movile2 Bot (non usare il menu principale Accessibilità)"
             android:paddingBottom="8dp" />
 
         <!-- Abilità 1 -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginBottom="8dp">
-
-            <TextView
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Abilità 1:"
-                android:textColor="#cccccc"
-                android:gravity="center_vertical" />
-
-            <TextView
-                android:id="@+id/tvSkill1Coord"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="(850, 650)"
-                android:textColor="#80cbc4"
-                android:gravity="center_vertical" />
-
-            <Button
-                android:id="@+id/btnPickSkill1"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Imposta"
-                android:textSize="12sp"
-                android:paddingStart="12dp"
-                android:paddingEnd="12dp" />
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="horizontal" android:layout_marginBottom="4dp">
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="Abilità 1:" android:textColor="#cccccc" android:gravity="center_vertical" />
+            <TextView android:id="@+id/tvSkill1Coord" android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="auto" android:textColor="#80cbc4" android:gravity="center_vertical" />
+            <Button android:id="@+id/btnPickSkill1" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="Imposta" android:textSize="12sp" android:paddingStart="12dp" android:paddingEnd="12dp" />
         </LinearLayout>
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginBottom="8dp">
-
-            <TextView
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Cooldown Abilità 1 (sec):"
-                android:textColor="#cccccc"
-                android:gravity="center_vertical" />
-
-            <EditText
-                android:id="@+id/etSkill1Cd"
-                android:layout_width="80dp"
-                android:layout_height="wrap_content"
-                android:inputType="number"
-                android:textColor="#ffffff"
-                android:background="#1e1e3a"
-                android:padding="8dp" />
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="horizontal" android:layout_marginBottom="8dp">
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="Cooldown 1 (sec):" android:textColor="#cccccc" android:gravity="center_vertical" />
+            <EditText android:id="@+id/etSkill1Cd" android:layout_width="80dp" android:layout_height="wrap_content"
+                android:inputType="number" android:textColor="#ffffff" android:background="#1e1e3a" android:padding="8dp" android:text="3" />
         </LinearLayout>
 
         <!-- Abilità 2 -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginBottom="8dp">
-
-            <TextView
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Abilità 2:"
-                android:textColor="#cccccc"
-                android:gravity="center_vertical" />
-
-            <TextView
-                android:id="@+id/tvSkill2Coord"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="(780, 720)"
-                android:textColor="#80cbc4"
-                android:gravity="center_vertical" />
-
-            <Button
-                android:id="@+id/btnPickSkill2"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Imposta"
-                android:textSize="12sp"
-                android:paddingStart="12dp"
-                android:paddingEnd="12dp" />
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="horizontal" android:layout_marginBottom="4dp">
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="Abilità 2:" android:textColor="#cccccc" android:gravity="center_vertical" />
+            <TextView android:id="@+id/tvSkill2Coord" android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="auto" android:textColor="#80cbc4" android:gravity="center_vertical" />
+            <Button android:id="@+id/btnPickSkill2" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="Imposta" android:textSize="12sp" android:paddingStart="12dp" android:paddingEnd="12dp" />
+        </LinearLayout>
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="horizontal" android:layout_marginBottom="8dp">
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="Cooldown 2 (sec):" android:textColor="#cccccc" android:gravity="center_vertical" />
+            <EditText android:id="@+id/etSkill2Cd" android:layout_width="80dp" android:layout_height="wrap_content"
+                android:inputType="number" android:textColor="#ffffff" android:background="#1e1e3a" android:padding="8dp" android:text="5" />
         </LinearLayout>
 
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginBottom="8dp">
-
-            <TextView
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Cooldown Abilità 2 (sec):"
-                android:textColor="#cccccc"
-                android:gravity="center_vertical" />
-
-            <EditText
-                android:id="@+id/etSkill2Cd"
-                android:layout_width="80dp"
-                android:layout_height="wrap_content"
-                android:inputType="number"
-                android:textColor="#ffffff"
-                android:background="#1e1e3a"
-                android:padding="8dp" />
+        <!-- Abilità 3 -->
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="horizontal" android:layout_marginBottom="4dp">
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="Abilità 3 (opz):" android:textColor="#cccccc" android:gravity="center_vertical" />
+            <TextView android:id="@+id/tvSkill3Coord" android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="auto" android:textColor="#80cbc4" android:gravity="center_vertical" />
+            <Button android:id="@+id/btnPickSkill3" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="Imposta" android:textSize="12sp" android:paddingStart="12dp" android:paddingEnd="12dp" />
         </LinearLayout>
-
-        <!-- Abilità 3 (opzionale) -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginBottom="8dp">
-
-            <TextView
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Abilità 3 (opzionale):"
-                android:textColor="#cccccc"
-                android:gravity="center_vertical" />
-
-            <TextView
-                android:id="@+id/tvSkill3Coord"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="non impostato"
-                android:textColor="#80cbc4"
-                android:gravity="center_vertical" />
-
-            <Button
-                android:id="@+id/btnPickSkill3"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Imposta"
-                android:textSize="12sp"
-                android:paddingStart="12dp"
-                android:paddingEnd="12dp" />
-        </LinearLayout>
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginBottom="8dp">
-
-            <TextView
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Cooldown Abilità 3 (sec):"
-                android:textColor="#cccccc"
-                android:gravity="center_vertical" />
-
-            <EditText
-                android:id="@+id/etSkill3Cd"
-                android:layout_width="80dp"
-                android:layout_height="wrap_content"
-                android:inputType="number"
-                android:textColor="#ffffff"
-                android:background="#1e1e3a"
-                android:padding="8dp"
-                android:text="8" />
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="horizontal" android:layout_marginBottom="8dp">
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="Cooldown 3 (sec):" android:textColor="#cccccc" android:gravity="center_vertical" />
+            <EditText android:id="@+id/etSkill3Cd" android:layout_width="80dp" android:layout_height="wrap_content"
+                android:inputType="number" android:textColor="#ffffff" android:background="#1e1e3a" android:padding="8dp" android:text="8" />
         </LinearLayout>
 
         <!-- Abilità 4 -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginBottom="8dp">
-
-            <TextView
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Abilità 4 (opzionale):"
-                android:textColor="#cccccc"
-                android:gravity="center_vertical" />
-
-            <TextView
-                android:id="@+id/tvSkill4Coord"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="non impostato"
-                android:textColor="#80cbc4"
-                android:gravity="center_vertical" />
-
-            <Button
-                android:id="@+id/btnPickSkill4"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Imposta"
-                android:textSize="12sp"
-                android:paddingStart="12dp"
-                android:paddingEnd="12dp" />
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="horizontal" android:layout_marginBottom="4dp">
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="Abilità 4 (opz):" android:textColor="#cccccc" android:gravity="center_vertical" />
+            <TextView android:id="@+id/tvSkill4Coord" android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="auto" android:textColor="#80cbc4" android:gravity="center_vertical" />
+            <Button android:id="@+id/btnPickSkill4" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="Imposta" android:textSize="12sp" android:paddingStart="12dp" android:paddingEnd="12dp" />
         </LinearLayout>
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginBottom="8dp">
-
-            <TextView
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Cooldown Abilità 4 (sec):"
-                android:textColor="#cccccc"
-                android:gravity="center_vertical" />
-
-            <EditText
-                android:id="@+id/etSkill4Cd"
-                android:layout_width="80dp"
-                android:layout_height="wrap_content"
-                android:inputType="number"
-                android:textColor="#ffffff"
-                android:background="#1e1e3a"
-                android:padding="8dp"
-                android:text="12" />
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="horizontal" android:layout_marginBottom="8dp">
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="Cooldown 4 (sec):" android:textColor="#cccccc" android:gravity="center_vertical" />
+            <EditText android:id="@+id/etSkill4Cd" android:layout_width="80dp" android:layout_height="wrap_content"
+                android:inputType="number" android:textColor="#ffffff" android:background="#1e1e3a" android:padding="8dp" android:text="12" />
         </LinearLayout>
 
         <!-- Abilità 5 -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginBottom="8dp">
-
-            <TextView
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Abilità 5 (opzionale):"
-                android:textColor="#cccccc"
-                android:gravity="center_vertical" />
-
-            <TextView
-                android:id="@+id/tvSkill5Coord"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="non impostato"
-                android:textColor="#80cbc4"
-                android:gravity="center_vertical" />
-
-            <Button
-                android:id="@+id/btnPickSkill5"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Imposta"
-                android:textSize="12sp"
-                android:paddingStart="12dp"
-                android:paddingEnd="12dp" />
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="horizontal" android:layout_marginBottom="4dp">
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="Abilità 5 (opz):" android:textColor="#cccccc" android:gravity="center_vertical" />
+            <TextView android:id="@+id/tvSkill5Coord" android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="auto" android:textColor="#80cbc4" android:gravity="center_vertical" />
+            <Button android:id="@+id/btnPickSkill5" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="Imposta" android:textSize="12sp" android:paddingStart="12dp" android:paddingEnd="12dp" />
+        </LinearLayout>
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="horizontal" android:layout_marginBottom="12dp">
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="Cooldown 5 (sec):" android:textColor="#cccccc" android:gravity="center_vertical" />
+            <EditText android:id="@+id/etSkill5Cd" android:layout_width="80dp" android:layout_height="wrap_content"
+                android:inputType="number" android:textColor="#ffffff" android:background="#1e1e3a" android:padding="8dp" android:text="15" />
         </LinearLayout>
 
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginBottom="12dp">
-
-            <TextView
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Cooldown Abilità 5 (sec):"
-                android:textColor="#cccccc"
-                android:gravity="center_vertical" />
-
-            <EditText
-                android:id="@+id/etSkill5Cd"
-                android:layout_width="80dp"
-                android:layout_height="wrap_content"
-                android:inputType="number"
-                android:textColor="#ffffff"
-                android:background="#1e1e3a"
-                android:padding="8dp"
-                android:text="15" />
-        </LinearLayout>
-
-        <!-- ── Pozioni ────────────────────────────────────────────────────── -->
+        <!-- ── Pozioni Vita ───────────────────────────────────────────────── -->
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="🧪 Pozioni"
+            android:text="🧪 Pozioni Vita — Multi-Slot (fino a 7)"
             android:textSize="15sp"
             android:textColor="#4fc3f7"
             android:textStyle="bold"
-            android:paddingBottom="8dp" />
+            android:paddingBottom="4dp" />
 
-        <LinearLayout
+        <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginBottom="8dp">
+            android:text="Imposta fino a 7 slot pozione. Il bot usa lo slot 1, poi 2, ecc. Quando uno slot si svuota (nessuna icona rossa rilevata) passa automaticamente al successivo. Quando tutti sono vuoti, trascina la pozione dall'inventario allo slot 1 (configura la posizione inventario qui sotto)."
+            android:textSize="11sp"
+            android:textColor="#aaaaaa"
+            android:background="#1a0a00"
+            android:padding="8dp"
+            android:layout_marginBottom="8dp" />
 
-            <TextView
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Slot pozione:"
-                android:textColor="#cccccc"
-                android:gravity="center_vertical" />
-
-            <TextView
-                android:id="@+id/tvPotionCoord"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="(0, 0)"
-                android:textColor="#80cbc4"
-                android:gravity="center_vertical" />
-
-            <Button
-                android:id="@+id/btnPickPotion"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Imposta"
-                android:textSize="12sp"
-                android:paddingStart="12dp"
-                android:paddingEnd="12dp" />
+        <!-- Slot 1 -->
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="horizontal" android:layout_marginBottom="6dp">
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="Slot 1 (principale):" android:textColor="#ffcc88" android:gravity="center_vertical" />
+            <TextView android:id="@+id/tvPotion1Coord" android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="non impostato" android:textColor="#ef9a9a" android:gravity="center_vertical" />
+            <Button android:id="@+id/btnPickPotion1" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="Imposta" android:textSize="11sp" android:paddingStart="10dp" android:paddingEnd="10dp" />
         </LinearLayout>
 
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginBottom="8dp">
-
-            <TextView
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Pozioni per slot:"
-                android:textColor="#cccccc"
-                android:gravity="center_vertical" />
-
-            <EditText
-                android:id="@+id/etMaxPotions"
-                android:layout_width="80dp"
-                android:layout_height="wrap_content"
-                android:inputType="number"
-                android:textColor="#ffffff"
-                android:background="#1e1e3a"
-                android:padding="8dp" />
+        <!-- Slot 2 -->
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="horizontal" android:layout_marginBottom="6dp">
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="Slot 2:" android:textColor="#cccccc" android:gravity="center_vertical" />
+            <TextView android:id="@+id/tvPotion2Coord" android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="non impostato" android:textColor="#aaaaaa" android:gravity="center_vertical" />
+            <Button android:id="@+id/btnPickPotion2" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="Imposta" android:textSize="11sp" android:paddingStart="10dp" android:paddingEnd="10dp" />
         </LinearLayout>
 
-        <LinearLayout
+        <!-- Slot 3 -->
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="horizontal" android:layout_marginBottom="6dp">
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="Slot 3:" android:textColor="#cccccc" android:gravity="center_vertical" />
+            <TextView android:id="@+id/tvPotion3Coord" android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="non impostato" android:textColor="#aaaaaa" android:gravity="center_vertical" />
+            <Button android:id="@+id/btnPickPotion3" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="Imposta" android:textSize="11sp" android:paddingStart="10dp" android:paddingEnd="10dp" />
+        </LinearLayout>
+
+        <!-- Slot 4 -->
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="horizontal" android:layout_marginBottom="6dp">
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="Slot 4:" android:textColor="#cccccc" android:gravity="center_vertical" />
+            <TextView android:id="@+id/tvPotion4Coord" android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="non impostato" android:textColor="#aaaaaa" android:gravity="center_vertical" />
+            <Button android:id="@+id/btnPickPotion4" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="Imposta" android:textSize="11sp" android:paddingStart="10dp" android:paddingEnd="10dp" />
+        </LinearLayout>
+
+        <!-- Slot 5 -->
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="horizontal" android:layout_marginBottom="6dp">
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="Slot 5:" android:textColor="#cccccc" android:gravity="center_vertical" />
+            <TextView android:id="@+id/tvPotion5Coord" android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="non impostato" android:textColor="#aaaaaa" android:gravity="center_vertical" />
+            <Button android:id="@+id/btnPickPotion5" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="Imposta" android:textSize="11sp" android:paddingStart="10dp" android:paddingEnd="10dp" />
+        </LinearLayout>
+
+        <!-- Slot 6 -->
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="horizontal" android:layout_marginBottom="6dp">
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="Slot 6:" android:textColor="#cccccc" android:gravity="center_vertical" />
+            <TextView android:id="@+id/tvPotion6Coord" android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="non impostato" android:textColor="#aaaaaa" android:gravity="center_vertical" />
+            <Button android:id="@+id/btnPickPotion6" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="Imposta" android:textSize="11sp" android:paddingStart="10dp" android:paddingEnd="10dp" />
+        </LinearLayout>
+
+        <!-- Slot 7 -->
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="horizontal" android:layout_marginBottom="6dp">
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="Slot 7:" android:textColor="#cccccc" android:gravity="center_vertical" />
+            <TextView android:id="@+id/tvPotion7Coord" android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="non impostato" android:textColor="#aaaaaa" android:gravity="center_vertical" />
+            <Button android:id="@+id/btnPickPotion7" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="Imposta" android:textSize="11sp" android:paddingStart="10dp" android:paddingEnd="10dp" />
+        </LinearLayout>
+
+        <!-- Inventario — posizione pozione rossa per refill -->
+        <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginBottom="16dp">
+            android:text="Posizione inventario: tocca la pozione rossa nell'inventario. Usata solo per il refill automatico quando tutti gli slot sono esauriti."
+            android:textSize="11sp"
+            android:textColor="#aaaaaa"
+            android:paddingTop="4dp"
+            android:paddingBottom="4dp" />
 
-            <TextView
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Pozione riserva (inventario):"
-                android:textColor="#cccccc"
-                android:gravity="center_vertical" />
-
-            <TextView
-                android:id="@+id/tvBackupPotionCoord"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="(0, 0)"
-                android:textColor="#80cbc4"
-                android:gravity="center_vertical" />
-
-            <Button
-                android:id="@+id/btnPickBackup"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Imposta"
-                android:textSize="12sp"
-                android:paddingStart="12dp"
-                android:paddingEnd="12dp" />
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="horizontal" android:layout_marginBottom="16dp">
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="Pozione nell'inventario:" android:textColor="#ffcc88" android:gravity="center_vertical" />
+            <TextView android:id="@+id/tvInventoryPotionCoord" android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="non impostato" android:textColor="#ef9a9a" android:gravity="center_vertical" />
+            <Button android:id="@+id/btnPickInvPotion" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="Imposta" android:textSize="11sp" android:paddingStart="10dp" android:paddingEnd="10dp" />
         </LinearLayout>
 
         <!-- ── Salva + Reset + Overlay ───────────────────────────────────── -->
@@ -990,7 +804,6 @@ abilita Movile2 Bot (non usare il menu principale Accessibilità)"
                 android:backgroundTint="#4a148c"
                 android:textColor="#ffffff"
                 android:textSize="11sp" />
-
         </LinearLayout>
 
         <LinearLayout

@@ -29,9 +29,17 @@ class MainActivity : AppCompatActivity() {
     private lateinit var etSkill4Cd: EditText
     private lateinit var tvSkill5Coord: TextView
     private lateinit var etSkill5Cd: EditText
-    private lateinit var tvPotionCoord: TextView
-    private lateinit var etMaxPotions: EditText
-    private lateinit var tvBackupPotionCoord: TextView
+
+    // 7 slot pozione + inventario
+    private lateinit var tvPotion1Coord: TextView
+    private lateinit var tvPotion2Coord: TextView
+    private lateinit var tvPotion3Coord: TextView
+    private lateinit var tvPotion4Coord: TextView
+    private lateinit var tvPotion5Coord: TextView
+    private lateinit var tvPotion6Coord: TextView
+    private lateinit var tvPotion7Coord: TextView
+    private lateinit var tvInventoryPotionCoord: TextView
+
     private lateinit var tvJoystickCoord: TextView
     private lateinit var etJoystickRadius: EditText
     private lateinit var tvCameraCoord: TextView
@@ -53,8 +61,14 @@ class MainActivity : AppCompatActivity() {
         private const val K_SK3      = "sk3"
         private const val K_SK4      = "sk4"
         private const val K_SK5      = "sk5"
-        private const val K_POTION   = "potion"
-        private const val K_BACKUP   = "backup"
+        private const val K_POT1     = "pot1"
+        private const val K_POT2     = "pot2"
+        private const val K_POT3     = "pot3"
+        private const val K_POT4     = "pot4"
+        private const val K_POT5     = "pot5"
+        private const val K_POT6     = "pot6"
+        private const val K_POT7     = "pot7"
+        private const val K_INV_POT  = "invPot"
         private const val K_JOYSTICK = "joystick"
         private const val K_CAMERA   = "camera"
         private const val K_HP       = "hp"
@@ -71,11 +85,9 @@ class MainActivity : AppCompatActivity() {
         hooks()
     }
 
-    // Azzera le vecchie coordinate hardcoded salvate da versioni precedenti.
-    // Se l'utente aveva 950/700 ecc. salvati, vengono rimpiazzati da 0 (= auto).
     private fun migrateToAutoCoords() {
         val prefs = getSharedPreferences("bot_config", android.content.Context.MODE_PRIVATE)
-        if (prefs.getBoolean("auto_coords_v6", false)) return
+        if (prefs.getBoolean("auto_coords_v7", false)) return
         val coordKeys = listOf(
             "attackX","attackY","skill1X","skill1Y","skill2X","skill2Y",
             "skill3X","skill3Y","skill4X","skill4Y","skill5X","skill5Y",
@@ -87,8 +99,8 @@ class MainActivity : AppCompatActivity() {
         )
         prefs.edit().apply {
             coordKeys.forEach { remove(it) }
-            remove("auto_coords_v5")
-            putBoolean("auto_coords_v6", true)
+            remove("auto_coords_v5"); remove("auto_coords_v6")
+            putBoolean("auto_coords_v7", true)
             apply()
         }
     }
@@ -98,7 +110,9 @@ class MainActivity : AppCompatActivity() {
         val coordKeys = listOf(
             "attackX","attackY","skill1X","skill1Y","skill2X","skill2Y",
             "skill3X","skill3Y","skill4X","skill4Y","skill5X","skill5Y",
-            "potionX","potionY","backupPotionX","backupPotionY",
+            "potion1X","potion1Y","potion2X","potion2Y","potion3X","potion3Y",
+            "potion4X","potion4Y","potion5X","potion5Y","potion6X","potion6Y",
+            "potion7X","potion7Y","inventoryPotionX","inventoryPotionY",
             "joystickX","joystickY","joystickRadius",
             "cameraAreaX","cameraAreaY","cameraSwipeRange",
             "hpBarX","hpBarY","hpBarFullWidth",
@@ -127,9 +141,14 @@ class MainActivity : AppCompatActivity() {
         etSkill4Cd           = findViewById(R.id.etSkill4Cd)
         tvSkill5Coord        = findViewById(R.id.tvSkill5Coord)
         etSkill5Cd           = findViewById(R.id.etSkill5Cd)
-        tvPotionCoord        = findViewById(R.id.tvPotionCoord)
-        etMaxPotions         = findViewById(R.id.etMaxPotions)
-        tvBackupPotionCoord  = findViewById(R.id.tvBackupPotionCoord)
+        tvPotion1Coord       = findViewById(R.id.tvPotion1Coord)
+        tvPotion2Coord       = findViewById(R.id.tvPotion2Coord)
+        tvPotion3Coord       = findViewById(R.id.tvPotion3Coord)
+        tvPotion4Coord       = findViewById(R.id.tvPotion4Coord)
+        tvPotion5Coord       = findViewById(R.id.tvPotion5Coord)
+        tvPotion6Coord       = findViewById(R.id.tvPotion6Coord)
+        tvPotion7Coord       = findViewById(R.id.tvPotion7Coord)
+        tvInventoryPotionCoord = findViewById(R.id.tvInventoryPotionCoord)
         tvJoystickCoord      = findViewById(R.id.tvJoystickCoord)
         etJoystickRadius     = findViewById(R.id.etJoystickRadius)
         tvCameraCoord        = findViewById(R.id.tvCameraCoord)
@@ -141,7 +160,7 @@ class MainActivity : AppCompatActivity() {
         etDefenseRadius      = findViewById(R.id.etDefenseRadius)
     }
 
-    private fun coord(x: Float, y: Float) = if (x > 0f) xy(x, y) else "auto"
+    private fun coord(x: Float, y: Float) = if (x > 0f) xy(x, y) else "non impostato"
 
     private fun populate() {
         etMonsterName.setText(cfg.monsterName)
@@ -160,9 +179,14 @@ class MainActivity : AppCompatActivity() {
         etSkill4Cd.setText((cfg.skill4CooldownMs / 1000).toString())
         tvSkill5Coord.text       = coord(cfg.skill5X, cfg.skill5Y)
         etSkill5Cd.setText((cfg.skill5CooldownMs / 1000).toString())
-        tvPotionCoord.text       = coord(cfg.potionX, cfg.potionY)
-        etMaxPotions.setText(cfg.maxPotionsInSlot.toString())
-        tvBackupPotionCoord.text = coord(cfg.backupPotionX, cfg.backupPotionY)
+        tvPotion1Coord.text      = coord(cfg.potion1X, cfg.potion1Y)
+        tvPotion2Coord.text      = coord(cfg.potion2X, cfg.potion2Y)
+        tvPotion3Coord.text      = coord(cfg.potion3X, cfg.potion3Y)
+        tvPotion4Coord.text      = coord(cfg.potion4X, cfg.potion4Y)
+        tvPotion5Coord.text      = coord(cfg.potion5X, cfg.potion5Y)
+        tvPotion6Coord.text      = coord(cfg.potion6X, cfg.potion6Y)
+        tvPotion7Coord.text      = coord(cfg.potion7X, cfg.potion7Y)
+        tvInventoryPotionCoord.text = coord(cfg.inventoryPotionX, cfg.inventoryPotionY)
         tvJoystickCoord.text     = coord(cfg.joystickX, cfg.joystickY)
         etJoystickRadius.setText(if (cfg.joystickRadius > 0f) cfg.joystickRadius.toInt().toString() else "0")
         tvCameraCoord.text       = coord(cfg.cameraAreaX, cfg.cameraAreaY)
@@ -185,19 +209,24 @@ class MainActivity : AppCompatActivity() {
             tv.text = "tocca lo schermo…"
         }
 
-        findViewById<Button>(R.id.btnPickAttack)  .setOnClickListener { pick(K_ATTACK,   "Bottone Attacco",          tvAttackCoord) }
-        findViewById<Button>(R.id.btnPickSkill1)  .setOnClickListener { pick(K_SK1,      "Abilità 1",                tvSkill1Coord) }
-        findViewById<Button>(R.id.btnPickSkill2)  .setOnClickListener { pick(K_SK2,      "Abilità 2",                tvSkill2Coord) }
-        findViewById<Button>(R.id.btnPickSkill3)  .setOnClickListener { pick(K_SK3,      "Abilità 3",                tvSkill3Coord) }
-        findViewById<Button>(R.id.btnPickSkill4)  .setOnClickListener { pick(K_SK4,      "Abilità 4",                tvSkill4Coord) }
-        findViewById<Button>(R.id.btnPickSkill5)  .setOnClickListener { pick(K_SK5,      "Abilità 5",                tvSkill5Coord) }
-        findViewById<Button>(R.id.btnPickPotion)  .setOnClickListener { pick(K_POTION,   "Slot Pozione",             tvPotionCoord) }
-        findViewById<Button>(R.id.btnPickBackup)  .setOnClickListener { pick(K_BACKUP,   "Pozione di Riserva",       tvBackupPotionCoord) }
-        findViewById<Button>(R.id.btnPickJoystick).setOnClickListener { pick(K_JOYSTICK, "Centro Joystick",          tvJoystickCoord) }
-        findViewById<Button>(R.id.btnPickCamera)  .setOnClickListener { pick(K_CAMERA,   "Punto Centrale Visuale",   tvCameraCoord) }
-        findViewById<Button>(R.id.btnPickHpBar)   .setOnClickListener { pick(K_HP,       "Bordo Sinistro Barra HP",  tvHpBarCoord) }
-        findViewById<Button>(R.id.btnPickPlayer)  .setOnClickListener { pick(K_PLAYER,   "Centro Personaggio",        tvPlayerCoord) }
-        findViewById<Button>(R.id.btnCalibrateHud).setOnClickListener { startCalibration() }
+        findViewById<Button>(R.id.btnPickAttack)  .setOnClickListener { pick(K_ATTACK,   "Bottone Attacco",            tvAttackCoord) }
+        findViewById<Button>(R.id.btnPickSkill1)  .setOnClickListener { pick(K_SK1,      "Abilità 1",                  tvSkill1Coord) }
+        findViewById<Button>(R.id.btnPickSkill2)  .setOnClickListener { pick(K_SK2,      "Abilità 2",                  tvSkill2Coord) }
+        findViewById<Button>(R.id.btnPickSkill3)  .setOnClickListener { pick(K_SK3,      "Abilità 3",                  tvSkill3Coord) }
+        findViewById<Button>(R.id.btnPickSkill4)  .setOnClickListener { pick(K_SK4,      "Abilità 4",                  tvSkill4Coord) }
+        findViewById<Button>(R.id.btnPickSkill5)  .setOnClickListener { pick(K_SK5,      "Abilità 5",                  tvSkill5Coord) }
+        findViewById<Button>(R.id.btnPickPotion1) .setOnClickListener { pick(K_POT1,     "Slot Pozione 1",             tvPotion1Coord) }
+        findViewById<Button>(R.id.btnPickPotion2) .setOnClickListener { pick(K_POT2,     "Slot Pozione 2",             tvPotion2Coord) }
+        findViewById<Button>(R.id.btnPickPotion3) .setOnClickListener { pick(K_POT3,     "Slot Pozione 3",             tvPotion3Coord) }
+        findViewById<Button>(R.id.btnPickPotion4) .setOnClickListener { pick(K_POT4,     "Slot Pozione 4",             tvPotion4Coord) }
+        findViewById<Button>(R.id.btnPickPotion5) .setOnClickListener { pick(K_POT5,     "Slot Pozione 5",             tvPotion5Coord) }
+        findViewById<Button>(R.id.btnPickPotion6) .setOnClickListener { pick(K_POT6,     "Slot Pozione 6",             tvPotion6Coord) }
+        findViewById<Button>(R.id.btnPickPotion7) .setOnClickListener { pick(K_POT7,     "Slot Pozione 7",             tvPotion7Coord) }
+        findViewById<Button>(R.id.btnPickInvPotion).setOnClickListener { pick(K_INV_POT, "Pozione Rossa Inventario",   tvInventoryPotionCoord) }
+        findViewById<Button>(R.id.btnPickJoystick).setOnClickListener { pick(K_JOYSTICK, "Centro Joystick",            tvJoystickCoord) }
+        findViewById<Button>(R.id.btnPickCamera)  .setOnClickListener { pick(K_CAMERA,   "Punto Centrale Visuale",     tvCameraCoord) }
+        findViewById<Button>(R.id.btnPickHpBar)   .setOnClickListener { pick(K_HP,       "Bordo Sinistro Barra HP",    tvHpBarCoord) }
+        findViewById<Button>(R.id.btnPickPlayer)  .setOnClickListener { pick(K_PLAYER,   "Centro Personaggio",          tvPlayerCoord) }
 
         findViewById<Button>(R.id.btnSave).setOnClickListener { save() }
         findViewById<Button>(R.id.btnResetCoords).setOnClickListener { resetToAuto() }
@@ -237,8 +266,14 @@ class MainActivity : AppCompatActivity() {
             K_SK3      -> cfg.copy(skill3X = x, skill3Y = y).also          { tvSkill3Coord.text = xy(x, y) }
             K_SK4      -> cfg.copy(skill4X = x, skill4Y = y).also          { tvSkill4Coord.text = xy(x, y) }
             K_SK5      -> cfg.copy(skill5X = x, skill5Y = y).also          { tvSkill5Coord.text = xy(x, y) }
-            K_POTION   -> cfg.copy(potionX = x, potionY = y).also          { tvPotionCoord.text = xy(x, y) }
-            K_BACKUP   -> cfg.copy(backupPotionX = x, backupPotionY = y).also { tvBackupPotionCoord.text = xy(x, y) }
+            K_POT1     -> cfg.copy(potion1X = x, potion1Y = y).also        { tvPotion1Coord.text = xy(x, y) }
+            K_POT2     -> cfg.copy(potion2X = x, potion2Y = y).also        { tvPotion2Coord.text = xy(x, y) }
+            K_POT3     -> cfg.copy(potion3X = x, potion3Y = y).also        { tvPotion3Coord.text = xy(x, y) }
+            K_POT4     -> cfg.copy(potion4X = x, potion4Y = y).also        { tvPotion4Coord.text = xy(x, y) }
+            K_POT5     -> cfg.copy(potion5X = x, potion5Y = y).also        { tvPotion5Coord.text = xy(x, y) }
+            K_POT6     -> cfg.copy(potion6X = x, potion6Y = y).also        { tvPotion6Coord.text = xy(x, y) }
+            K_POT7     -> cfg.copy(potion7X = x, potion7Y = y).also        { tvPotion7Coord.text = xy(x, y) }
+            K_INV_POT  -> cfg.copy(inventoryPotionX = x, inventoryPotionY = y).also { tvInventoryPotionCoord.text = xy(x, y) }
             K_JOYSTICK -> cfg.copy(joystickX = x, joystickY = y).also      { tvJoystickCoord.text = xy(x, y) }
             K_CAMERA   -> cfg.copy(cameraAreaX = x, cameraAreaY = y).also  { tvCameraCoord.text = xy(x, y) }
             K_HP       -> cfg.copy(hpBarX = x, hpBarY = y).also            { tvHpBarCoord.text = xy(x, y) }
@@ -257,8 +292,8 @@ class MainActivity : AppCompatActivity() {
                 K_SK3 to "Abilità 3",
                 K_SK4 to "Abilità 4",
                 K_SK5 to "Abilità 5",
-                "potion" to "Pozione rossa",
-                "backup" to "Pozione backup",
+                K_POTION to "Pozione rossa",
+                K_BACKUP to "Pozione backup",
                 K_JOYSTICK to "Centro Joystick",
                 K_HP to "Bordo sinistro barra HP",
                 K_PLAYER to "Centro personaggio (petto)"
@@ -298,7 +333,6 @@ class MainActivity : AppCompatActivity() {
             skill3CooldownMs  = (etSkill3Cd.text.toString().toLongOrNull()      ?: (cfg.skill3CooldownMs / 1000)) * 1000,
             skill4CooldownMs  = (etSkill4Cd.text.toString().toLongOrNull()      ?: (cfg.skill4CooldownMs / 1000)) * 1000,
             skill5CooldownMs  = (etSkill5Cd.text.toString().toLongOrNull()      ?: (cfg.skill5CooldownMs / 1000)) * 1000,
-            maxPotionsInSlot  = etMaxPotions.text.toString().toIntOrNull()      ?: cfg.maxPotionsInSlot,
             joystickRadius    = etJoystickRadius.text.toString().toFloatOrNull() ?: cfg.joystickRadius,
             cameraSwipeRange  = etCameraSwipeRange.text.toString().toFloatOrNull() ?: cfg.cameraSwipeRange,
             hpBarFullWidth    = etHpBarFullWidth.text.toString().toIntOrNull()  ?: cfg.hpBarFullWidth,

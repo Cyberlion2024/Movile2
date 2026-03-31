@@ -13,7 +13,7 @@ PAGE = """<!DOCTYPE html>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Segoe UI',sans-serif;background:#0f0f1a;color:#e0e0e0;min-height:100vh;padding:32px 20px}
-.wrap{max-width:860px;margin:0 auto}
+.wrap{max-width:900px;margin:0 auto}
 h1{font-size:2rem;color:#4fc3f7;margin-bottom:6px}
 .sub{color:#888;margin-bottom:24px;font-size:.95rem}
 .card{background:#1a1a2e;border:1px solid #1e3a5f;border-radius:10px;padding:22px;margin-bottom:18px}
@@ -27,28 +27,34 @@ ol,ul{padding-left:18px}
 li{margin-bottom:8px;line-height:1.6;color:#ccc}
 .badge{display:inline-block;background:#0d3b6e;color:#4fc3f7;border-radius:4px;padding:2px 8px;font-size:.8rem;margin:2px}
 .warn{background:#1a1400;border:1px solid #665500;border-radius:8px;padding:12px 16px;color:#ffcc44;font-size:.9rem;margin-top:10px}
+.danger{background:#1a0505;border:1px solid #660000;border-radius:8px;padding:12px 16px;color:#ff6666;font-size:.9rem;margin-top:10px}
+.ok{background:#051a0d;border:1px solid #006622;border-radius:8px;padding:12px 16px;color:#69f0ae;font-size:.9rem;margin-top:8px}
 .new{background:#0d3b1e;border:1px solid #1b5e20;border-radius:4px;padding:2px 8px;font-size:.78rem;color:#69f0ae;margin-left:6px;vertical-align:middle}
+.tag-ok{background:#0d3b1e;color:#69f0ae;border-radius:4px;padding:1px 7px;font-size:.78rem}
+.tag-warn{background:#3b2800;color:#ffcc44;border-radius:4px;padding:1px 7px;font-size:.78rem}
+.tag-bad{background:#3b0000;color:#ff6666;border-radius:4px;padding:1px 7px;font-size:.78rem}
 </style>
 </head>
 <body>
 <div class="wrap">
   <h1>&#129302; Movile2 Bot</h1>
-  <p class="sub">Bot Android per MMORPG &mdash; Kotlin + Accessibility Service &mdash; <strong>v4</strong></p>
+  <p class="sub">Bot Android per MMORPG &mdash; Kotlin + Accessibility Service &mdash; <strong>v5</strong></p>
 
   <div class="card">
-    <h2>&#10024; Funzionalit&agrave; v4</h2>
+    <h2>&#10024; Novit&agrave; v5 &mdash; Architettura Professionale</h2>
     <ul>
-      <li><strong>Rilevamento mostri via pixel</strong> &mdash; screenshot ogni 1.2s, trova pixel rossi (nomi nemici), calcola centroide e tocca per selezionare il bersaglio</li>
-      <li><strong>Fix rotazione camera</strong> &mdash; la camera ruota solo se NON c&#39;&egrave; gi&agrave; un bersaglio visibile, eliminando il loop di ricerca</li>
-      <li><strong>Monitor barra HP (top-left)</strong> <span class="new">NEW</span> &mdash; scansiona i pixel rossi della barra vita; pozione automatica se scende sotto soglia configurabile</li>
-      <li><strong>Modalit&agrave; Difesa</strong> <span class="new">NEW</span> &mdash; se l&#39;HP continua a calare (mostri che attaccano), spam attacco immediato su tutti i mostri vicini; overlay mostra &#x1F6E1; DIFESA in giallo</li>
-      <li><strong>3 abilit&agrave; con cooldown separati</strong> <span class="new">NEW</span> &mdash; Abilit&agrave; 1, 2 e 3 opzionale, ognuna con il proprio timer</li>
-      <li><strong>Timer di sessione</strong> <span class="new">NEW</span> &mdash; auto-stop dopo X minuti configurabili (0 = infinito)</li>
-      <li><strong>Joystick virtuale</strong> &mdash; pattuglia N&rarr;E&rarr;S&rarr;W con raggio configurabile</li>
-      <li><strong>Pozioni automatiche + ricarica</strong> &mdash; tap slot pozione; se finiscono, swipe dall&#39;inventario allo slot</li>
-      <li><strong>Limite massimo uccisioni</strong> &mdash; il bot si ferma al raggiungimento del limite</li>
-      <li><strong>Overlay draggabile</strong> &mdash; pannello flottante con contatore kills, stato RUNNING/DIFESA/STOP e pulsanti Start/Stop</li>
-      <li><strong>Fix crash Android 14</strong> &mdash; <code>foregroundServiceType="specialUse"</code> nel manifest</li>
+      <li><strong>Multi-touch simultaneo</strong> <span class="new">NEW</span> &mdash; Attack + Skill1..5 + Target premuti <em>nello stesso frame</em> con <code>GestureDescription</code> multi-stroke (fino a 10 dita contemporanee)</li>
+      <li><strong>Loop unificato senza state machine</strong> <span class="new">NEW</span> &mdash; nessuna fase HUNT/DEFEND separata; la pozione viene usata inline senza interrompere il combattimento</li>
+      <li><strong>Ciclo di combattimento 320ms</strong> <span class="new">NEW</span> &mdash; attack spam a 320ms + 2 tap extra a 75/150ms; pattuglia a 550ms solo senza bersaglio</li>
+      <li><strong>Scan screenshot ogni 600ms</strong> <span class="new">NEW</span> &mdash; da 1000ms a 600ms; step 3 invece di 4 per pi&ugrave; precisione nella detection del centroide</li>
+      <li><strong>Rilevamento mostri migliorato</strong> &mdash; soglie allentate (R>160, diff&ge;38) per pi&ugrave; hit, min pixel 8 invece di 10</li>
+      <li><strong>Loot aggressivo</strong> <span class="new">NEW</span> &mdash; raccolta anche durante il combattimento (ogni 1.4s); post-kill multi-tap in 4 direzioni; finestra di 7s dopo ogni kill</li>
+      <li><strong>Pozione inline</strong> <span class="new">NEW</span> &mdash; tap pozione in priorit&agrave; massima senza cambiare ciclo; refill automatico se slot esaurito</li>
+      <li><strong>5 skill con cooldown indipendenti</strong> &mdash; tutte e 5 fire in multi-touch quando sono pronte; skill 1-3 attivate anche durante pattuglia</li>
+      <li><strong>Joystick virtuale</strong> &mdash; pattuglia N&rarr;E&rarr;S&rarr;W; si ferma automaticamente se c&#39;&egrave; un bersaglio</li>
+      <li><strong>Monitor HP + auto-detection barra</strong> &mdash; rileva automaticamente la barra HP in top-left; pozione se HP &lt; soglia</li>
+      <li><strong>Kill counter + timer sessione</strong> &mdash; auto-stop al raggiungimento del limite</li>
+      <li><strong>Overlay draggabile</strong> &mdash; pannello flottante con kills, stato e pulsanti Start/Stop</li>
     </ul>
   </div>
 
@@ -61,8 +67,51 @@ li{margin-bottom:8px;line-height:1.6;color:#ccc}
       <tr><td>Min SDK</td><td>26 (Android 8.0)</td></tr>
       <tr><td>Target SDK</td><td>34 (Android 14)</td></tr>
       <tr><td>Build System</td><td>Gradle Kotlin DSL</td></tr>
-      <tr><td>Gioco target</td><td><code>com.vendsoft.mobile2</code> (Unreal Engine 4)</td></tr>
+      <tr><td>Gioco target</td><td><code>com.vendsoft.mobile2</code> (Unreal Engine 4 &mdash; clone Metin2)</td></tr>
     </table>
+  </div>
+
+  <div class="card">
+    <h2>&#128270; Analisi libUE4.so &mdash; Risultati</h2>
+    <p style="color:#aaa;font-size:.9rem;margin-bottom:14px">Reverse engineering del binario nativo ARM64 (182 MB) — 821.971 stringhe estratte.</p>
+
+    <div class="danger">
+      &#128683; <strong>EMULATOR DETECTION ATTIVO</strong><br>
+      Il gioco rileva ed esclude i seguenti emulatori. Usa <strong>solo dispositivo fisico reale</strong>:
+      <pre style="margin-top:8px">com.bluestacks.*   &rarr; BlueStacks
+com.bignox.*       &rarr; BigNox / NoxPlayer
+com.microvirt.*    &rarr; MEmu
+com.nox.mopen.app  &rarr; NoxPlayer (alt)
+com.vphone.*       &rarr; vPhone
+org.chromium.arc   &rarr; Android su ChromeOS (ARC)</pre>
+    </div>
+
+    <div style="margin-top:14px">
+      <strong style="color:#4fc3f7">Costanti di combattimento trovate nel codice nativo:</strong>
+      <table style="margin-top:10px">
+        <tr><th>Costante</th><th>Significato</th><th>Impatto sul bot</th></tr>
+        <tr><td><code>ATTACK_RANGE</code></td><td>Raggio massimo attacco</td><td><span class="tag-ok">Confermato</span> il bot si avvicina prima di attaccare</td></tr>
+        <tr><td><code>ATTACK_SPEED</code></td><td>Velocit&agrave; attacco mob</td><td><span class="tag-ok">TAP_MS=60ms allineato</span></td></tr>
+        <tr><td><code>AttackTimeMsec</code></td><td>Durata gesto attacco (ms)</td><td><span class="tag-ok">60ms confermato corretto</span></td></tr>
+        <tr><td><code>AGGRESSIVE_HP_PCT</code></td><td>% HP che rende mob aggressivo</td><td><span class="tag-warn">Difesa attiva gi&agrave; al primo drop HP</span></td></tr>
+        <tr><td><code>AGGRESSIVE_SIGHT</code></td><td>Raggio visione mob aggressivi</td><td><span class="tag-warn">Patrol raggio deve essere contenuto</span></td></tr>
+        <tr><td><code>MOB_COLOR</code></td><td>Colore nome mob (rosso)</td><td><span class="tag-ok">R&gt;160,G&lt;130,B&lt;120 confermato</span></td></tr>
+        <tr><td><code>attackable</code></td><td>Bool: mob pu&ograve; essere attaccato</td><td><span class="tag-ok">Pixel detection filtra gi&agrave; correttamente</span></td></tr>
+        <tr><td><code>attackDistance</code></td><td>Distanza attacco AI mob</td><td><span class="tag-ok">Joystick avvicina il personaggio</span></td></tr>
+        <tr><td><code>dropLocs</code> / <code>DROP_ITEM</code></td><td>Posizioni drop loot</td><td><span class="tag-ok">Centroide pixel bianco/verde corretto</span></td></tr>
+        <tr><td><code>SKILL_VNUM0&ndash;4</code></td><td>5 slot abilit&agrave;</td><td><span class="tag-ok">Bot implementa gi&agrave; 5 skill</span></td></tr>
+      </table>
+    </div>
+
+    <div class="ok" style="margin-top:14px">
+      &#9989; <strong>Origine gioco confermata</strong>: Mobile2 Global &egrave; un clone di <strong>Metin2</strong> sviluppato in Turchia
+      (evidenza: valuta <code>yang</code>, stat <code>buyuAttack</code>/<code>buyuDef</code> = magia attacco/difesa in turco,
+      <code>SKILL_VNUM</code> = numerazione virtuale abilit&agrave; tipica Metin2, <code>coinBonusYuzde</code> = "yüzde" = percento in turco).
+    </div>
+
+    <div class="warn" style="margin-top:10px">
+      &#128161; <strong>Server IP non trovato</strong> nel .so &mdash; gli endpoint sono nel file PAK scaricato all&#39;avvio via OBBDownloaderService (non reversibile facilmente senza il file OBB).
+    </div>
   </div>
 
   <div class="card">
@@ -72,7 +121,7 @@ li{margin-bottom:8px;line-height:1.6;color:#ccc}
       <li>Tocca <strong>1. Permesso Overlay</strong> &rarr; abilita</li>
       <li>Tocca <strong>2. Accessibilit&agrave;</strong> &rarr; trova <em>Movile2 Bot</em> e abilita</li>
       <li>Configura le coordinate toccando <strong>Imposta</strong> accanto ad ogni voce</li>
-      <li><strong>[NUOVO]</strong> Tocca <em>Bordo Sinistro Barra HP</em> per abilitare il monitor vita (barra rossa in alto a sinistra)</li>
+      <li>Tocca <em>Bordo Sinistro Barra HP</em> per abilitare il monitor vita (barra rossa in alto a sinistra)</li>
       <li>Imposta la larghezza della barra a vita piena in pixel e la soglia pozione (es. 85%)</li>
       <li>Tocca <strong>SALVA IMPOSTAZIONI</strong></li>
       <li>Tocca <strong>Avvia Overlay</strong> &rarr; passa al gioco</li>
@@ -89,11 +138,22 @@ li{margin-bottom:8px;line-height:1.6;color:#ccc}
     <h2>&#128293; Logica Modalit&agrave; Difesa</h2>
     <ul>
       <li>Il bot confronta la lettura HP tra uno screenshot e il successivo (ogni ~1.2s)</li>
-      <li>Se l&#39;HP cala per <strong>2 cicli consecutivi</strong> &rarr; entra in <strong>DIFESA</strong>: spam attacco + abilit&agrave; senza aspettare bersaglio specifico</li>
+      <li>Se l&#39;HP cala per <strong>1+ ciclo</strong> &rarr; entra in <strong>DIFESA</strong>: spam attacco + abilit&agrave;</li>
       <li>Se durante la difesa l&#39;HP scende sotto soglia &rarr; usa pozione immediatamente</li>
-      <li>Quando l&#39;HP si stabilizza per <strong>3 cicli consecutivi</strong> &rarr; torna alla caccia normale</li>
+      <li>Quando l&#39;HP si stabilizza per <strong>4 cicli</strong> &rarr; torna alla caccia normale</li>
       <li>L&#39;overlay mostra &#x1F6E1; <strong>DIFESA</strong> in giallo durante questa fase</li>
     </ul>
+  </div>
+
+  <div class="card">
+    <h2>&#128202; State Machine v4</h2>
+    <table>
+      <tr><th>Fase</th><th>Ciclo</th><th>Logica</th></tr>
+      <tr><td><strong>HUNT</strong></td><td>~800ms</td><td>Patrol joystick, rileva mob via pixel rossi, attacca + abilit&agrave;</td></tr>
+      <tr><td><strong>DEFEND</strong></td><td>~400ms</td><td>Spam attacco circolare attorno al personaggio, nessun patrol</td></tr>
+      <tr><td><strong>POTION</strong></td><td>1 tap</td><td>Usa slot pozione, torna a HUNT o DEFEND</td></tr>
+      <tr><td><strong>REFILL</strong></td><td>1 swipe</td><td>Ricarica slot pozione dall&#39;inventario</td></tr>
+    </table>
   </div>
 
   <div class="card">

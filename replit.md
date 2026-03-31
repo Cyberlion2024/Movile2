@@ -18,31 +18,39 @@ Android bot app in Kotlin for MMORPG automation using Accessibility Service + Ov
 | `BotConfig.kt` | Data class + SharedPreferences per persistere le impostazioni |
 | `BotState.kt` | Singleton condiviso per stato runtime (isRunning, killCount) |
 
-## Features v4
-- Joystick virtuale: pattuglia N→E→S→W con raggio configurabile
-- Rilevamento mostri via pixel rossi (nomi nemici): selezione + attacco
-- FIX: rotazione camera saltata se bersaglio già visibile (bug loop ricerca)
-- Monitor barra HP (top-left): pixel rossi della barra vita → pozione auto se < soglia
-- Modalità Difesa: se HP continua a calare → spam attacco su tutto finché si stabilizza
-- 3 abilità con cooldown separati (skill3 opzionale)
-- Timer di sessione: auto-stop dopo X minuti (0 = infinito)
-- Pozioni automatiche + ricarica dall'inventario
-- Limite massimo uccisioni configurabile
-- Fix crash Android 14 (foregroundServiceType = specialUse)
-- Fix accessibilità su MIUI/Samsung (config semplificata)
-- Overlay: mostra stato RUNNING / 🛡 DIFESA / STOP
+## Features v6 — Sistema Pozioni Multi-Slot
+- **Multi-touch simultaneo**: Attack (SEMPRE incluso) + Skill1..5 + Target nello stesso frame
+- **Loop unificato**: nessuna state machine; pozione inline senza interrompere il combattimento
+- **Ciclo combattimento 320ms**: attack spam + 2 tap extra a 75/150ms
+- **Scan ogni 600ms**: rilevamento mostri (R>160, diff≥38); pixel check slot pozione
+- **Loot aggressivo**: raccolta in combattimento, post-kill multi-tap 4 direzioni, finestra 7s
+- **Sistema Multi-Slot Pozioni (fino a 7)**:
+  - Pixel detection slot: rileva se l'icona rossa è presente → slot pieno/vuoto
+  - Rotazione automatica: slot 1→2→...→7 quando uno si svuota
+  - Refill inventario: drag automatico dalla posizione inventario allo slot 1 quando tutti vuoti
+  - POTION_CD 3s per evitare spam continuo
+- **5 skill tutte attive**: multi-touch quando pronte; skill 1-3 anche durante pattuglia
+- Joystick virtuale N→E→S→W; si ferma se c'è bersaglio
+- Monitor HP automatico (auto-detection barra top-left)
+- Kill counter + timer sessione + overlay draggabile
 
-## State Machine v4
-- HUNT: ciclo 800ms
-  - Se underAttack → passa subito a DEFEND
-  - Se HP < soglia e hpBar configurata → POTION
-  - Se bersaglio visibile: selezione pixel → attacco (no rotazione camera)
-  - Ogni 4 cicli (solo se NO bersaglio): cameraSwipe per cercare mostri
-- DEFEND: ciclo 400ms, spam attacco + abilità disponibili
-  - Se HP si stabilizza per 3 cicli → torna a HUNT
-  - Se HP < soglia → POTION poi torna DEFEND
-- POTION: tap slot pozione
-- REFILL: swipe inventario → slot
+## Architettura v5
+```
+doLoop() ogni 320ms (combat) / 550ms (patrol):
+  1. Kill counter aggiornato (prevTarget→no target = kill)
+  2. Pozione inline se hpLow (tap immediato, no fase separata)
+  3. if (inCombat):
+       multiTap([attack, target, skill1..5 pronte]) → 1 gesto multi-touch
+       +2 attack spam a 75/150ms via postDelayed
+       loot anche in combat se visibile (CD 1.4s)
+       → schedula prossimo loop a 320ms
+  4. else (no target):
+       loot aggressivo (tap diretto se visibile, multi-tap intorno player se post-kill)
+       skill 1-3 durante patrol
+       camera rotation ogni 4 cicli
+       joystick patrol N→E→S→W
+       → schedula prossimo loop a 550ms
+```
 
 ## Configurazione consigliata
 1. Centro joystick: tocca il centro del joystick (basso-sinistra)
@@ -62,6 +70,23 @@ APK scaricabile da Actions › Artifacts.
 Local build: `gradle assembleDebug` (richiede Android SDK + JDK 17)
 
 ---
+
+## Analisi libUE4.so (31/03/2026)
+
+### Findings chiave
+- **Emulator detection**: BlueStacks, NoxPlayer, MEmu, vPhone, ChromeOS-ARC → solo dispositivi fisici reali
+- **MOB_COLOR confermato**: nomi mob rosso vivace → R>170, G<110, B<110, diff≥45
+- **AttackTimeMsec**: 60ms TAP_MS confermato corretto
+- **AGGRESSIVE_HP_PCT / AGGRESSIVE_SIGHT**: mob con aggro e raggio visione
+- **SKILL_VNUM0-4**: 5 slot abilità confermati (già implementati)
+- **dropLocs / dropedAt**: drop con posizione precisa e lifetime → centroide OK
+- **Origine Metin2** (turco): yang, buyuAttack, buyuDef, coinBonusYuzde
+- **Nessun IP server** trovato nel .so → endpoint nel PAK/OBB
+
+### File generati
+- `mobile2_decompiled/ANALISI_LIBRERIA.md` — analisi completa
+- `mobile2_decompiled/libUE4_strings.txt` — 821.971 stringhe estratte
+- `mobile2_decompiled/xapk_contents/` — tutti gli APK decompressi
 
 ## Analisi APK del gioco target (Mobile2 Global 2.23)
 

@@ -40,7 +40,13 @@ jobs:
           grep -n "ATTACK_SPAM_COUNT\|lastCombatSeenMs" app/src/main/java/com/movile2/bot/BotAccessibilityService.kt || true
 
       - name: Build Debug APK
-        run: gradle --no-build-cache --rerun-tasks assembleDebug --stacktrace
+        run: gradle --no-build-cache --rerun-tasks assembleDebug
+
+      - name: Debug Kotlin source snapshot
+        run: |
+          echo "Commit: $(git rev-parse --short HEAD)"
+          echo "Checking symbols in BotAccessibilityService.kt"
+          grep -n "ATTACK_SPAM_COUNT\|lastCombatSeenMs" app/src/main/java/com/movile2/bot/BotAccessibilityService.kt || true
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
