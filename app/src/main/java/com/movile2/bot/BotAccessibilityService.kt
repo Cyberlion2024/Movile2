@@ -1,6 +1,6 @@
 package com.movile2.bot
 
-// ═══════════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════
 // Analisi libUE4.so (Mobile2 Global 2.23 — ARM64 stripped, 182 MB)
 //
 // Costanti trovate nel codice nativo del gioco:
@@ -15,7 +15,7 @@ package com.movile2.bot
 //   com.bluestacks.*, com.bignox.*, com.microvirt.*, com.nox.mopen.app,
 //   com.vphone.*, org.chromium.arc
 //   → usare SOLO dispositivi fisici reali, non emulatori noti.
-// ═══════════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
@@ -37,27 +37,28 @@ class BotAccessibilityService : AccessibilityService() {
 
     // ── Timing (AttackTimeMsec = 60ms confermato da libUE4.so) ───────────────
     private val TAP_MS            = 60L
-    private val GAP_MS            = 75L     // gap minimo tra gesture successive
+    private val GAP_MS            = 75L
     private val JOYSTICK_MS       = 280L
     private val CAMERA_MS         = 200L
     private val POST_MOVE_MS      = 60L
-    private val COMBAT_CYCLE_MS   = 320L    // ciclo veloce in combattimento
-    private val PATROL_CYCLE_MS   = 550L    // ciclo pattuglia (no target)
-    private val SCAN_DELAY_MS     = 600L    // screenshot ogni 600ms
-    private val CAMERA_EVERY      = 4       // rotazione camera ogni 4 cicli senza target
-    private val COMBAT_GRACE_MS   = 1800L   // finestra post-danno
-    private val TARGET_GRACE_MS   = 1200L   // finestra post-target perso
-    private val LOOT_TAP_CD_MS    = 700L    // raccolta aggressiva (dropedAt ha lifetime breve)
-    private val POTION_CD_MS      = 2000L   // minimo tra pozioni
-    private val LOOT_GRACE_MS     = 7000L   // finestra post-kill per raccolta loot
+    private val COMBAT_CYCLE_MS   = 320L
+    private val PATROL_CYCLE_MS   = 550L
+    private val SCAN_DELAY_MS     = 600L
+    private val CAMERA_EVERY      = 4
+    private val COMBAT_GRACE_MS   = 1800L
+    private val TARGET_GRACE_MS   = 1200L
+    private val LOOT_TAP_CD_MS    = 700L
+    private val POTION_CD_MS      = 3000L   // 3s minimo tra pozioni per non spam
+    private val LOOT_GRACE_MS     = 7000L
+    private val REFILL_DELAY_MS   = 600L    // attesa dopo drag inventario→slot
 
-    // ── Soglie pixel (da analisi MOB_COLOR in libUE4.so) ─────────────────────
-    // Nomi mostri: rosso vivo Metin2 (R>170, G<110, B<110, diff≥45)
+    // ── Soglie pixel ──────────────────────────────────────────────────────────
     private val MOB_R_MIN  = 160;  private val MOB_G_MAX  = 118;  private val MOB_B_MAX  = 118
-    private val MOB_R_DIFF = 38    // leggermente allentato per catch migliore
-    // Barra HP: rosso meno saturo in top-left
+    private val MOB_R_DIFF = 38
     private val HP_R_MIN   = 110;  private val HP_G_MAX   = 115;  private val HP_B_MAX   = 115
     private val HP_R_DIFF  = 20
+    // Soglia per considerare uno slot pozione "vuoto" (no pixel rossi = nessuna icona pozione)
+    private val SLOT_RED_THRESHOLD = 0.08f  // meno del 8% pixel rossi = slot vuoto
 
     // ── Coordinate automatiche ────────────────────────────────────────────────
     private var aAttackX = 0f;    private var aAttackY = 0f
@@ -66,8 +67,7 @@ class BotAccessibilityService : AccessibilityService() {
     private var aSkill3X = 0f;    private var aSkill3Y = 0f
     private var aSkill4X = 0f;    private var aSkill4Y = 0f
     private var aSkill5X = 0f;    private var aSkill5Y = 0f
-    private var aPotionX = 0f;    private var aPotionY = 0f
-    private var aBackupPotX = 0f; private var aBackupPotY = 0f
+    private var aPotion1X = 0f;   private var aPotion1Y = 0f
     private var aJoystickX = 0f;  private var aJoystickY = 0f; private var aJoystickR = 0f
     private var aCameraX = 0f;    private var aCameraY = 0f;   private var aCameraRange = 0f
     private var aPlayerX = 0f;    private var aPlayerY = 0f;   private var aDefenseR = 0
@@ -93,7 +93,6 @@ class BotAccessibilityService : AccessibilityService() {
     private var patrolSteps = 0
     private var cameraDir   = 1
     private var huntCycles  = 0
-    private var potionUses  = 0
     private var prevTargetFound = false
 
     private val PATROL_STEPS = intArrayOf(5, 4, 5, 4)
@@ -103,6 +102,15 @@ class BotAccessibilityService : AccessibilityService() {
         floatArrayOf( 0f,  1f),
         floatArrayOf(-1f,  0f),
     )
+
+    // ── Sistema multi-slot pozioni ────────────────────────────────────────────
+    // currentSlotIdx: indice dello slot attivo (0-based su lista slots configurati)
+    // slotEmptyFlags: true se il pixel check ha rilevato slot vuoto
+    // isRefilling:    true mentre si esegue il drag inventario→slot
+    private var currentSlotIdx  = 0
+    private var slotEmptyFlags  = BooleanArray(7) { false }
+    private var isRefilling     = false
+    private var lastSlotCheckBmp: Bitmap? = null
 
     // ── Pixel detection (thread-safe, tutto su main looper) ───────────────────
     @Volatile private var targetX           = 0f
@@ -117,10 +125,11 @@ class BotAccessibilityService : AccessibilityService() {
     @Volatile private var autoPlayerTrackX  = 0f
     @Volatile private var autoPlayerTrackY  = 0f
 
+    // Risultato pixel check slot (aggiornato da analyzeFrame, letto da doLoop)
+    @Volatile private var currentSlotIsEmpty = false
+
     // ═══════════════════════════════════════════════════════════════════════════
-    // Coordinate automatiche — layout Mobile2 Global da screenshot reali
-    // Pannello skill in basso a destra: topRow y≈80%, botRow y≈84.9%
-    // Colonne: col1≈77.1%, col2≈81.9%, col3≈86.6%, col4≈90.4%
+    // Coordinate automatiche — layout Mobile2 Global
     // ═══════════════════════════════════════════════════════════════════════════
     private fun initAutoCoords() {
         val dm  = resources.displayMetrics
@@ -134,34 +143,60 @@ class BotAccessibilityService : AccessibilityService() {
         val col3    = sw * 0.866f
         val col4    = sw * 0.904f
 
-        // Attack = tasto più a destra della riga inferiore
         aAttackX = col4;      aAttackY = botRowY
-        // Skill 1-3 = riga inferiore, sinistra→destra
         aSkill1X = col1;      aSkill1Y = botRowY
         aSkill2X = col2;      aSkill2Y = botRowY
         aSkill3X = col3;      aSkill3Y = botRowY
-        // Skill 4-5 = riga superiore
         aSkill4X = col4;      aSkill4Y = topRowY
         aSkill5X = col3;      aSkill5Y = topRowY
-        // Pozioni = riga superiore sinistra
-        aPotionX    = col1;   aPotionY    = topRowY
-        aBackupPotX = col2;   aBackupPotY = topRowY
-        // Joystick in basso a sinistra
+        aPotion1X = col1;     aPotion1Y = topRowY
         aJoystickX  = sw * 0.067f
         aJoystickY  = sh * 0.815f
         aJoystickR  = sw * 0.072f
-        // Camera (trascina il centro schermo)
         aCameraX    = sw * 0.530f
         aCameraY    = sh * 0.430f
         aCameraRange = sw * 0.165f
-        // Player center
         aPlayerX    = sw * 0.500f
         aPlayerY    = sh * 0.510f
         aDefenseR   = (sw * 0.145f).toInt()
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Loop principale — architettura unificata, nessuna state machine
+    // Restituisce la lista degli slot pozione attivi (configurati o auto)
+    // ═══════════════════════════════════════════════════════════════════════════
+    private fun activePotionSlots(cfg: BotConfig): List<Pair<Float, Float>> {
+        val manual = cfg.potionSlots()
+        return if (manual.isNotEmpty()) manual
+               else listOf(aPotion1X to aPotion1Y)  // fallback auto: 1 slot
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Controlla se uno slot pozione ha l'icona rossa (pozione presente)
+    // Campiona una griglia di pixel attorno al centro dello slot.
+    // Slot vuoto = nessun pixel rosso-vivo (sfondo grigio/scuro del gioco).
+    // ═══════════════════════════════════════════════════════════════════════════
+    private fun isSlotHasPotion(bmp: Bitmap, sx: Float, sy: Float): Boolean {
+        val bw = bmp.width; val bh = bmp.height
+        val cx = sx.toInt().coerceIn(16, bw - 17)
+        val cy = sy.toInt().coerceIn(16, bh - 17)
+        var redCount = 0; var total = 0
+        for (dy in -14..14 step 4) {
+            for (dx in -14..14 step 4) {
+                val x = (cx + dx).coerceIn(0, bw - 1)
+                val y = (cy + dy).coerceIn(0, bh - 1)
+                val p = bmp.getPixel(x, y)
+                val rv = Color.red(p); val gv = Color.green(p); val bv = Color.blue(p)
+                // Pixel rosso vivo = icona pozione vita HP
+                if (rv > 140 && gv < 110 && bv < 110 && rv - gv > 50) redCount++
+                total++
+            }
+        }
+        val ratio = if (total > 0) redCount.toFloat() / total else 0f
+        return ratio >= SLOT_RED_THRESHOLD
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // LOOP PRINCIPALE
     // ═══════════════════════════════════════════════════════════════════════════
     private val loop = object : Runnable {
         override fun run() {
@@ -176,7 +211,6 @@ class BotAccessibilityService : AccessibilityService() {
         }
     }
 
-    // ── Scanner periodico ─────────────────────────────────────────────────────
     private val scanner = object : Runnable {
         override fun run() {
             if (!BotState.isRunning) return
@@ -187,9 +221,6 @@ class BotAccessibilityService : AccessibilityService() {
 
     // ═══════════════════════════════════════════════════════════════════════════
     // LOOP UNIFICATO
-    // Niente fasi separate per pozione o difesa — tutto inline.
-    // Il combattimento usa multi-touch simultaneo:
-    //   tap target + tap attack + tap skill1..5 (se pronte) → 1 solo gesto multitouch.
     // ═══════════════════════════════════════════════════════════════════════════
     private fun doLoop(cfg: BotConfig) {
         val now         = System.currentTimeMillis()
@@ -201,33 +232,27 @@ class BotAccessibilityService : AccessibilityService() {
         // ── Kill counter ──────────────────────────────────────────────────
         if (prevTargetFound && !hasTarget) {
             BotState.killCount++
-            lastCombatSeenMs = now   // aggiorna finestra loot post-kill
+            lastCombatSeenMs = now
         }
         prevTargetFound = hasTarget
-
-        // Aggiorna stato overlay
         BotState.underAttack = recentDmg || (hpBarConfigured && BotState.hpDropCycles >= 1)
 
         // ── Coordinate effettive ──────────────────────────────────────────
-        val ax   = r(cfg.attackX,   aAttackX);  val ay   = r(cfg.attackY,   aAttackY)
-        val potX = r(cfg.potionX,   aPotionX);  val potY = r(cfg.potionY,   aPotionY)
-        val bkX  = r(cfg.backupPotionX, aBackupPotX); val bkY = r(cfg.backupPotionY, aBackupPotY)
-        val px   = if (cfg.playerX > 0f) cfg.playerX
-                   else if (autoPlayerTrackX > 0f) autoPlayerTrackX else aPlayerX
-        val py   = if (cfg.playerY > 0f) cfg.playerY
-                   else if (autoPlayerTrackY > 0f) autoPlayerTrackY else aPlayerY
+        val ax = r(cfg.attackX, aAttackX)
+        val ay = r(cfg.attackY, aAttackY)
+        val px = if (cfg.playerX > 0f) cfg.playerX
+                 else if (autoPlayerTrackX > 0f) autoPlayerTrackX else aPlayerX
+        val py = if (cfg.playerY > 0f) cfg.playerY
+                 else if (autoPlayerTrackY > 0f) autoPlayerTrackY else aPlayerY
 
-        // ── POZIONE (inline — priorità massima, non blocca combattimento) ─
-        val hpLow       = hpBarConfigured && scannedHpRatio in 0.01f..cfg.hpPotionThreshold
-        val timerPotion = potX > 0f && !hpBarConfigured && inCombat && huntCycles % 5 == 0 && huntCycles > 0
-        if (potX > 0f && (hpLow || timerPotion) && now - lastPotionTapMs >= POTION_CD_MS) {
-            tap(potX, potY)
-            lastPotionTapMs = now
-            potionUses++
-            if (potionUses >= cfg.maxPotionsInSlot && bkX > 0f) {
-                handler.postDelayed({ if (BotState.isRunning) swipe(bkX, bkY, potX, potY, 350L) }, TAP_MS + 180L)
-                potionUses = 0
-            }
+        // ── POZIONE MULTI-SLOT ────────────────────────────────────────────
+        // hpLow: HP monitorato e sotto soglia
+        // timerPotion: fallback se HP non rilevato (usa pozione ogni N cicli in combattimento)
+        val hpLow = hpBarConfigured && scannedHpRatio in 0.01f..cfg.hpPotionThreshold
+        val timerPotion = !hpBarConfigured && inCombat && huntCycles > 0 && huntCycles % 8 == 0
+
+        if (!isRefilling && (hpLow || timerPotion) && now - lastPotionTapMs >= POTION_CD_MS) {
+            usePotion(cfg, now)
         }
 
         // ── COMBATTIMENTO ─────────────────────────────────────────────────
@@ -235,23 +260,26 @@ class BotAccessibilityService : AccessibilityService() {
             val tx = if (hasTarget) targetX else lastTargetX
             val ty = if (hasTarget) targetY else lastTargetY
 
-            // Costruisci il multi-tap simultaneo:
-            // [attack] + [target se visibile] + [skill pronte]
+            // Multi-touch simultaneo: attack SEMPRE incluso + target + skill pronte
             val wave1 = mutableListOf<Pair<Float, Float>>()
-            if (ax > 0f && ay > 0f)             wave1.add(ax to ay)
+
+            // Attacco — sempre presente se configurato/auto
+            if (ax > 0f && ay > 0f) wave1.add(ax to ay)
+
+            // Target tap (seleziona il mob)
             if (tx > 0f && ty > 0f && hasTarget) wave1.add(tx to ty)
 
-            // Skills pronte → aggiunte allo stesso gesto (multi-touch)
+            // Skills — tutte e 5 controllate, aggiunte se pronte
             val s1x = r(cfg.skill1X, aSkill1X); val s1y = r(cfg.skill1Y, aSkill1Y)
             val s2x = r(cfg.skill2X, aSkill2X); val s2y = r(cfg.skill2Y, aSkill2Y)
             val s3x = r(cfg.skill3X, aSkill3X); val s3y = r(cfg.skill3Y, aSkill3Y)
             val s4x = r(cfg.skill4X, aSkill4X); val s4y = r(cfg.skill4Y, aSkill4Y)
             val s5x = r(cfg.skill5X, aSkill5X); val s5y = r(cfg.skill5Y, aSkill5Y)
 
-            if (s1x > 0f && now - lastSkill1Ms >= cfg.skill1CooldownMs) {
+            if (s1x > 0f && s1y > 0f && now - lastSkill1Ms >= cfg.skill1CooldownMs) {
                 wave1.add(s1x to s1y); lastSkill1Ms = now
             }
-            if (s2x > 0f && now - lastSkill2Ms >= cfg.skill2CooldownMs) {
+            if (s2x > 0f && s2y > 0f && now - lastSkill2Ms >= cfg.skill2CooldownMs) {
                 wave1.add(s2x to s2y); lastSkill2Ms = now
             }
             if (s3x > 0f && s3y > 0f && now - lastSkill3Ms >= cfg.skill3CooldownMs) {
@@ -264,27 +292,23 @@ class BotAccessibilityService : AccessibilityService() {
                 wave1.add(s5x to s5y); lastSkill5Ms = now
             }
 
-            // Esegui multi-touch (attack + skills + target simultaneamente)
             if (wave1.isNotEmpty()) multiTap(wave1)
 
-            // Spam attack aggiuntivi per colmare il gap tra i cicli
-            // (eseguiti in sequenza dopo il multi-touch, non bloccano il ciclo)
+            // Spam attack aggiuntivi tra i cicli (non bloccano il loop)
             if (ax > 0f && ay > 0f) {
                 val d1 = TAP_MS + GAP_MS
                 val d2 = d1 * 2
                 handler.postDelayed({ if (BotState.isRunning) tap(ax, ay) }, d1)
                 handler.postDelayed({ if (BotState.isRunning) tap(ax, ay) }, d2)
-                // Se c'è ancora un target visibile, lo si seleziona di nuovo
                 if (tx > 0f && ty > 0f && hasTarget) {
                     handler.postDelayed({ if (BotState.isRunning) tap(tx, ty) }, d2 + GAP_MS)
                 }
             }
 
-            // Raccolta loot anche in combattimento (drop con lifetime breve — dropedAt)
+            // Loot anche in combattimento
             if (lootX > 0f && lootY > 0f && now - lastLootTapMs >= LOOT_TAP_CD_MS * 2) {
                 val lx = lootX; val ly = lootY
-                val lootDelay = TAP_MS + GAP_MS * 3
-                handler.postDelayed({ if (BotState.isRunning) tap(lx, ly) }, lootDelay)
+                handler.postDelayed({ if (BotState.isRunning) tap(lx, ly) }, TAP_MS + GAP_MS * 3)
                 lastLootTapMs = now
             }
 
@@ -293,37 +317,34 @@ class BotAccessibilityService : AccessibilityService() {
             return
         }
 
-        // ── NESSUN TARGET — PATTUGLIA + LOOT AGGRESSIVO ───────────────────
+        // ── PATTUGLIA + LOOT ──────────────────────────────────────────────
         val justKilled  = now - lastCombatSeenMs < LOOT_GRACE_MS
         val lootVisible = lootX > 0f && lootY > 0f
         val lootReady   = now - lastLootTapMs >= LOOT_TAP_CD_MS
 
         if (lootReady) {
             if (lootVisible) {
-                // Loot rilevato dallo scanner → tap diretto
                 tap(lootX, lootY)
                 lastLootTapMs = now
             } else if (justKilled && px > 0f && py > 0f) {
-                // Post-kill: tap in 4 punti intorno al personaggio per raccogliere
                 val dr = ri(cfg.defenseRadiusPx, aDefenseR).coerceAtLeast(90).toFloat()
-                val lootWave = listOf(
+                multiTap(listOf(
                     px + dr * 0.40f to py,
                     px - dr * 0.40f to py,
                     px to py + dr * 0.30f,
                     px to py - dr * 0.30f,
-                )
-                multiTap(lootWave)
+                ))
                 lastLootTapMs = now
             }
         }
 
-        // Skills anche durante pattuglia (non blocca il movimento)
+        // Skills durante pattuglia
         val s1x = r(cfg.skill1X, aSkill1X); val s1y = r(cfg.skill1Y, aSkill1Y)
         val s2x = r(cfg.skill2X, aSkill2X); val s2y = r(cfg.skill2Y, aSkill2Y)
         val s3x = r(cfg.skill3X, aSkill3X); val s3y = r(cfg.skill3Y, aSkill3Y)
         val patrolSkills = mutableListOf<Pair<Float, Float>>()
-        if (s1x > 0f && now - lastSkill1Ms >= cfg.skill1CooldownMs) { patrolSkills.add(s1x to s1y); lastSkill1Ms = now }
-        if (s2x > 0f && now - lastSkill2Ms >= cfg.skill2CooldownMs) { patrolSkills.add(s2x to s2y); lastSkill2Ms = now }
+        if (s1x > 0f && s1y > 0f && now - lastSkill1Ms >= cfg.skill1CooldownMs) { patrolSkills.add(s1x to s1y); lastSkill1Ms = now }
+        if (s2x > 0f && s2y > 0f && now - lastSkill2Ms >= cfg.skill2CooldownMs) { patrolSkills.add(s2x to s2y); lastSkill2Ms = now }
         if (s3x > 0f && s3y > 0f && now - lastSkill3Ms >= cfg.skill3CooldownMs) { patrolSkills.add(s3x to s3y); lastSkill3Ms = now }
         if (patrolSkills.isNotEmpty()) multiTap(patrolSkills)
 
@@ -345,15 +366,68 @@ class BotAccessibilityService : AccessibilityService() {
         val jr = r(cfg.joystickRadius, aJoystickR)
         if (jx > 0f && jy > 0f && jr > 0f) {
             val dir = PATROL_DIRS[patrolDir]
-            val tx  = jx + dir[0] * jr
-            val ty  = jy + dir[1] * jr
-            handler.postDelayed({ if (BotState.isRunning) joystickPush(jx, jy, tx, ty, JOYSTICK_MS) }, moveDelay)
+            val jtx = jx + dir[0] * jr
+            val jty = jy + dir[1] * jr
+            handler.postDelayed({ if (BotState.isRunning) joystickPush(jx, jy, jtx, jty, JOYSTICK_MS) }, moveDelay)
             patrolSteps++
             if (patrolSteps >= PATROL_STEPS[patrolDir]) { patrolSteps = 0; patrolDir = (patrolDir + 1) % 4 }
         }
 
         huntCycles++
         handler.postDelayed(loop, PATROL_CYCLE_MS)
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // LOGICA POZIONE MULTI-SLOT
+    //
+    // 1. Prendi lo slot corrente dalla lista configurata
+    // 2. Se il pixel check dice che è vuoto → avanza al prossimo slot
+    // 3. Se tutti i slot sono vuoti → refill dall'inventario (drag)
+    // 4. Dopo il refill → reset flags e riparti dallo slot 0
+    // ═══════════════════════════════════════════════════════════════════════════
+    private fun usePotion(cfg: BotConfig, now: Long) {
+        val slots = activePotionSlots(cfg)
+        if (slots.isEmpty()) return
+
+        // Se il pixel check indica slot vuoto, cerca il prossimo slot con pozione
+        if (currentSlotIsEmpty) {
+            slotEmptyFlags[currentSlotIdx % slotEmptyFlags.size] = true
+            // Avanza al prossimo slot non vuoto
+            var found = false
+            for (i in 1..slots.size) {
+                val nextIdx = (currentSlotIdx + i) % slots.size
+                if (!slotEmptyFlags[nextIdx % slotEmptyFlags.size]) {
+                    currentSlotIdx = nextIdx
+                    found = true
+                    break
+                }
+            }
+            if (!found) {
+                // Tutti gli slot sono vuoti → refill dall'inventario
+                val invX = cfg.inventoryPotionX
+                val invY = cfg.inventoryPotionY
+                if (invX > 0f && invY > 0f && slots.isNotEmpty()) {
+                    val (s0x, s0y) = slots[0]
+                    isRefilling = true
+                    // Drag dalla posizione inventario al primo slot
+                    swipe(invX, invY, s0x, s0y, 350L)
+                    handler.postDelayed({
+                        // Reset dopo il refill
+                        currentSlotIdx = 0
+                        slotEmptyFlags.fill(false)
+                        currentSlotIsEmpty = false
+                        isRefilling = false
+                    }, REFILL_DELAY_MS + 400L)
+                }
+                return
+            }
+        }
+
+        // Usa lo slot corrente
+        val (potX, potY) = slots[currentSlotIdx % slots.size]
+        tap(potX, potY)
+        lastPotionTapMs = now
+        // Dopo il tap, il prossimo analyzeFrame aggiornerà currentSlotIsEmpty
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -379,15 +453,15 @@ class BotAccessibilityService : AccessibilityService() {
         val cfg = BotConfig.load(this)
         val w = bmp.width; val h = bmp.height
 
-        // ── 0. Tracking giocatore (nome verde sopra la testa) ─────────────────
+        // ── 0. Tracking giocatore ─────────────────────────────────────────────
         val pgX0 = (w * 0.20f).toInt(); val pgX1 = (w * 0.80f).toInt()
         val pgY0 = (h * 0.18f).toInt(); val pgY1 = (h * 0.70f).toInt()
         var pgSX = 0L; var pgSY = 0L; var pgCnt = 0
         for (y in pgY0 until pgY1 step 4) {
             for (x in pgX0 until pgX1 step 4) {
                 val p = bmp.getPixel(x, y)
-                val r = Color.red(p); val g = Color.green(p); val b = Color.blue(p)
-                if (g > 145 && g > r + 28 && g > b + 20) { pgSX += x; pgSY += y; pgCnt++ }
+                val rv = Color.red(p); val gv = Color.green(p); val bv = Color.blue(p)
+                if (gv > 145 && gv > rv + 28 && gv > bv + 20) { pgSX += x; pgSY += y; pgCnt++ }
             }
         }
         if (pgCnt >= 6) {
@@ -395,16 +469,15 @@ class BotAccessibilityService : AccessibilityService() {
             autoPlayerTrackY = ((pgSY / pgCnt).toFloat() + h * 0.05f).coerceAtMost(h - 1f)
         }
 
-        // ── 1. Rilevamento nomi mostri (rosso vivo = nome nemico) ─────────────
-        // Scan su step 3 per più precisione (confermato R>160, G<118, B<118, diff≥38)
+        // ── 1. Rilevamento nomi mostri ────────────────────────────────────────
         val yStart = (h * 0.07f).toInt(); val yEnd = (h * 0.85f).toInt()
         var sumX = 0L; var sumY = 0L; var count = 0
         for (y in yStart until yEnd step 3) {
             for (x in 80 until w step 3) {
                 val p = bmp.getPixel(x, y)
-                val r = Color.red(p); val g = Color.green(p); val b = Color.blue(p)
-                if (r > MOB_R_MIN && g < MOB_G_MAX && b < MOB_B_MAX &&
-                    r - g > MOB_R_DIFF && r - b > MOB_R_DIFF) {
+                val rv = Color.red(p); val gv = Color.green(p); val bv = Color.blue(p)
+                if (rv > MOB_R_MIN && gv < MOB_G_MAX && bv < MOB_B_MAX &&
+                    rv - gv > MOB_R_DIFF && rv - bv > MOB_R_DIFF) {
                     sumX += x; sumY += y; count++
                 }
             }
@@ -439,9 +512,9 @@ class BotAccessibilityService : AccessibilityService() {
                 val sy = (barY + dy).coerceIn(0, h - 1)
                 for (x in barX until scanEnd) {
                     val p = bmp.getPixel(x, sy)
-                    val r = Color.red(p); val g = Color.green(p); val b = Color.blue(p)
-                    if (r > HP_R_MIN && g < HP_G_MAX && b < HP_B_MAX &&
-                        r - g > HP_R_DIFF && r - b > HP_R_DIFF) redPx++
+                    val rv = Color.red(p); val gv = Color.green(p); val bv = Color.blue(p)
+                    if (rv > HP_R_MIN && gv < HP_G_MAX && bv < HP_B_MAX &&
+                        rv - gv > HP_R_DIFF && rv - bv > HP_R_DIFF) redPx++
                     totPx++
                 }
             }
@@ -459,7 +532,18 @@ class BotAccessibilityService : AccessibilityService() {
             scannedHpRatio = newRatio
         }
 
-        // ── 3. Loot a terra (yang/drop: testo bianco o verde) ─────────────────
+        // ── 3. Pixel check slot pozione corrente ──────────────────────────────
+        // Controlla se lo slot attivo ha ancora l'icona rossa (pozione presente)
+        val slots = activePotionSlots(cfg)
+        if (slots.isNotEmpty() && !isRefilling) {
+            val idx = currentSlotIdx % slots.size
+            val (sx, sy) = slots[idx]
+            if (sx > 0f && sy > 0f) {
+                currentSlotIsEmpty = !isSlotHasPotion(bmp, sx, sy)
+            }
+        }
+
+        // ── 4. Loot a terra ───────────────────────────────────────────────────
         detectLoot(bmp, w, h)
     }
 
@@ -470,9 +554,9 @@ class BotAccessibilityService : AccessibilityService() {
         for (y in y0 until y1 step 4) {
             for (x in x0 until x1 step 4) {
                 val p = bmp.getPixel(x, y)
-                val r = Color.red(p); val g = Color.green(p); val b = Color.blue(p)
-                val white = r > 178 && g > 178 && b > 178 && abs(r - g) < 22 && abs(r - b) < 22
-                val green = g > 158 && g > r + 28 && g > b + 20
+                val rv = Color.red(p); val gv = Color.green(p); val bv = Color.blue(p)
+                val white = rv > 178 && gv > 178 && bv > 178 && abs(rv - gv) < 22 && abs(rv - bv) < 22
+                val green = gv > 158 && gv > rv + 28 && gv > bv + 20
                 if (white || green) { sx += x; sy += y; cnt++ }
             }
         }
@@ -484,15 +568,14 @@ class BotAccessibilityService : AccessibilityService() {
         }
     }
 
-    // Ricerca automatica barra HP (striscia rossa orizzontale in top-left)
     private fun autoDetectHpBar(bmp: Bitmap, w: Int, h: Int) {
         val maxY = (h * 0.22f).toInt(); val maxX = (w * 0.38f).toInt()
         for (y in 4 until maxY) {
             var firstRed = -1; var lastRed = -1; var redCount = 0
             for (x in 14 until maxX) {
                 val p = bmp.getPixel(x, y)
-                val r = Color.red(p); val g = Color.green(p); val b = Color.blue(p)
-                if (r > HP_R_MIN && r - g > HP_R_DIFF && r - b > HP_R_DIFF) {
+                val rv = Color.red(p); val gv = Color.green(p); val bv = Color.blue(p)
+                if (rv > HP_R_MIN && rv - gv > HP_R_DIFF && rv - bv > HP_R_DIFF) {
                     if (firstRed < 0) firstRed = x; lastRed = x; redCount++
                 }
             }
@@ -502,8 +585,8 @@ class BotAccessibilityService : AccessibilityService() {
                 var extX = lastRed + 1
                 while (extX < maxX) {
                     val p = bmp.getPixel(extX, y)
-                    val r = Color.red(p); val g = Color.green(p); val b = Color.blue(p)
-                    if (r < 90 && g < 90 && b < 90) extX++ else break
+                    val rv = Color.red(p); val gv = Color.green(p); val bv = Color.blue(p)
+                    if (rv < 90 && gv < 90 && bv < 90) extX++ else break
                 }
                 autoBarFullW = (extX - firstRed).coerceAtLeast(stripeW + 12)
                 break
@@ -526,7 +609,7 @@ class BotAccessibilityService : AccessibilityService() {
         BotState.lastHpRatio    = 1.0f
         BotState.hpDropCycles   = 0;  BotState.hpStableCycles = 0
         BotState.underAttack    = false; BotState.hpDisplayPct  = -1
-        huntCycles = 0; potionUses = 0
+        huntCycles = 0
         patrolDir  = 0; patrolSteps = 0; cameraDir = 1
         prevTargetFound = false
         targetX = 0f; targetY = 0f
@@ -538,6 +621,11 @@ class BotAccessibilityService : AccessibilityService() {
         lastSkill1Ms = 0L; lastSkill2Ms = 0L; lastSkill3Ms = 0L
         lastSkill4Ms = 0L; lastSkill5Ms = 0L
         autoBarX = -1; autoBarY = -1; autoBarFullW = 0
+        // Reset sistema pozioni
+        currentSlotIdx = 0
+        slotEmptyFlags.fill(false)
+        currentSlotIsEmpty = false
+        isRefilling = false
         handler.post(loop)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)
             handler.postDelayed(scanner, SCAN_DELAY_MS)
@@ -547,18 +635,17 @@ class BotAccessibilityService : AccessibilityService() {
         BotState.isRunning = false
         handler.removeCallbacksAndMessages(null)
         targetX = 0f; targetY = 0f
+        isRefilling = false
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // GESTI
     // ═══════════════════════════════════════════════════════════════════════════
 
-    // Multi-touch simultaneo: un solo dispatchGesture con N stroke = N dita contemporanee
-    // Perfetto per MMORPG: attack + skill1 + skill2 + target nello stesso frame
     private fun multiTap(points: List<Pair<Float, Float>>) {
         if (points.isEmpty()) return
         val builder = GestureDescription.Builder()
-        for ((x, y) in points.take(10)) {   // max 10 pointer simultanei
+        for ((x, y) in points.take(10)) {
             val path = Path().apply { moveTo(x, y) }
             try { builder.addStroke(GestureDescription.StrokeDescription(path, 0L, TAP_MS)) }
             catch (e: Exception) { /* stroke ignorato se troppi pointer */ }

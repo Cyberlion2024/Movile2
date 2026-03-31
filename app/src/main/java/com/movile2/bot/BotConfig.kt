@@ -8,7 +8,6 @@ data class BotConfig(
     val maxKills: Int = 50,
     val sessionMinutes: Int = 0,
 
-    // 0f = usa coordinate automatiche calcolate dalla risoluzione schermo
     val attackX: Float = 0f,
     val attackY: Float = 0f,
     val attackDelayMs: Long = 200L,
@@ -33,11 +32,21 @@ data class BotConfig(
     val skill5Y: Float = 0f,
     val skill5CooldownMs: Long = 15000L,
 
-    val potionX: Float = 0f,
-    val potionY: Float = 0f,
-    val maxPotionsInSlot: Int = 10,
-    val backupPotionX: Float = 0f,
-    val backupPotionY: Float = 0f,
+    // ── Slot pozione vita (fino a 7) ─────────────────────────────────────────
+    // Ogni slot è configurabile dall'utente toccando lo schermo.
+    // Quando uno slot si svuota (pixel detection → nessun rosso), il bot passa
+    // al successivo. Quando tutti sono vuoti, trascina dall'inventario al slot 1.
+    val potion1X: Float = 0f, val potion1Y: Float = 0f,
+    val potion2X: Float = 0f, val potion2Y: Float = 0f,
+    val potion3X: Float = 0f, val potion3Y: Float = 0f,
+    val potion4X: Float = 0f, val potion4Y: Float = 0f,
+    val potion5X: Float = 0f, val potion5Y: Float = 0f,
+    val potion6X: Float = 0f, val potion6Y: Float = 0f,
+    val potion7X: Float = 0f, val potion7Y: Float = 0f,
+
+    // Posizione pozione rossa nell'inventario (per il refill automatico)
+    val inventoryPotionX: Float = 0f,
+    val inventoryPotionY: Float = 0f,
 
     val joystickX: Float = 0f,
     val joystickY: Float = 0f,
@@ -56,6 +65,17 @@ data class BotConfig(
     val playerY: Float = 0f,
     val defenseRadiusPx: Int = 0,
 ) {
+    // Restituisce la lista degli slot configurati (x,y) non zero, nell'ordine 1→7
+    fun potionSlots(): List<Pair<Float, Float>> = listOfNotNull(
+        if (potion1X > 0f && potion1Y > 0f) potion1X to potion1Y else null,
+        if (potion2X > 0f && potion2Y > 0f) potion2X to potion2Y else null,
+        if (potion3X > 0f && potion3Y > 0f) potion3X to potion3Y else null,
+        if (potion4X > 0f && potion4Y > 0f) potion4X to potion4Y else null,
+        if (potion5X > 0f && potion5Y > 0f) potion5X to potion5Y else null,
+        if (potion6X > 0f && potion6Y > 0f) potion6X to potion6Y else null,
+        if (potion7X > 0f && potion7Y > 0f) potion7X to potion7Y else null,
+    )
+
     companion object {
         private const val PREFS = "bot_config"
 
@@ -84,11 +104,22 @@ data class BotConfig(
                 skill5X           = p.getFloat("skill5X", 0f),
                 skill5Y           = p.getFloat("skill5Y", 0f),
                 skill5CooldownMs  = p.getLong("skill5CooldownMs", 15000L),
-                potionX           = p.getFloat("potionX", 0f),
-                potionY           = p.getFloat("potionY", 0f),
-                maxPotionsInSlot  = p.getInt("maxPotionsInSlot", 10),
-                backupPotionX     = p.getFloat("backupPotionX", 0f),
-                backupPotionY     = p.getFloat("backupPotionY", 0f),
+                potion1X          = p.getFloat("potion1X", 0f),
+                potion1Y          = p.getFloat("potion1Y", 0f),
+                potion2X          = p.getFloat("potion2X", 0f),
+                potion2Y          = p.getFloat("potion2Y", 0f),
+                potion3X          = p.getFloat("potion3X", 0f),
+                potion3Y          = p.getFloat("potion3Y", 0f),
+                potion4X          = p.getFloat("potion4X", 0f),
+                potion4Y          = p.getFloat("potion4Y", 0f),
+                potion5X          = p.getFloat("potion5X", 0f),
+                potion5Y          = p.getFloat("potion5Y", 0f),
+                potion6X          = p.getFloat("potion6X", 0f),
+                potion6Y          = p.getFloat("potion6Y", 0f),
+                potion7X          = p.getFloat("potion7X", 0f),
+                potion7Y          = p.getFloat("potion7Y", 0f),
+                inventoryPotionX  = p.getFloat("inventoryPotionX", 0f),
+                inventoryPotionY  = p.getFloat("inventoryPotionY", 0f),
                 joystickX         = p.getFloat("joystickX", 0f),
                 joystickY         = p.getFloat("joystickY", 0f),
                 joystickRadius    = p.getFloat("joystickRadius", 0f),
@@ -129,11 +160,22 @@ data class BotConfig(
                 putFloat("skill5X", cfg.skill5X)
                 putFloat("skill5Y", cfg.skill5Y)
                 putLong("skill5CooldownMs", cfg.skill5CooldownMs)
-                putFloat("potionX", cfg.potionX)
-                putFloat("potionY", cfg.potionY)
-                putInt("maxPotionsInSlot", cfg.maxPotionsInSlot)
-                putFloat("backupPotionX", cfg.backupPotionX)
-                putFloat("backupPotionY", cfg.backupPotionY)
+                putFloat("potion1X", cfg.potion1X)
+                putFloat("potion1Y", cfg.potion1Y)
+                putFloat("potion2X", cfg.potion2X)
+                putFloat("potion2Y", cfg.potion2Y)
+                putFloat("potion3X", cfg.potion3X)
+                putFloat("potion3Y", cfg.potion3Y)
+                putFloat("potion4X", cfg.potion4X)
+                putFloat("potion4Y", cfg.potion4Y)
+                putFloat("potion5X", cfg.potion5X)
+                putFloat("potion5Y", cfg.potion5Y)
+                putFloat("potion6X", cfg.potion6X)
+                putFloat("potion6Y", cfg.potion6Y)
+                putFloat("potion7X", cfg.potion7X)
+                putFloat("potion7Y", cfg.potion7Y)
+                putFloat("inventoryPotionX", cfg.inventoryPotionX)
+                putFloat("inventoryPotionY", cfg.inventoryPotionY)
                 putFloat("joystickX", cfg.joystickX)
                 putFloat("joystickY", cfg.joystickY)
                 putFloat("joystickRadius", cfg.joystickRadius)

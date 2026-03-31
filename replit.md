@@ -18,13 +18,17 @@ Android bot app in Kotlin for MMORPG automation using Accessibility Service + Ov
 | `BotConfig.kt` | Data class + SharedPreferences per persistere le impostazioni |
 | `BotState.kt` | Singleton condiviso per stato runtime (isRunning, killCount) |
 
-## Features v5 — Architettura Professionale
-- **Multi-touch simultaneo**: Attack + Skill1..5 + Target nello stesso frame (GestureDescription multi-stroke, fino a 10 pointer)
-- **Loop unificato**: nessuna state machine HUNT/DEFEND; pozione inline senza interrompere il combattimento
-- **Ciclo combattimento 320ms**: attack immediato + 2 spam extra a 75/150ms
-- **Scan ogni 600ms**: step 3 per più precisione; rilevamento mostri migliorato (R>160, diff≥38)
-- **Loot aggressivo**: raccolta anche durante combattimento (1.4s CD), post-kill multi-tap in 4 direzioni, finestra 7s
-- **Pozione inline + refill automatico**: priorità massima, nessuna fase separata
+## Features v6 — Sistema Pozioni Multi-Slot
+- **Multi-touch simultaneo**: Attack (SEMPRE incluso) + Skill1..5 + Target nello stesso frame
+- **Loop unificato**: nessuna state machine; pozione inline senza interrompere il combattimento
+- **Ciclo combattimento 320ms**: attack spam + 2 tap extra a 75/150ms
+- **Scan ogni 600ms**: rilevamento mostri (R>160, diff≥38); pixel check slot pozione
+- **Loot aggressivo**: raccolta in combattimento, post-kill multi-tap 4 direzioni, finestra 7s
+- **Sistema Multi-Slot Pozioni (fino a 7)**:
+  - Pixel detection slot: rileva se l'icona rossa è presente → slot pieno/vuoto
+  - Rotazione automatica: slot 1→2→...→7 quando uno si svuota
+  - Refill inventario: drag automatico dalla posizione inventario allo slot 1 quando tutti vuoti
+  - POTION_CD 3s per evitare spam continuo
 - **5 skill tutte attive**: multi-touch quando pronte; skill 1-3 anche durante pattuglia
 - Joystick virtuale N→E→S→W; si ferma se c'è bersaglio
 - Monitor HP automatico (auto-detection barra top-left)
