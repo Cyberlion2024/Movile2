@@ -56,6 +56,14 @@ class BotAccessibilityService : AccessibilityService() {
     private var lastSkill1Ms = 0L; private var lastSkill2Ms = 0L
     private var lastSkill3Ms = 0L; private var lastSkill4Ms = 0L; private var lastSkill5Ms = 0L
 
+    // ── Timestamp eventi ──────────────────────────────────────────────────────
+    private var lastDamageMs     = 0L
+    private var lastTargetSeenMs = 0L
+    private var lastLootTapMs    = 0L
+    private var lastPotionTapMs  = 0L
+    private var lastTargetX      = 0f
+    private var lastTargetY      = 0f
+
     // ── Pattugliamento ────────────────────────────────────────────────────────
     private var patrolDir = 0; private var patrolSteps = 0; private var cameraDir = 1
 
@@ -412,7 +420,7 @@ class BotAccessibilityService : AccessibilityService() {
         if (doCamera) {
             swipe(cx - cameraDir * cr, cy, cx + cameraDir * cr, cy, CAMERA_MS)
             cameraDir = -cameraDir; t = CAMERA_MS + POST_MOVE_MS
-        } else if (useJoystick && !takingDamage && !recentCombat) {
+        } else if (useJoystick && !BotState.underAttack && !recentCombat) {
             val dir = PATROL_DIRS[patrolDir]
             joystickPush(jx, jy, jx + dir[0] * jr, jy + dir[1] * jr, JOYSTICK_MS)
             patrolSteps++
