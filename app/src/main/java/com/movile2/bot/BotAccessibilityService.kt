@@ -31,7 +31,6 @@ class BotAccessibilityService : AccessibilityService() {
     private val COMBAT_GRACE_MS  = 2500L
     private val TARGET_GRACE_MS  = 1800L
     private val LOOT_TAP_CD_MS   = 1200L
-    private val POTION_GAP_MS    = 1700L
 
     // ── Coordinate automatiche (calcolate da risoluzione schermo) ─────────────
     // Layout Mobile2 Global derivato dall'analisi degli screenshot.
@@ -81,12 +80,6 @@ class BotAccessibilityService : AccessibilityService() {
     @Volatile private var autoBarFullW = 0
     @Volatile private var autoPlayerTrackX = 0f
     @Volatile private var autoPlayerTrackY = 0f
-    @Volatile private var lastDamageMs = 0L
-    @Volatile private var lastTargetSeenMs = 0L
-    @Volatile private var lastLootTapMs = 0L
-    @Volatile private var lastTargetX = 0f
-    @Volatile private var lastTargetY = 0f
-    @Volatile private var lastPotionTapMs = 0L
 
     private val PATROL_STEPS = intArrayOf(5, 4, 5, 4)
     private val PATROL_DIRS  = arrayOf(
@@ -285,18 +278,14 @@ class BotAccessibilityService : AccessibilityService() {
         }
 
         // ── 3. Loot a terra (Yang + drop col nome in verde) ─────────────────
-        detectLoot(bmp, w, h, cfg)
+        detectLoot(bmp, w, h)
     }
 
-    private fun detectLoot(bmp: Bitmap, w: Int, h: Int, cfg: BotConfig) {
-        val centerX = if (cfg.playerX > 0f) cfg.playerX else if (autoPlayerTrackX > 0f) autoPlayerTrackX else aPlayerX
-        val centerY = if (cfg.playerY > 0f) cfg.playerY else if (autoPlayerTrackY > 0f) autoPlayerTrackY else aPlayerY
-        val rx = (w * 0.28f).toInt()
-        val ry = (h * 0.22f).toInt()
-        val x0 = (centerX.toInt() - rx).coerceIn((w * 0.08f).toInt(), (w * 0.80f).toInt())
-        val x1 = (centerX.toInt() + rx).coerceIn((w * 0.20f).toInt(), (w * 0.92f).toInt())
-        val y0 = (centerY.toInt() - ry).coerceIn((h * 0.22f).toInt(), (h * 0.75f).toInt())
-        val y1 = (centerY.toInt() + ry).coerceIn((h * 0.30f).toInt(), (h * 0.92f).toInt())
+    private fun detectLoot(bmp: Bitmap, w: Int, h: Int) {
+        val x0 = (w * 0.12f).toInt()
+        val x1 = (w * 0.88f).toInt()
+        val y0 = (h * 0.16f).toInt()
+        val y1 = (h * 0.86f).toInt()
         var sx = 0L; var sy = 0L; var cnt = 0
         for (y in y0 until y1 step 5) {
             for (x in x0 until x1 step 5) {
@@ -371,7 +360,6 @@ class BotAccessibilityService : AccessibilityService() {
         lootX = 0f; lootY = 0f
         lastDamageMs = 0L; lastTargetSeenMs = 0L
         lastLootTapMs = 0L; lastTargetX = 0f; lastTargetY = 0f
-        lastPotionTapMs = 0L
         autoBarX = -1; autoBarY = -1; autoBarFullW = 0
         handler.post(loop)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)
@@ -408,8 +396,7 @@ class BotAccessibilityService : AccessibilityService() {
         val potionActive = potX > 0f
         val hpLow       = hpBarConfigured && scannedHpRatio in 0.01f..cfg.hpPotionThreshold
         val timerPotion = potionActive && (!hpBarConfigured || recentCombat) && huntCycles > 0 && huntCycles % 4 == 0
-        val canPotion = now - lastPotionTapMs >= POTION_GAP_MS
-        if (potionActive && canPotion && (hpLow || timerPotion)) { phase = Phase.POTION; handler.post(loop); return }
+        if (potionActive && (hpLow || timerPotion)) { phase = Phase.POTION; handler.post(loop); return }
 
         val jx = r(cfg.joystickX, aJoystickX); val jy = r(cfg.joystickY, aJoystickY)
         val jr = r(cfg.joystickRadius, aJoystickR)
@@ -467,9 +454,8 @@ class BotAccessibilityService : AccessibilityService() {
 
         val potX = r(cfg.potionX, aPotionX); val potY = r(cfg.potionY, aPotionY)
         val potionByHp = potX > 0f && hpBarConfigured && scannedHpRatio in 0.01f..cfg.hpPotionThreshold
-        val potionByTimer = potX > 0f && !hpBarConfigured && recentCombat
-        val canPotion = now - lastPotionTapMs >= POTION_GAP_MS
-        if (canPotion && (potionByHp || potionByTimer)) {
+        val potionByTimer = potX > 0f && !hpBarConfigured && now % 3200L < 250L
+        if (potionByHp || potionByTimer) {
             phase = Phase.POTION; handler.post(loop); return
         }
 
