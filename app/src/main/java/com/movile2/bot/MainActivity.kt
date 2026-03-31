@@ -73,18 +73,20 @@ class MainActivity : AppCompatActivity() {
     // Se l'utente aveva 950/700 ecc. salvati, vengono rimpiazzati da 0 (= auto).
     private fun migrateToAutoCoords() {
         val prefs = getSharedPreferences("bot_config", android.content.Context.MODE_PRIVATE)
-        if (prefs.getBoolean("auto_coords_v5", false)) return
+        if (prefs.getBoolean("auto_coords_v6", false)) return
         val coordKeys = listOf(
             "attackX","attackY","skill1X","skill1Y","skill2X","skill2Y",
             "skill3X","skill3Y","skill4X","skill4Y","skill5X","skill5Y",
             "potionX","potionY","backupPotionX","backupPotionY",
             "joystickX","joystickY","joystickRadius",
             "cameraAreaX","cameraAreaY","cameraSwipeRange",
-            "playerX","playerY","defenseRadiusPx","hpBarFullWidth"
+            "playerX","playerY","defenseRadiusPx",
+            "hpBarX","hpBarY","hpBarFullWidth"
         )
         prefs.edit().apply {
             coordKeys.forEach { remove(it) }
-            putBoolean("auto_coords_v5", true)
+            remove("auto_coords_v5")
+            putBoolean("auto_coords_v6", true)
             apply()
         }
     }
