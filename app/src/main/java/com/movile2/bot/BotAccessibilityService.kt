@@ -136,7 +136,7 @@ class BotAccessibilityService : AccessibilityService() {
         val sw = dm.widthPixels.toFloat()
         val sh = dm.heightPixels.toFloat()
 
-        // Righe del pannello skill (in basso a destra)
+      // Righe del pannello skill (in basso a destra)
         val topRowY = sh * 0.800f   // riga superiore: pozioni/oggetti
         val botRowY = sh * 0.849f   // riga inferiore: skill + attacco
 
