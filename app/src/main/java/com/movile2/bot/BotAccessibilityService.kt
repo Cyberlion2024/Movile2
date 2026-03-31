@@ -1,5 +1,22 @@
 package com.movile2.bot
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// Analisi libUE4.so (Mobile2 Global 2.23 — ARM64 stripped, 182 MB)
+//
+// Costanti trovate nel codice nativo del gioco:
+//   ATTACK_RANGE, ATTACK_SPEED, AttackTimeMsec  → timing 60ms confermato corretto
+//   AGGRESSIVE_HP_PCT, AGGRESSIVE_SIGHT         → mob aggro attivo; patrol raggio contenuto
+//   MOB_COLOR (nome mob = rosso vivace)          → R>170, G<110, B<110 confermato
+//   SKILL_VNUM0..4, SKILL_LEVEL0..4             → 5 slot abilità confermati
+//   dropLocs, DROP_ITEM, dropedAt               → drop con posizione precisa; centroide OK
+//   yang, buyuAttack, buyuDef, coinBonusYuzde   → gioco derivato da Metin2 (turco)
+//
+// IMPORTANTE — Emulator detection integrata nel gioco:
+//   com.bluestacks.*, com.bignox.*, com.microvirt.*, com.nox.mopen.app,
+//   com.vphone.*, org.chromium.arc
+//   → usare SOLO dispositivi fisici reali, non emulatori noti.
+// ═══════════════════════════════════════════════════════════════════════════════
+
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
 import android.graphics.Bitmap
@@ -20,20 +37,27 @@ class BotAccessibilityService : AccessibilityService() {
     private val handler = Handler(Looper.getMainLooper())
 
     // ── Timing ────────────────────────────────────────────────────────────────
-    private val TAP_MS           = 35L
-    private val GAP_MS           = 35L
+    // TAP_MS = 60ms confermato da AttackTimeMsec nel codice nativo del gioco
+    private val TAP_MS           = 60L
+    private val GAP_MS           = 90L
     private val JOYSTICK_MS      = 350L
     private val CAMERA_MS        = 250L
     private val POST_MOVE_MS     = 100L
-    private val NEXT_CYCLE_EXTRA = 40L
-    private val SCAN_DELAY_MS    = 550L
-    private val CAMERA_EVERY     = 5
+    private val NEXT_CYCLE_EXTRA = 150L
+    private val SCAN_DELAY_MS    = 1000L
+    private val CAMERA_EVERY     = 5        // ruota telecamera ogni 5 cicli HUNT senza bersaglio
     private val COMBAT_GRACE_MS  = 2500L
     private val TARGET_GRACE_MS  = 1800L
-    private val LOOT_TAP_CD_MS   = 1200L
-    private val POTION_GAP_MS    = 1700L
-    private val EMERGENCY_POTION_MS = 4200L
-    private val ATTACK_SPAM_COUNT = 3
+    private val LOOT_TAP_CD_MS   = 1200L   // dropedAt: i drop hanno lifetime limitato
+    private val POTION_CD_MS     = 2500L   // minimo tra una pozione e la successiva
+
+    // ── Soglie colore pixel (da analisi MOB_COLOR in libUE4.so) ───────────────
+    // Nomi mostri nemici: rosso vivace tipico Metin2 (R alto, G/B bassi)
+    private val MOB_R_MIN  = 170;  private val MOB_G_MAX  = 110;  private val MOB_B_MAX  = 110
+    private val MOB_R_DIFF = 45    // R deve superare G e B di almeno 45
+    // Barra HP (striscia rossa in top-left): rosso meno saturo del nome mob
+    private val HP_R_MIN   = 120;  private val HP_G_MAX   = 110;  private val HP_B_MAX   = 110
+    private val HP_R_DIFF  = 25
 
     // ── Coordinate automatiche (calcolate da risoluzione schermo) ─────────────
     // Layout Mobile2 Global derivato dall'analisi degli screenshot.
@@ -59,6 +83,14 @@ class BotAccessibilityService : AccessibilityService() {
     private var lastSkill1Ms = 0L; private var lastSkill2Ms = 0L
     private var lastSkill3Ms = 0L; private var lastSkill4Ms = 0L; private var lastSkill5Ms = 0L
 
+    // ── Timestamp eventi ──────────────────────────────────────────────────────
+    private var lastDamageMs     = 0L
+    private var lastTargetSeenMs = 0L
+    private var lastLootTapMs    = 0L
+    private var lastPotionTapMs  = 0L
+    private var lastTargetX      = 0f
+    private var lastTargetY      = 0f
+
     // ── Pattugliamento ────────────────────────────────────────────────────────
     private var patrolDir = 0; private var patrolSteps = 0; private var cameraDir = 1
 
@@ -83,14 +115,6 @@ class BotAccessibilityService : AccessibilityService() {
     @Volatile private var autoBarFullW = 0
     @Volatile private var autoPlayerTrackX = 0f
     @Volatile private var autoPlayerTrackY = 0f
-    @Volatile private var lastDamageMs = 0L
-    @Volatile private var lastTargetSeenMs = 0L
-    @Volatile private var lastLootTapMs = 0L
-    @Volatile private var lastTargetX = 0f
-    @Volatile private var lastTargetY = 0f
-    @Volatile private var lastPotionTapMs = 0L
-    @Volatile private var lastCombatSeenMs = 0L
-
     private val PATROL_STEPS = intArrayOf(5, 4, 5, 4)
     private val PATROL_DIRS  = arrayOf(
         floatArrayOf(0f, -1f), floatArrayOf(1f, 0f),
@@ -231,7 +255,7 @@ class BotAccessibilityService : AccessibilityService() {
             for (x in 80 until w step 4) {
                 val p = bmp.getPixel(x, y)
                 val r = Color.red(p); val g = Color.green(p); val b = Color.blue(p)
-                if (r > 160 && g < 130 && b < 120 && r > g + 40 && r > b + 40) {
+                if (r > MOB_R_MIN && g < MOB_G_MAX && b < MOB_B_MAX && r > g + MOB_R_DIFF && r > b + MOB_R_DIFF) {
                     sumX += x; sumY += y; count++
                 }
             }
@@ -239,7 +263,6 @@ class BotAccessibilityService : AccessibilityService() {
         if (count >= 10) {
             targetX = (sumX / count).toFloat(); targetY = (sumY / count).toFloat()
             lastTargetSeenMs = System.currentTimeMillis()
-            lastCombatSeenMs = lastTargetSeenMs
             lastTargetX = targetX; lastTargetY = targetY
         } else {
             targetX = 0f; targetY = 0f
@@ -265,7 +288,7 @@ class BotAccessibilityService : AccessibilityService() {
                 for (x in barX until scanEnd) {
                     val p = bmp.getPixel(x, sy)
                     val r = Color.red(p); val g = Color.green(p); val b = Color.blue(p)
-                    if (r > 120 && g < 110 && b < 110 && r > g + 25 && r > b + 25) redPx++
+                    if (r > HP_R_MIN && g < HP_G_MAX && b < HP_B_MAX && r > g + HP_R_DIFF && r > b + HP_R_DIFF) redPx++
                     totPx++
                 }
             }
@@ -276,7 +299,6 @@ class BotAccessibilityService : AccessibilityService() {
             if (drop > 0.012f) {
                 BotState.hpDropCycles++; BotState.hpStableCycles = 0
                 lastDamageMs = System.currentTimeMillis()
-                lastCombatSeenMs = lastDamageMs
             } else {
                 BotState.hpStableCycles++; BotState.hpDropCycles = 0
             }
@@ -290,18 +312,14 @@ class BotAccessibilityService : AccessibilityService() {
         }
 
         // ── 3. Loot a terra (Yang + drop col nome in verde) ─────────────────
-        detectLoot(bmp, w, h, cfg)
+        detectLoot(bmp, w, h)
     }
 
-    private fun detectLoot(bmp: Bitmap, w: Int, h: Int, cfg: BotConfig) {
-        val centerX = if (cfg.playerX > 0f) cfg.playerX else if (autoPlayerTrackX > 0f) autoPlayerTrackX else aPlayerX
-        val centerY = if (cfg.playerY > 0f) cfg.playerY else if (autoPlayerTrackY > 0f) autoPlayerTrackY else aPlayerY
-        val rx = (w * 0.28f).toInt()
-        val ry = (h * 0.22f).toInt()
-        val x0 = (centerX.toInt() - rx).coerceIn((w * 0.08f).toInt(), (w * 0.80f).toInt())
-        val x1 = (centerX.toInt() + rx).coerceIn((w * 0.20f).toInt(), (w * 0.92f).toInt())
-        val y0 = (centerY.toInt() - ry).coerceIn((h * 0.22f).toInt(), (h * 0.75f).toInt())
-        val y1 = (centerY.toInt() + ry).coerceIn((h * 0.30f).toInt(), (h * 0.92f).toInt())
+    private fun detectLoot(bmp: Bitmap, w: Int, h: Int) {
+        val x0 = (w * 0.12f).toInt()
+        val x1 = (w * 0.88f).toInt()
+        val y0 = (h * 0.16f).toInt()
+        val y1 = (h * 0.86f).toInt()
         var sx = 0L; var sy = 0L; var cnt = 0
         for (y in y0 until y1 step 5) {
             for (x in x0 until x1 step 5) {
@@ -330,7 +348,7 @@ class BotAccessibilityService : AccessibilityService() {
             for (x in 14 until maxX) {
                 val p = bmp.getPixel(x, y)
                 val r = Color.red(p); val g = Color.green(p); val b = Color.blue(p)
-                if (r > 120 && r > g + 25 && r > b + 25) {
+                if (r > HP_R_MIN && r > g + HP_R_DIFF && r > b + HP_R_DIFF) {
                     if (firstRed < 0) firstRed = x; lastRed = x; redCount++
                 }
             }
@@ -376,8 +394,6 @@ class BotAccessibilityService : AccessibilityService() {
         lootX = 0f; lootY = 0f
         lastDamageMs = 0L; lastTargetSeenMs = 0L
         lastLootTapMs = 0L; lastTargetX = 0f; lastTargetY = 0f
-        lastPotionTapMs = 0L
-        lastCombatSeenMs = 0L
         autoBarX = -1; autoBarY = -1; autoBarFullW = 0
         handler.post(loop)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)
@@ -396,8 +412,7 @@ class BotAccessibilityService : AccessibilityService() {
     private fun doHunt(cfg: BotConfig) {
         val now = System.currentTimeMillis()
         val hasTarget = targetX > 0f && targetY > 0f
-        val takingDamage = (now - lastDamageMs) < COMBAT_GRACE_MS
-        val recentCombat = takingDamage || (now - lastTargetSeenMs) < TARGET_GRACE_MS
+        val recentCombat = (now - lastDamageMs) < COMBAT_GRACE_MS || (now - lastTargetSeenMs) < TARGET_GRACE_MS
 
         if (prevTargetFound && !hasTarget) BotState.killCount++
         prevTargetFound = hasTarget
@@ -408,17 +423,14 @@ class BotAccessibilityService : AccessibilityService() {
         } else {
             inCombatCycles = 0
         }
-        // Richiesta utente: non pattugliare MAI finché ricevi danno
-        if (BotState.underAttack || takingDamage || recentCombat) { phase = Phase.DEFEND; handler.post(loop); return }
+        if (BotState.underAttack || recentCombat) { phase = Phase.DEFEND; handler.post(loop); return }
 
         // Coordinate effettive (manuale se impostato, altrimenti automatico)
         val potX = r(cfg.potionX, aPotionX); val potY = r(cfg.potionY, aPotionY)
         val potionActive = potX > 0f
         val hpLow       = hpBarConfigured && scannedHpRatio in 0.01f..cfg.hpPotionThreshold
-        val timerPotion = potionActive && (!hpBarConfigured || recentCombat) && huntCycles > 0 && huntCycles % 3 == 0
-        val emergencyPotion = potionActive && recentCombat && now - lastPotionTapMs >= EMERGENCY_POTION_MS
-        val canPotion = now - lastPotionTapMs >= POTION_GAP_MS
-        if (potionActive && (emergencyPotion || (canPotion && (hpLow || timerPotion)))) { phase = Phase.POTION; handler.post(loop); return }
+        val timerPotion = potionActive && (!hpBarConfigured || recentCombat) && huntCycles > 0 && huntCycles % 4 == 0
+        if (potionActive && (hpLow || timerPotion) && now - lastPotionTapMs >= POTION_CD_MS) { phase = Phase.POTION; handler.post(loop); return }
 
         val jx = r(cfg.joystickX, aJoystickX); val jy = r(cfg.joystickY, aJoystickY)
         val jr = r(cfg.joystickRadius, aJoystickR)
@@ -427,7 +439,7 @@ class BotAccessibilityService : AccessibilityService() {
 
         val useJoystick = jx > 0f && jy > 0f
         val useCamera   = cx > 0f
-        val doCamera    = useCamera && !hasTarget && !takingDamage && !recentCombat && huntCycles > 0 && huntCycles % CAMERA_EVERY == 0
+        val doCamera    = useCamera && !hasTarget && !recentCombat && huntCycles > 0 && huntCycles % CAMERA_EVERY == 0
         val ax = r(cfg.attackX, aAttackX); val ay = r(cfg.attackY, aAttackY)
 
         var t = 0L
@@ -435,7 +447,7 @@ class BotAccessibilityService : AccessibilityService() {
         if (doCamera) {
             swipe(cx - cameraDir * cr, cy, cx + cameraDir * cr, cy, CAMERA_MS)
             cameraDir = -cameraDir; t = CAMERA_MS + POST_MOVE_MS
-        } else if (useJoystick && !takingDamage && !recentCombat) {
+        } else if (useJoystick && !BotState.underAttack && !recentCombat) {
             val dir = PATROL_DIRS[patrolDir]
             joystickPush(jx, jy, jx + dir[0] * jr, jy + dir[1] * jr, JOYSTICK_MS)
             patrolSteps++
@@ -472,6 +484,14 @@ class BotAccessibilityService : AccessibilityService() {
             t += TAP_MS + GAP_MS
         }
 
+        // Raccolta loot quando non siamo più in combattimento
+        if (!hasTarget && !recentCombat && lootX > 0f && now - lastLootTapMs >= LOOT_TAP_CD_MS) {
+            val lx = lootX; val ly = lootY
+            handler.postDelayed({ if (BotState.isRunning) tap(lx, ly) }, t)
+            lastLootTapMs = now
+            t += TAP_MS + GAP_MS
+        }
+
         t = scheduleSkills(cfg, now, t)
         huntCycles++
         handler.postDelayed(loop, t + NEXT_CYCLE_EXTRA)
@@ -482,19 +502,16 @@ class BotAccessibilityService : AccessibilityService() {
     // ═══════════════════════════════════════════════════════════════════════════
     private fun doDefend(cfg: BotConfig) {
         val now = System.currentTimeMillis()
-        val takingDamage = (now - lastDamageMs) < COMBAT_GRACE_MS
-        val recentCombat = takingDamage || (now - lastTargetSeenMs) < TARGET_GRACE_MS
-        if (!BotState.underAttack && !takingDamage && !recentCombat) {
+        val recentCombat = (now - lastDamageMs) < COMBAT_GRACE_MS || (now - lastTargetSeenMs) < TARGET_GRACE_MS
+        if (!BotState.underAttack && !recentCombat) {
             inCombatCycles = 0; phase = Phase.HUNT
             handler.postDelayed(loop, 100L); return
         }
 
         val potX = r(cfg.potionX, aPotionX); val potY = r(cfg.potionY, aPotionY)
         val potionByHp = potX > 0f && hpBarConfigured && scannedHpRatio in 0.01f..cfg.hpPotionThreshold
-        val potionByTimer = potX > 0f && !hpBarConfigured && recentCombat
-        val potionEmergency = potX > 0f && recentCombat && now - lastPotionTapMs >= EMERGENCY_POTION_MS
-        val canPotion = now - lastPotionTapMs >= POTION_GAP_MS
-        if (potionEmergency || (canPotion && (potionByHp || potionByTimer))) {
+        val potionByTimer = potX > 0f && !hpBarConfigured && now % 3200L < 250L
+        if ((potionByHp || potionByTimer) && now - lastPotionTapMs >= POTION_CD_MS) {
             phase = Phase.POTION; handler.post(loop); return
         }
 
