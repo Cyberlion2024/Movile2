@@ -80,7 +80,6 @@ class BotAccessibilityService : AccessibilityService() {
     @Volatile private var autoBarFullW = 0
     @Volatile private var autoPlayerTrackX = 0f
     @Volatile private var autoPlayerTrackY = 0f
-
     private val PATROL_STEPS = intArrayOf(5, 4, 5, 4)
     private val PATROL_DIRS  = arrayOf(
         floatArrayOf(0f, -1f), floatArrayOf(1f, 0f),
@@ -413,7 +412,7 @@ class BotAccessibilityService : AccessibilityService() {
         if (doCamera) {
             swipe(cx - cameraDir * cr, cy, cx + cameraDir * cr, cy, CAMERA_MS)
             cameraDir = -cameraDir; t = CAMERA_MS + POST_MOVE_MS
-        } else if (useJoystick) {
+        } else if (useJoystick && !takingDamage && !recentCombat) {
             val dir = PATROL_DIRS[patrolDir]
             joystickPush(jx, jy, jx + dir[0] * jr, jy + dir[1] * jr, JOYSTICK_MS)
             patrolSteps++
