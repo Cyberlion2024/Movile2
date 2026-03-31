@@ -45,10 +45,11 @@ class BotAccessibilityService : AccessibilityService() {
     private val POST_MOVE_MS     = 100L
     private val NEXT_CYCLE_EXTRA = 150L
     private val SCAN_DELAY_MS    = 1000L
-    private val CAMERA_EVERY     = 5
+    private val CAMERA_EVERY     = 5        // ruota telecamera ogni 5 cicli HUNT senza bersaglio
     private val COMBAT_GRACE_MS  = 2500L
     private val TARGET_GRACE_MS  = 1800L
     private val LOOT_TAP_CD_MS   = 1200L   // dropedAt: i drop hanno lifetime limitato
+    private val POTION_CD_MS     = 2500L   // minimo tra una pozione e la successiva
 
     // ── Soglie colore pixel (da analisi MOB_COLOR in libUE4.so) ───────────────
     // Nomi mostri nemici: rosso vivace tipico Metin2 (R alto, G/B bassi)
@@ -429,7 +430,7 @@ class BotAccessibilityService : AccessibilityService() {
         val potionActive = potX > 0f
         val hpLow       = hpBarConfigured && scannedHpRatio in 0.01f..cfg.hpPotionThreshold
         val timerPotion = potionActive && (!hpBarConfigured || recentCombat) && huntCycles > 0 && huntCycles % 4 == 0
-        if (potionActive && (hpLow || timerPotion)) { phase = Phase.POTION; handler.post(loop); return }
+        if (potionActive && (hpLow || timerPotion) && now - lastPotionTapMs >= POTION_CD_MS) { phase = Phase.POTION; handler.post(loop); return }
 
         val jx = r(cfg.joystickX, aJoystickX); val jy = r(cfg.joystickY, aJoystickY)
         val jr = r(cfg.joystickRadius, aJoystickR)
@@ -488,7 +489,7 @@ class BotAccessibilityService : AccessibilityService() {
         val potX = r(cfg.potionX, aPotionX); val potY = r(cfg.potionY, aPotionY)
         val potionByHp = potX > 0f && hpBarConfigured && scannedHpRatio in 0.01f..cfg.hpPotionThreshold
         val potionByTimer = potX > 0f && !hpBarConfigured && now % 3200L < 250L
-        if (potionByHp || potionByTimer) {
+        if ((potionByHp || potionByTimer) && now - lastPotionTapMs >= POTION_CD_MS) {
             phase = Phase.POTION; handler.post(loop); return
         }
 
