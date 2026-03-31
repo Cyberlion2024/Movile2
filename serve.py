@@ -38,23 +38,23 @@ li{margin-bottom:8px;line-height:1.6;color:#ccc}
 <body>
 <div class="wrap">
   <h1>&#129302; Movile2 Bot</h1>
-  <p class="sub">Bot Android per MMORPG &mdash; Kotlin + Accessibility Service &mdash; <strong>v4</strong></p>
+  <p class="sub">Bot Android per MMORPG &mdash; Kotlin + Accessibility Service &mdash; <strong>v5</strong></p>
 
   <div class="card">
-    <h2>&#10024; Funzionalit&agrave; v4</h2>
+    <h2>&#10024; Novit&agrave; v5 &mdash; Architettura Professionale</h2>
     <ul>
-      <li><strong>Rilevamento mostri via pixel</strong> &mdash; screenshot ogni 1.2s, trova pixel rossi (nomi nemici), calcola centroide e tocca per selezionare il bersaglio</li>
-      <li><strong>Fix rotazione camera</strong> &mdash; la camera ruota solo se NON c&#39;&egrave; gi&agrave; un bersaglio visibile, eliminando il loop di ricerca</li>
-      <li><strong>Monitor barra HP (top-left)</strong> <span class="new">NEW</span> &mdash; scansiona i pixel rossi della barra vita; pozione automatica se scende sotto soglia configurabile</li>
-      <li><strong>Modalit&agrave; Difesa</strong> <span class="new">NEW</span> &mdash; se l&#39;HP continua a calare, spam attacco immediato; overlay mostra &#x1F6E1; DIFESA in giallo</li>
-      <li><strong>5 abilit&agrave; con cooldown separati</strong> <span class="new">NEW</span> &mdash; Skill 1&ndash;5, ognuna con il proprio timer configurabile</li>
-      <li><strong>Timer di sessione</strong> <span class="new">NEW</span> &mdash; auto-stop dopo X minuti configurabili (0 = infinito)</li>
-      <li><strong>Joystick virtuale</strong> &mdash; pattuglia N&rarr;E&rarr;S&rarr;W con raggio configurabile</li>
-      <li><strong>Pozioni automatiche + ricarica</strong> &mdash; tap slot pozione; se finiscono, swipe dall&#39;inventario allo slot</li>
-      <li><strong>Raccolta loot</strong> &mdash; rileva testo bianco/verde a terra e tocca automaticamente</li>
-      <li><strong>Limite massimo uccisioni</strong> &mdash; il bot si ferma al raggiungimento del limite</li>
-      <li><strong>Overlay draggabile</strong> &mdash; pannello flottante con contatore kills, stato RUNNING/DIFESA/STOP e pulsanti Start/Stop</li>
-      <li><strong>Fix crash Android 14</strong> &mdash; <code>foregroundServiceType="specialUse"</code> nel manifest</li>
+      <li><strong>Multi-touch simultaneo</strong> <span class="new">NEW</span> &mdash; Attack + Skill1..5 + Target premuti <em>nello stesso frame</em> con <code>GestureDescription</code> multi-stroke (fino a 10 dita contemporanee)</li>
+      <li><strong>Loop unificato senza state machine</strong> <span class="new">NEW</span> &mdash; nessuna fase HUNT/DEFEND separata; la pozione viene usata inline senza interrompere il combattimento</li>
+      <li><strong>Ciclo di combattimento 320ms</strong> <span class="new">NEW</span> &mdash; attack spam a 320ms + 2 tap extra a 75/150ms; pattuglia a 550ms solo senza bersaglio</li>
+      <li><strong>Scan screenshot ogni 600ms</strong> <span class="new">NEW</span> &mdash; da 1000ms a 600ms; step 3 invece di 4 per pi&ugrave; precisione nella detection del centroide</li>
+      <li><strong>Rilevamento mostri migliorato</strong> &mdash; soglie allentate (R>160, diff&ge;38) per pi&ugrave; hit, min pixel 8 invece di 10</li>
+      <li><strong>Loot aggressivo</strong> <span class="new">NEW</span> &mdash; raccolta anche durante il combattimento (ogni 1.4s); post-kill multi-tap in 4 direzioni; finestra di 7s dopo ogni kill</li>
+      <li><strong>Pozione inline</strong> <span class="new">NEW</span> &mdash; tap pozione in priorit&agrave; massima senza cambiare ciclo; refill automatico se slot esaurito</li>
+      <li><strong>5 skill con cooldown indipendenti</strong> &mdash; tutte e 5 fire in multi-touch quando sono pronte; skill 1-3 attivate anche durante pattuglia</li>
+      <li><strong>Joystick virtuale</strong> &mdash; pattuglia N&rarr;E&rarr;S&rarr;W; si ferma automaticamente se c&#39;&egrave; un bersaglio</li>
+      <li><strong>Monitor HP + auto-detection barra</strong> &mdash; rileva automaticamente la barra HP in top-left; pozione se HP &lt; soglia</li>
+      <li><strong>Kill counter + timer sessione</strong> &mdash; auto-stop al raggiungimento del limite</li>
+      <li><strong>Overlay draggabile</strong> &mdash; pannello flottante con kills, stato e pulsanti Start/Stop</li>
     </ul>
   </div>
 

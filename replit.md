@@ -18,31 +18,35 @@ Android bot app in Kotlin for MMORPG automation using Accessibility Service + Ov
 | `BotConfig.kt` | Data class + SharedPreferences per persistere le impostazioni |
 | `BotState.kt` | Singleton condiviso per stato runtime (isRunning, killCount) |
 
-## Features v4
-- Joystick virtuale: pattuglia N→E→S→W con raggio configurabile
-- Rilevamento mostri via pixel rossi (nomi nemici): selezione + attacco
-- FIX: rotazione camera saltata se bersaglio già visibile (bug loop ricerca)
-- Monitor barra HP (top-left): pixel rossi della barra vita → pozione auto se < soglia
-- Modalità Difesa: se HP continua a calare → spam attacco su tutto finché si stabilizza
-- 3 abilità con cooldown separati (skill3 opzionale)
-- Timer di sessione: auto-stop dopo X minuti (0 = infinito)
-- Pozioni automatiche + ricarica dall'inventario
-- Limite massimo uccisioni configurabile
-- Fix crash Android 14 (foregroundServiceType = specialUse)
-- Fix accessibilità su MIUI/Samsung (config semplificata)
-- Overlay: mostra stato RUNNING / 🛡 DIFESA / STOP
+## Features v5 — Architettura Professionale
+- **Multi-touch simultaneo**: Attack + Skill1..5 + Target nello stesso frame (GestureDescription multi-stroke, fino a 10 pointer)
+- **Loop unificato**: nessuna state machine HUNT/DEFEND; pozione inline senza interrompere il combattimento
+- **Ciclo combattimento 320ms**: attack immediato + 2 spam extra a 75/150ms
+- **Scan ogni 600ms**: step 3 per più precisione; rilevamento mostri migliorato (R>160, diff≥38)
+- **Loot aggressivo**: raccolta anche durante combattimento (1.4s CD), post-kill multi-tap in 4 direzioni, finestra 7s
+- **Pozione inline + refill automatico**: priorità massima, nessuna fase separata
+- **5 skill tutte attive**: multi-touch quando pronte; skill 1-3 anche durante pattuglia
+- Joystick virtuale N→E→S→W; si ferma se c'è bersaglio
+- Monitor HP automatico (auto-detection barra top-left)
+- Kill counter + timer sessione + overlay draggabile
 
-## State Machine v4
-- HUNT: ciclo 800ms
-  - Se underAttack → passa subito a DEFEND
-  - Se HP < soglia e hpBar configurata → POTION
-  - Se bersaglio visibile: selezione pixel → attacco (no rotazione camera)
-  - Ogni 4 cicli (solo se NO bersaglio): cameraSwipe per cercare mostri
-- DEFEND: ciclo 400ms, spam attacco + abilità disponibili
-  - Se HP si stabilizza per 3 cicli → torna a HUNT
-  - Se HP < soglia → POTION poi torna DEFEND
-- POTION: tap slot pozione
-- REFILL: swipe inventario → slot
+## Architettura v5
+```
+doLoop() ogni 320ms (combat) / 550ms (patrol):
+  1. Kill counter aggiornato (prevTarget→no target = kill)
+  2. Pozione inline se hpLow (tap immediato, no fase separata)
+  3. if (inCombat):
+       multiTap([attack, target, skill1..5 pronte]) → 1 gesto multi-touch
+       +2 attack spam a 75/150ms via postDelayed
+       loot anche in combat se visibile (CD 1.4s)
+       → schedula prossimo loop a 320ms
+  4. else (no target):
+       loot aggressivo (tap diretto se visibile, multi-tap intorno player se post-kill)
+       skill 1-3 durante patrol
+       camera rotation ogni 4 cicli
+       joystick patrol N→E→S→W
+       → schedula prossimo loop a 550ms
+```
 
 ## Configurazione consigliata
 1. Centro joystick: tocca il centro del joystick (basso-sinistra)
