@@ -31,18 +31,16 @@ class BotAccessibilityService : AccessibilityService() {
     private val TAP_MS          = 60L
     private val JOYSTICK_MS     = 300L
     private val CAMERA_MS       = 200L
-    private val COMBAT_CYCLE_MS = 280L   // attacca ogni 280ms
+    private val COMBAT_CYCLE_MS = 280L
     private val PATROL_CYCLE_MS = 550L
-    private val SCAN_DELAY_MS   = 500L   // screenshot ogni 500ms (più reattivo)
+    private val SCAN_DELAY_MS   = 500L
     private val CAMERA_EVERY    = 5
-    // Grace period: continua ad attaccare anche se scanner manca 1 frame
-    private val TARGET_GRACE_MS = 2000L
-    private val COMBAT_GRACE_MS = 2000L
+    private val TARGET_GRACE_MS = 3000L  // 3s grace: meno pause tra un mostro e l'altro
+    private val COMBAT_GRACE_MS = 3000L
     private val LOOT_GRACE_MS   = 7000L
     private val LOOT_CD_MS      = 800L
-    // Pozione: cooldown minimo tra tap
-    private val POTION_CD_MS    = 2500L
-    // Max tap per slot prima di avanzare al prossimo (in assenza di pixel check)
+    private val POTION_CD_MS    = 2000L  // 2s tra pozioni normali
+    private val POTION_CD_EMERG = 1000L  // 1s se HP < 20% (emergenza)
     private val MAX_TAPS_PER_SLOT = 10
 
     // ── Soglie pixel ──────────────────────────────────────────────────────────
@@ -70,14 +68,26 @@ class BotAccessibilityService : AccessibilityService() {
         val dm = resources.displayMetrics
         val sw = dm.widthPixels.toFloat()
         val sh = dm.heightPixels.toFloat()
-        val topY = sh * 0.800f; val botY = sh * 0.849f
-        val c1 = sw * 0.771f;  val c2 = sw * 0.819f
-        val c3 = sw * 0.866f;  val c4 = sw * 0.904f
+
+        // ── Skill/Attack bar — fila in basso a destra ─────────────────────────
+        // Riga inferiore (botY ≈ 87%) e superiore (topY ≈ 79%)
+        val botY = sh * 0.870f; val topY = sh * 0.790f
+        val c1   = sw * 0.771f; val c2  = sw * 0.819f
+        val c3   = sw * 0.866f; val c4  = sw * 0.930f  // attack: più a destra
+
         aAttackX = c4; aAttackY = botY
         aS1X = c1; aS1Y = botY; aS2X = c2; aS2Y = botY
-        aS3X = c3; aS3Y = botY; aS4X = c4; aS4Y = topY; aS5X = c3; aS5Y = topY
-        aPot1X = c1; aPot1Y = topY
+        aS3X = c3; aS3Y = botY; aS4X = c3; aS4Y = topY; aS5X = c2; aS5Y = topY
+
+        // ── Pozioni vita — colonna destra a metà schermo ──────────────────────
+        // Dal screenshot: 4 slot verticali a destra (~88% X), partendo da ~31% Y
+        // Slot 1 (HP rosso) ≈ 88% x, 31% y
+        aPot1X = sw * 0.882f; aPot1Y = sh * 0.310f
+
+        // ── Joystick — fondo sinistra ─────────────────────────────────────────
         aJoyX = sw * 0.067f; aJoyY = sh * 0.815f; aJoyR = sw * 0.072f
+
+        // ── Camera e player ───────────────────────────────────────────────────
         aCamX = sw * 0.530f; aCamY = sh * 0.430f; aCamR = sw * 0.165f
         aPlyX = sw * 0.500f; aPlyY = sh * 0.510f
         aDefR = (sw * 0.145f).toInt()
@@ -172,18 +182,30 @@ class BotAccessibilityService : AccessibilityService() {
         val py = when { cfg.playerY > 0f -> cfg.playerY; trackY > 0f -> trackY; else -> aPlyY }
 
         // ─────────────────────────────────────────────────────────────────────
-        // POZIONE — priorità massima, non blocca il combattimento
+        // POZIONE — priorità massima
         //
-        // Condizioni per usare pozione:
-        //   A) HP bar trovata + HP sotto soglia
-        //   B) HP bar NON trovata: usa pozione ogni ~5 cicli in combattimento
-        //      (fallback cieco: meglio spreconomia che morire)
+        // Modalità EMERGENZA (HP < 20%):
+        //   - CD ridotto a 1s
+        //   - Ignora isRefilling (non si muore aspettando il refill)
+        //   - Si attiva anche se HP bar non trovata (ogni 3 cicli)
+        //
+        // Modalità NORMALE (HP < soglia configurata):
+        //   - CD normale 2s
+        //   - Rispetta isRefilling
+        //
+        // Fallback cieco (nessuna HP bar):
+        //   - Ogni 5 cicli in combattimento
         // ─────────────────────────────────────────────────────────────────────
-        val hpLow      = hpFound && hpRatio > 0.01f && hpRatio < cfg.hpPotionThreshold
+        val hpEmergency = hpFound && hpRatio > 0.01f && hpRatio < 0.20f
+        val hpLow       = hpFound && hpRatio > 0.01f && hpRatio < cfg.hpPotionThreshold
         val blindTimer  = !hpFound && inCombat && huntCycles > 0 && huntCycles % 5 == 0
-        val potionReady = now - tPotion >= POTION_CD_MS
+        val blindEmerg  = !hpFound && inCombat && huntCycles > 0 && huntCycles % 3 == 0
 
-        if (!isRefilling && potionReady && (hpLow || blindTimer)) {
+        val potionCd     = if (hpEmergency || blindEmerg) POTION_CD_EMERG else POTION_CD_MS
+        val potionReady  = now - tPotion >= potionCd
+        val skipRefill   = hpEmergency || blindEmerg   // emergenza: ignora isRefilling
+
+        if ((skipRefill || !isRefilling) && potionReady && (hpLow || hpEmergency || blindTimer || blindEmerg)) {
             firePotion(cfg, now)
         }
 
@@ -262,25 +284,29 @@ class BotAccessibilityService : AccessibilityService() {
         if (s3x > 0f && s3y > 0f && now - tSk3 >= cfg.skill3CooldownMs) { ps.add(s3x to s3y); tSk3 = now }
         if (ps.isNotEmpty()) multiTap(ps)
 
-        // Camera
-        val cx = r(cfg.cameraAreaX, aCamX); val cy = r(cfg.cameraAreaY, aCamY)
-        val cr = r(cfg.cameraSwipeRange, aCamR)
-        var moveDelay = 0L
-        if (cx > 0f && huntCycles > 0 && huntCycles % CAMERA_EVERY == 0) {
-            val d = camDir; camDir = -camDir
-            handler.postDelayed({ if (BotState.isRunning) swipe(cx - d * cr, cy, cx + d * cr, cy, CAMERA_MS) }, moveDelay)
-            moveDelay += CAMERA_MS + 60L
-        }
+        // Se HP è critico NON muovere — resta fermo e aspetta la pozione
+        val hpCritical = hpFound && hpRatio < 0.30f
+        if (!hpCritical) {
+            // Camera
+            val cx = r(cfg.cameraAreaX, aCamX); val cy = r(cfg.cameraAreaY, aCamY)
+            val cr = r(cfg.cameraSwipeRange, aCamR)
+            var moveDelay = 0L
+            if (cx > 0f && huntCycles > 0 && huntCycles % CAMERA_EVERY == 0) {
+                val d = camDir; camDir = -camDir
+                handler.postDelayed({ if (BotState.isRunning) swipe(cx - d * cr, cy, cx + d * cr, cy, CAMERA_MS) }, moveDelay)
+                moveDelay += CAMERA_MS + 60L
+            }
 
-        // Joystick
-        val jx = r(cfg.joystickX, aJoyX); val jy = r(cfg.joystickY, aJoyY)
-        val jr = r(cfg.joystickRadius, aJoyR)
-        if (jx > 0f && jy > 0f && jr > 0f) {
-            val dir = PATROL_DIRS[patrolDir]
-            val jtx = jx + dir[0] * jr; val jty = jy + dir[1] * jr
-            handler.postDelayed({ if (BotState.isRunning) joystickPush(jx, jy, jtx, jty, JOYSTICK_MS) }, moveDelay)
-            patrolStep++
-            if (patrolStep >= PATROL_STEPS[patrolDir]) { patrolStep = 0; patrolDir = (patrolDir + 1) % 4 }
+            // Joystick
+            val jx = r(cfg.joystickX, aJoyX); val jy = r(cfg.joystickY, aJoyY)
+            val jr = r(cfg.joystickRadius, aJoyR)
+            if (jx > 0f && jy > 0f && jr > 0f) {
+                val dir = PATROL_DIRS[patrolDir]
+                val jtx = jx + dir[0] * jr; val jty = jy + dir[1] * jr
+                handler.postDelayed({ if (BotState.isRunning) joystickPush(jx, jy, jtx, jty, JOYSTICK_MS) }, moveDelay)
+                patrolStep++
+                if (patrolStep >= PATROL_STEPS[patrolDir]) { patrolStep = 0; patrolDir = (patrolDir + 1) % 4 }
+            }
         }
 
         huntCycles++
