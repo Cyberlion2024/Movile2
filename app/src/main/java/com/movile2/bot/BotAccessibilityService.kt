@@ -50,6 +50,7 @@ class BotAccessibilityService : AccessibilityService() {
     private val TARGET_GRACE_MS  = 1800L
     private val LOOT_TAP_CD_MS   = 1200L   // dropedAt: i drop hanno lifetime limitato
     private val POTION_CD_MS     = 2500L   // minimo tra una pozione e la successiva
+    private val ATTACK_SPAM_COUNT = 2      // numero di tap attacco per ciclo
 
     // ── Soglie colore pixel (da analisi MOB_COLOR in libUE4.so) ───────────────
     // Nomi mostri nemici: rosso vivace tipico Metin2 (R alto, G/B bassi)
@@ -86,6 +87,7 @@ class BotAccessibilityService : AccessibilityService() {
     // ── Timestamp eventi ──────────────────────────────────────────────────────
     private var lastDamageMs     = 0L
     private var lastTargetSeenMs = 0L
+    private var lastCombatSeenMs = 0L
     private var lastLootTapMs    = 0L
     private var lastPotionTapMs  = 0L
     private var lastTargetX      = 0f
@@ -263,6 +265,7 @@ class BotAccessibilityService : AccessibilityService() {
         if (count >= 10) {
             targetX = (sumX / count).toFloat(); targetY = (sumY / count).toFloat()
             lastTargetSeenMs = System.currentTimeMillis()
+            lastCombatSeenMs = lastTargetSeenMs
             lastTargetX = targetX; lastTargetY = targetY
         } else {
             targetX = 0f; targetY = 0f
@@ -392,7 +395,7 @@ class BotAccessibilityService : AccessibilityService() {
         targetX = 0f; targetY = 0f; prevTargetFound = false
         scannedHpRatio = 1.0f; hpBarConfigured = false
         lootX = 0f; lootY = 0f
-        lastDamageMs = 0L; lastTargetSeenMs = 0L
+        lastDamageMs = 0L; lastTargetSeenMs = 0L; lastCombatSeenMs = 0L
         lastLootTapMs = 0L; lastTargetX = 0f; lastTargetY = 0f
         autoBarX = -1; autoBarY = -1; autoBarFullW = 0
         handler.post(loop)
