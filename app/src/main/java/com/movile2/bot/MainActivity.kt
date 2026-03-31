@@ -121,7 +121,7 @@ class MainActivity : AppCompatActivity() {
         etJoystickRadius.setText(cfg.joystickRadius.toInt().toString())
         tvCameraCoord.text       = if (cfg.cameraAreaX > 0f) xy(cfg.cameraAreaX, cfg.cameraAreaY) else "non impostato"
         etCameraSwipeRange.setText(cfg.cameraSwipeRange.toInt().toString())
-        tvHpBarCoord.text        = if (cfg.hpBarX > 0f) xy(cfg.hpBarX, cfg.hpBarY) else "non impostato"
+        tvHpBarCoord.text        = if (cfg.hpBarX > 0f) xy(cfg.hpBarX, cfg.hpBarY) else "auto"
         etHpBarFullWidth.setText(cfg.hpBarFullWidth.toString())
         etHpPotionThreshold.setText((cfg.hpPotionThreshold * 100).toInt().toString())
         tvPlayerCoord.text       = if (cfg.playerX > 0f) xy(cfg.playerX, cfg.playerY) else "non impostato"

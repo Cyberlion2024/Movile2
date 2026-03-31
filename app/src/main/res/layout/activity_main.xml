@@ -138,7 +138,7 @@ abilita Movile2 Bot (non usare il menu principale Accessibilità)"
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="❤ Barra HP (top-left)"
+            android:text="❤ Barra HP — RILEVAMENTO AUTOMATICO"
             android:textSize="15sp"
             android:textColor="#4fc3f7"
             android:textStyle="bold"
@@ -147,7 +147,7 @@ abilita Movile2 Bot (non usare il menu principale Accessibilità)"
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Tocca il bordo sinistro della barra HP a vita piena. Il bot monitorerà la tua vita: pozione automatica se scende sotto soglia, modalità difesa se continua a calare."
+            android:text="NON serve impostare niente qui. Il bot trova da solo la barra HP rossa in alto a sinistra non appena parte. Se il rilevamento automatico non funzionasse puoi toccare Manuale per impostarlo a mano."
             android:textSize="11sp"
             android:textColor="#aaaaaa"
             android:paddingBottom="6dp" />
@@ -162,8 +162,8 @@ abilita Movile2 Bot (non usare il menu principale Accessibilità)"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="Bordo sinistro barra HP:"
-                android:textColor="#cccccc"
+                android:text="Override manuale (opzionale):"
+                android:textColor="#888888"
                 android:gravity="center_vertical" />
 
             <TextView
@@ -171,15 +171,15 @@ abilita Movile2 Bot (non usare il menu principale Accessibilità)"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="non impostato"
-                android:textColor="#ef9a9a"
+                android:text="auto"
+                android:textColor="#81c784"
                 android:gravity="center_vertical" />
 
             <Button
                 android:id="@+id/btnPickHpBar"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Imposta"
+                android:text="Manuale"
                 android:textSize="12sp"
                 android:paddingStart="12dp"
                 android:paddingEnd="12dp" />
@@ -195,8 +195,8 @@ abilita Movile2 Bot (non usare il menu principale Accessibilità)"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="Larghezza barra piena (px):"
-                android:textColor="#cccccc"
+                android:text="Larghezza barra piena px (solo se manuale):"
+                android:textColor="#888888"
                 android:gravity="center_vertical" />
 
             <EditText
