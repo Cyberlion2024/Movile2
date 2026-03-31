@@ -36,6 +36,9 @@ class BotAccessibilityService : AccessibilityService() {
     private var aAttackX       = 0f; private var aAttackY       = 0f
     private var aSkill1X       = 0f; private var aSkill1Y       = 0f
     private var aSkill2X       = 0f; private var aSkill2Y       = 0f
+    private var aSkill3X       = 0f; private var aSkill3Y       = 0f
+    private var aSkill4X       = 0f; private var aSkill4Y       = 0f
+    private var aSkill5X       = 0f; private var aSkill5Y       = 0f
     private var aPotionX       = 0f; private var aPotionY       = 0f
     private var aBackupPotX    = 0f; private var aBackupPotY    = 0f
     private var aJoystickX     = 0f; private var aJoystickY     = 0f; private var aJoystickR  = 0f
@@ -70,6 +73,8 @@ class BotAccessibilityService : AccessibilityService() {
     @Volatile private var autoBarX     = -1
     @Volatile private var autoBarY     = -1
     @Volatile private var autoBarFullW = 0
+    @Volatile private var autoPlayerTrackX = 0f
+    @Volatile private var autoPlayerTrackY = 0f
 
     private val PATROL_STEPS = intArrayOf(5, 4, 5, 4)
     private val PATROL_DIRS  = arrayOf(
@@ -105,6 +110,9 @@ class BotAccessibilityService : AccessibilityService() {
         aAttackX    = col4;  aAttackY    = botRowY
         aSkill1X    = col1;  aSkill1Y    = botRowY
         aSkill2X    = col2;  aSkill2Y    = botRowY
+        aSkill3X    = col4;  aSkill3Y    = topRowY
+        aSkill4X    = col3;  aSkill4Y    = botRowY
+        aSkill5X    = col3;  aSkill5Y    = topRowY
         aPotionX    = col1;  aPotionY    = topRowY   // prima pozione (slot sinistra)
         aBackupPotX = col2;  aBackupPotY = topRowY   // seconda pozione (slot a destra)
 
@@ -177,6 +185,28 @@ class BotAccessibilityService : AccessibilityService() {
         val cfg = BotConfig.load(this)
         val w = bmp.width; val h = bmp.height
 
+        // ── 0. Tracking giocatore (nome verde -> centro corpo) ───────────────
+        val playerScanX0 = (w * 0.20f).toInt()
+        val playerScanX1 = (w * 0.80f).toInt()
+        val playerScanY0 = (h * 0.18f).toInt()
+        val playerScanY1 = (h * 0.70f).toInt()
+        var pgX = 0L; var pgY = 0L; var pgCount = 0
+        for (y in playerScanY0 until playerScanY1 step 4) {
+            for (x in playerScanX0 until playerScanX1 step 4) {
+                val p = bmp.getPixel(x, y)
+                val r = Color.red(p); val g = Color.green(p); val b = Color.blue(p)
+                if (g > 145 && g > r + 28 && g > b + 20) {
+                    pgX += x; pgY += y; pgCount++
+                }
+            }
+        }
+        if (pgCount >= 8) {
+            val nameX = (pgX / pgCount).toFloat()
+            val nameY = (pgY / pgCount).toFloat()
+            autoPlayerTrackX = nameX
+            autoPlayerTrackY = (nameY + h * 0.05f).coerceAtMost(h - 1f)
+        }
+
         // ── 1. Rilevamento nomi mostri ────────────────────────────────────────
         // Rosso vivo = nome nemico (es. "Cane Selvaggio")
         // Zona: 7%-85% verticale, skip 80px a sinistra (overlay bot)
@@ -242,18 +272,18 @@ class BotAccessibilityService : AccessibilityService() {
 
     // Cerca la striscia rossa orizzontale (barra HP) nel top-left dello schermo
     private fun autoDetectHpBar(bmp: Bitmap, w: Int, h: Int) {
-        val maxY = (h * 0.08f).toInt(); val maxX = (w * 0.28f).toInt()
+        val maxY = (h * 0.22f).toInt(); val maxX = (w * 0.35f).toInt()
         for (y in 4 until maxY) {
             var firstRed = -1; var lastRed = -1; var redCount = 0
-            for (x in 18 until maxX) {
+            for (x in 14 until maxX) {
                 val p = bmp.getPixel(x, y)
                 val r = Color.red(p); val g = Color.green(p); val b = Color.blue(p)
-                if (r > 140 && g < 75 && b < 75) {
+                if (r > 120 && r > g + 25 && r > b + 25) {
                     if (firstRed < 0) firstRed = x; lastRed = x; redCount++
                 }
             }
             val stripeW = if (firstRed >= 0) lastRed - firstRed + 1 else 0
-            if (stripeW >= 40 && redCount.toFloat() / stripeW >= 0.65f) {
+            if (stripeW in 50..320 && redCount.toFloat() / stripeW >= 0.45f) {
                 autoBarX = firstRed; autoBarY = y
                 var extX = lastRed + 1
                 while (extX < maxX) {
@@ -261,7 +291,7 @@ class BotAccessibilityService : AccessibilityService() {
                     val r = Color.red(p); val g = Color.green(p); val b = Color.blue(p)
                     if (r < 90 && g < 90 && b < 90) extX++ else break
                 }
-                autoBarFullW = (extX - firstRed).coerceAtLeast(stripeW + 10)
+                autoBarFullW = (extX - firstRed).coerceAtLeast(stripeW + 16)
                 break
             }
         }
@@ -379,7 +409,8 @@ class BotAccessibilityService : AccessibilityService() {
         }
 
         val ax = r(cfg.attackX, aAttackX); val ay = r(cfg.attackY, aAttackY)
-        val px = r(cfg.playerX, aPlayerX);  val py = r(cfg.playerY, aPlayerY)
+        val px = if (cfg.playerX > 0f) cfg.playerX else if (autoPlayerTrackX > 0f) autoPlayerTrackX else aPlayerX
+        val py = if (cfg.playerY > 0f) cfg.playerY else if (autoPlayerTrackY > 0f) autoPlayerTrackY else aPlayerY
         val dr = ri(cfg.defenseRadiusPx, aDefenseR)
 
         var t = 0L
@@ -438,6 +469,9 @@ class BotAccessibilityService : AccessibilityService() {
         var t = startT
         val s1x = r(cfg.skill1X, aSkill1X); val s1y = r(cfg.skill1Y, aSkill1Y)
         val s2x = r(cfg.skill2X, aSkill2X); val s2y = r(cfg.skill2Y, aSkill2Y)
+        val s3x = r(cfg.skill3X, aSkill3X); val s3y = r(cfg.skill3Y, aSkill3Y)
+        val s4x = r(cfg.skill4X, aSkill4X); val s4y = r(cfg.skill4Y, aSkill4Y)
+        val s5x = r(cfg.skill5X, aSkill5X); val s5y = r(cfg.skill5Y, aSkill5Y)
 
         if (s1x > 0f && now - lastSkill1Ms >= cfg.skill1CooldownMs) {
             lastSkill1Ms = now; val ft = t
@@ -447,17 +481,17 @@ class BotAccessibilityService : AccessibilityService() {
             lastSkill2Ms = now; val ft = t
             handler.postDelayed({ if (BotState.isRunning) tap(s2x, s2y) }, ft); t += TAP_MS + GAP_MS
         }
-        if (cfg.skill3X > 0f && cfg.skill3Y > 0f && now - lastSkill3Ms >= cfg.skill3CooldownMs) {
+        if (s3x > 0f && s3y > 0f && now - lastSkill3Ms >= cfg.skill3CooldownMs) {
             lastSkill3Ms = now; val ft = t
-            handler.postDelayed({ if (BotState.isRunning) tap(cfg.skill3X, cfg.skill3Y) }, ft); t += TAP_MS + GAP_MS
+            handler.postDelayed({ if (BotState.isRunning) tap(s3x, s3y) }, ft); t += TAP_MS + GAP_MS
         }
-        if (cfg.skill4X > 0f && cfg.skill4Y > 0f && now - lastSkill4Ms >= cfg.skill4CooldownMs) {
+        if (s4x > 0f && s4y > 0f && now - lastSkill4Ms >= cfg.skill4CooldownMs) {
             lastSkill4Ms = now; val ft = t
-            handler.postDelayed({ if (BotState.isRunning) tap(cfg.skill4X, cfg.skill4Y) }, ft); t += TAP_MS + GAP_MS
+            handler.postDelayed({ if (BotState.isRunning) tap(s4x, s4y) }, ft); t += TAP_MS + GAP_MS
         }
-        if (cfg.skill5X > 0f && cfg.skill5Y > 0f && now - lastSkill5Ms >= cfg.skill5CooldownMs) {
+        if (s5x > 0f && s5y > 0f && now - lastSkill5Ms >= cfg.skill5CooldownMs) {
             lastSkill5Ms = now; val ft = t
-            handler.postDelayed({ if (BotState.isRunning) tap(cfg.skill5X, cfg.skill5Y) }, ft); t += TAP_MS + GAP_MS
+            handler.postDelayed({ if (BotState.isRunning) tap(s5x, s5y) }, ft); t += TAP_MS + GAP_MS
         }
         return t
     }
