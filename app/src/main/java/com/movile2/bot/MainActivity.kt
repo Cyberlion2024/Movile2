@@ -62,10 +62,48 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+        migrateToAutoCoords()
         cfg = BotConfig.load(this)
         bind()
         populate()
         hooks()
+    }
+
+    // Azzera le vecchie coordinate hardcoded salvate da versioni precedenti.
+    // Se l'utente aveva 950/700 ecc. salvati, vengono rimpiazzati da 0 (= auto).
+    private fun migrateToAutoCoords() {
+        val prefs = getSharedPreferences("bot_config", android.content.Context.MODE_PRIVATE)
+        if (prefs.getBoolean("auto_coords_v5", false)) return
+        val coordKeys = listOf(
+            "attackX","attackY","skill1X","skill1Y","skill2X","skill2Y",
+            "skill3X","skill3Y","skill4X","skill4Y","skill5X","skill5Y",
+            "potionX","potionY","backupPotionX","backupPotionY",
+            "joystickX","joystickY","joystickRadius",
+            "cameraAreaX","cameraAreaY","cameraSwipeRange",
+            "playerX","playerY","defenseRadiusPx","hpBarFullWidth"
+        )
+        prefs.edit().apply {
+            coordKeys.forEach { remove(it) }
+            putBoolean("auto_coords_v5", true)
+            apply()
+        }
+    }
+
+    private fun resetToAuto() {
+        val prefs = getSharedPreferences("bot_config", android.content.Context.MODE_PRIVATE)
+        val coordKeys = listOf(
+            "attackX","attackY","skill1X","skill1Y","skill2X","skill2Y",
+            "skill3X","skill3Y","skill4X","skill4Y","skill5X","skill5Y",
+            "potionX","potionY","backupPotionX","backupPotionY",
+            "joystickX","joystickY","joystickRadius",
+            "cameraAreaX","cameraAreaY","cameraSwipeRange",
+            "hpBarX","hpBarY","hpBarFullWidth",
+            "playerX","playerY","defenseRadiusPx"
+        )
+        prefs.edit().apply { coordKeys.forEach { remove(it) }; apply() }
+        cfg = BotConfig.load(this)
+        populate()
+        toast("Coordinate resettate → modalità auto ✓")
     }
 
     private fun bind() {
@@ -98,33 +136,35 @@ class MainActivity : AppCompatActivity() {
         etDefenseRadius      = findViewById(R.id.etDefenseRadius)
     }
 
+    private fun coord(x: Float, y: Float) = if (x > 0f) xy(x, y) else "auto"
+
     private fun populate() {
         etMonsterName.setText(cfg.monsterName)
         etMaxKills.setText(cfg.maxKills.toString())
         etSessionMinutes.setText(cfg.sessionMinutes.toString())
         etAttackDelay.setText(cfg.attackDelayMs.toString())
-        tvAttackCoord.text       = xy(cfg.attackX, cfg.attackY)
-        tvSkill1Coord.text       = xy(cfg.skill1X, cfg.skill1Y)
+        tvAttackCoord.text       = coord(cfg.attackX, cfg.attackY)
+        tvSkill1Coord.text       = coord(cfg.skill1X, cfg.skill1Y)
         etSkill1Cd.setText((cfg.skill1CooldownMs / 1000).toString())
-        tvSkill2Coord.text       = xy(cfg.skill2X, cfg.skill2Y)
+        tvSkill2Coord.text       = coord(cfg.skill2X, cfg.skill2Y)
         etSkill2Cd.setText((cfg.skill2CooldownMs / 1000).toString())
-        tvSkill3Coord.text       = if (cfg.skill3X > 0f) xy(cfg.skill3X, cfg.skill3Y) else "non impostato"
+        tvSkill3Coord.text       = coord(cfg.skill3X, cfg.skill3Y)
         etSkill3Cd.setText((cfg.skill3CooldownMs / 1000).toString())
-        tvSkill4Coord.text       = if (cfg.skill4X > 0f) xy(cfg.skill4X, cfg.skill4Y) else "non impostato"
+        tvSkill4Coord.text       = coord(cfg.skill4X, cfg.skill4Y)
         etSkill4Cd.setText((cfg.skill4CooldownMs / 1000).toString())
-        tvSkill5Coord.text       = if (cfg.skill5X > 0f) xy(cfg.skill5X, cfg.skill5Y) else "non impostato"
+        tvSkill5Coord.text       = coord(cfg.skill5X, cfg.skill5Y)
         etSkill5Cd.setText((cfg.skill5CooldownMs / 1000).toString())
-        tvPotionCoord.text       = xy(cfg.potionX, cfg.potionY)
+        tvPotionCoord.text       = coord(cfg.potionX, cfg.potionY)
         etMaxPotions.setText(cfg.maxPotionsInSlot.toString())
-        tvBackupPotionCoord.text = xy(cfg.backupPotionX, cfg.backupPotionY)
-        tvJoystickCoord.text     = if (cfg.joystickX > 0f) xy(cfg.joystickX, cfg.joystickY) else "non impostato"
-        etJoystickRadius.setText(cfg.joystickRadius.toInt().toString())
-        tvCameraCoord.text       = if (cfg.cameraAreaX > 0f) xy(cfg.cameraAreaX, cfg.cameraAreaY) else "non impostato"
-        etCameraSwipeRange.setText(cfg.cameraSwipeRange.toInt().toString())
-        tvHpBarCoord.text        = if (cfg.hpBarX > 0f) xy(cfg.hpBarX, cfg.hpBarY) else "auto"
+        tvBackupPotionCoord.text = coord(cfg.backupPotionX, cfg.backupPotionY)
+        tvJoystickCoord.text     = coord(cfg.joystickX, cfg.joystickY)
+        etJoystickRadius.setText(if (cfg.joystickRadius > 0f) cfg.joystickRadius.toInt().toString() else "0")
+        tvCameraCoord.text       = coord(cfg.cameraAreaX, cfg.cameraAreaY)
+        etCameraSwipeRange.setText(if (cfg.cameraSwipeRange > 0f) cfg.cameraSwipeRange.toInt().toString() else "0")
+        tvHpBarCoord.text        = coord(cfg.hpBarX, cfg.hpBarY)
         etHpBarFullWidth.setText(cfg.hpBarFullWidth.toString())
         etHpPotionThreshold.setText((cfg.hpPotionThreshold * 100).toInt().toString())
-        tvPlayerCoord.text       = if (cfg.playerX > 0f) xy(cfg.playerX, cfg.playerY) else "non impostato"
+        tvPlayerCoord.text       = coord(cfg.playerX, cfg.playerY)
         etDefenseRadius.setText(cfg.defenseRadiusPx.toString())
     }
 
@@ -153,6 +193,7 @@ class MainActivity : AppCompatActivity() {
         findViewById<Button>(R.id.btnPickPlayer)  .setOnClickListener { pick(K_PLAYER,   "Centro Personaggio",        tvPlayerCoord) }
 
         findViewById<Button>(R.id.btnSave).setOnClickListener { save() }
+        findViewById<Button>(R.id.btnResetCoords).setOnClickListener { resetToAuto() }
 
         findViewById<Button>(R.id.btnOverlayPermission).setOnClickListener {
             if (!Settings.canDrawOverlays(this))

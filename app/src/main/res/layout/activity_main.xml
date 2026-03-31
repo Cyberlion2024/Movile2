@@ -22,10 +22,20 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Imposta prima i permessi, poi configura le coordinate"
+            android:text="Le coordinate si calcolano AUTOMATICAMENTE. Serve solo abilitare i permessi qui sotto."
             android:textSize="12sp"
-            android:textColor="#888888"
-            android:paddingBottom="12dp" />
+            android:textColor="#81c784"
+            android:paddingBottom="8dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Il bot calcola attacco, skill, joystick, pozioni e centro personaggio dalla risoluzione del tuo schermo. I campi più in basso sono override manuali facoltativi — lasciando 0 usa sempre i valori automatici."
+            android:textSize="11sp"
+            android:textColor="#aaaaaa"
+            android:background="#0d1f0d"
+            android:padding="8dp"
+            android:layout_marginBottom="12dp" />
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -934,15 +944,34 @@ abilita Movile2 Bot (non usare il menu principale Accessibilità)"
                 android:paddingEnd="12dp" />
         </LinearLayout>
 
-        <!-- ── Salva + Overlay ────────────────────────────────────────────── -->
-        <Button
-            android:id="@+id/btnSave"
+        <!-- ── Salva + Reset + Overlay ───────────────────────────────────── -->
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="💾 SALVA IMPOSTAZIONI"
-            android:backgroundTint="#1565c0"
-            android:textColor="#ffffff"
-            android:layout_marginBottom="8dp" />
+            android:orientation="horizontal"
+            android:layout_marginBottom="8dp">
+
+            <Button
+                android:id="@+id/btnSave"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="2"
+                android:text="💾 SALVA"
+                android:backgroundTint="#1565c0"
+                android:textColor="#ffffff" />
+
+            <Button
+                android:id="@+id/btnResetCoords"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="8dp"
+                android:text="🔄 RESET AUTO"
+                android:backgroundTint="#4a148c"
+                android:textColor="#ffffff"
+                android:textSize="11sp" />
+
+        </LinearLayout>
 
         <LinearLayout
             android:layout_width="match_parent"

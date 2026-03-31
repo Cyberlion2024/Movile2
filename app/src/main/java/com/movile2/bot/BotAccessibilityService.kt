@@ -26,26 +26,36 @@ class BotAccessibilityService : AccessibilityService() {
     private val CAMERA_MS        = 250L
     private val POST_MOVE_MS     = 100L
     private val NEXT_CYCLE_EXTRA = 150L
-    private val SCAN_DELAY_MS    = 1000L   // screenshot ogni 1 secondo
+    private val SCAN_DELAY_MS    = 1000L
     private val CAMERA_EVERY     = 5
 
+    // ── Coordinate automatiche (calcolate da risoluzione schermo) ─────────────
+    // Layout Mobile2 Global derivato dall'analisi degli screenshot.
+    // Valori proporzionali → moltiplicati per sw/sh a runtime.
+    // L'utente può sovrascrivere ognuno dall'app (se > 0 nel cfg la preferenza è manuale).
+    private var aAttackX       = 0f; private var aAttackY       = 0f
+    private var aSkill1X       = 0f; private var aSkill1Y       = 0f
+    private var aSkill2X       = 0f; private var aSkill2Y       = 0f
+    private var aPotionX       = 0f; private var aPotionY       = 0f
+    private var aBackupPotX    = 0f; private var aBackupPotY    = 0f
+    private var aJoystickX     = 0f; private var aJoystickY     = 0f; private var aJoystickR  = 0f
+    private var aCameraX       = 0f; private var aCameraY       = 0f; private var aCameraRange = 0f
+    private var aPlayerX       = 0f; private var aPlayerY       = 0f; private var aDefenseR   = 0
+
+    // Resolve: usa la coordinata manuale se > 0, altrimenti quella automatica
+    private fun r(manual: Float, auto: Float) = if (manual > 0f) manual else auto
+    private fun ri(manual: Int, auto: Int)    = if (manual > 0)  manual else auto
+
     // ── Cooldown abilità ──────────────────────────────────────────────────────
-    private var lastSkill1Ms = 0L
-    private var lastSkill2Ms = 0L
-    private var lastSkill3Ms = 0L
-    private var lastSkill4Ms = 0L
-    private var lastSkill5Ms = 0L
+    private var lastSkill1Ms = 0L; private var lastSkill2Ms = 0L
+    private var lastSkill3Ms = 0L; private var lastSkill4Ms = 0L; private var lastSkill5Ms = 0L
 
     // ── Pattugliamento ────────────────────────────────────────────────────────
-    private var patrolDir   = 0
-    private var patrolSteps = 0
-    private var cameraDir   = 1
+    private var patrolDir = 0; private var patrolSteps = 0; private var cameraDir = 1
 
     // ── Stato ciclo ───────────────────────────────────────────────────────────
-    private var huntCycles      = 0
-    private var potionUses      = 0
-    private var inCombatCycles  = 0
-    private var defendAngleIdx  = 0
+    private var huntCycles = 0; private var potionUses = 0
+    private var inCombatCycles = 0; private var defendAngleIdx = 0
 
     private val DEFEND_ANGLES = floatArrayOf(0f, 45f, 90f, 135f, 180f, 225f, 270f, 315f)
 
@@ -56,7 +66,7 @@ class BotAccessibilityService : AccessibilityService() {
     @Volatile private var scannedHpRatio  = 1.0f
     @Volatile private var hpBarConfigured = false
 
-    // Auto HP bar detection (trovata automaticamente dal primo screenshot)
+    // Auto HP bar detection dal pixel scanning
     @Volatile private var autoBarX     = -1
     @Volatile private var autoBarY     = -1
     @Volatile private var autoBarFullW = 0
@@ -69,6 +79,50 @@ class BotAccessibilityService : AccessibilityService() {
 
     private enum class Phase { HUNT, DEFEND, POTION, REFILL }
     private var phase = Phase.HUNT
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Calcolo coordinate automatiche dalla risoluzione dello schermo
+    // Proporzioni derivate dall'analisi degli screenshot di Mobile2 Global:
+    //   - Pannello tasti in basso a destra: y≈80-85%, x≈77-90%
+    //   - Joystick in basso a sinistra: x≈8%, y≈84%
+    //   - Personaggio al centro: x≈46%, y≈39%
+    // ═══════════════════════════════════════════════════════════════════════════
+    private fun initAutoCoords() {
+        val dm = resources.displayMetrics
+        val sw = dm.widthPixels.toFloat()
+        val sh = dm.heightPixels.toFloat()
+
+        // Righe del pannello skill (in basso a destra)
+        val topRowY = sh * 0.800f   // riga superiore: pozioni/oggetti
+        val botRowY = sh * 0.849f   // riga inferiore: skill + attacco
+
+        // Colonne del pannello (4 slot + attacco)
+        val col1 = sw * 0.771f      // primo slot (sinistra)
+        val col2 = sw * 0.819f      // secondo slot
+        val col3 = sw * 0.866f      // terzo slot
+        val col4 = sw * 0.904f      // tasto attacco (destra)
+
+        aAttackX    = col4;  aAttackY    = botRowY
+        aSkill1X    = col1;  aSkill1Y    = botRowY
+        aSkill2X    = col2;  aSkill2Y    = botRowY
+        aPotionX    = col1;  aPotionY    = topRowY   // prima pozione (slot sinistra)
+        aBackupPotX = col2;  aBackupPotY = topRowY   // seconda pozione (slot a destra)
+
+        // Joystick (cerchio grande in basso a sinistra)
+        aJoystickX  = sw * 0.083f
+        aJoystickY  = sh * 0.844f
+        aJoystickR  = sw * 0.065f
+
+        // Area telecamera (trascina centro schermo per ruotare)
+        aCameraX     = sw * 0.500f
+        aCameraY     = sh * 0.375f
+        aCameraRange = sw * 0.140f
+
+        // Centro personaggio (bashy: circa centro-sinistra del game world)
+        aPlayerX  = sw * 0.455f
+        aPlayerY  = sh * 0.395f
+        aDefenseR = (sw * 0.165f).toInt()   // raggio difesa ~165px su 1080px
+    }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Loop principale
@@ -123,18 +177,15 @@ class BotAccessibilityService : AccessibilityService() {
         val cfg = BotConfig.load(this)
         val w = bmp.width; val h = bmp.height
 
-        // ── 1. Rilevamento nomi mostri (rosso brillante) ──────────────────────
-        // Zona ampliata: 7%-85% verticale per coprire anche mostri vicinissimi
-        val yStart = (h * 0.07f).toInt()
-        val yEnd   = (h * 0.85f).toInt()
-        val xStart = 80  // skip overlay
-
+        // ── 1. Rilevamento nomi mostri ────────────────────────────────────────
+        // Rosso vivo = nome nemico (es. "Cane Selvaggio")
+        // Zona: 7%-85% verticale, skip 80px a sinistra (overlay bot)
+        val yStart = (h * 0.07f).toInt(); val yEnd = (h * 0.85f).toInt()
         var sumX = 0L; var sumY = 0L; var count = 0
         for (y in yStart until yEnd step 4) {
-            for (x in xStart until w step 4) {
+            for (x in 80 until w step 4) {
                 val p = bmp.getPixel(x, y)
                 val r = Color.red(p); val g = Color.green(p); val b = Color.blue(p)
-                // Rosso vivo dei nomi nemici (es. "Cane Selvaggio")
                 if (r > 160 && g < 130 && b < 120 && r > g + 40 && r > b + 40) {
                     sumX += x; sumY += y; count++
                 }
@@ -146,25 +197,19 @@ class BotAccessibilityService : AccessibilityService() {
             targetX = 0f; targetY = 0f
         }
 
-        // ── 2. Barra HP: auto-rilevamento + lettura ratio ─────────────────────
-        // Strategia: se configurata manualmente usa quelle; altrimenti auto-trova
+        // ── 2. Barra HP ───────────────────────────────────────────────────────
         val barX: Int; val barY: Int; val barFullW: Int
-
         if (cfg.hpBarX > 0f) {
-            // Configurazione manuale dell'utente
             barX = cfg.hpBarX.toInt(); barY = cfg.hpBarY.toInt()
-            barFullW = cfg.hpBarFullWidth
+            barFullW = if (cfg.hpBarFullWidth > 0) cfg.hpBarFullWidth else 160
             hpBarConfigured = true
         } else {
-            // Auto-rilevamento: cerca la striscia rossa orizzontale in top-left
             if (autoBarX < 0) autoDetectHpBar(bmp, w, h)
             barX = autoBarX; barY = autoBarY; barFullW = autoBarFullW
         }
 
         if (barX >= 0 && barFullW > 0) {
             hpBarConfigured = true
-            // Scansiona un rettangolo di 7px di altezza centrato sulla barra
-            // Conta pixel rossi (HP rimasto) su tutta la larghezza della barra piena
             var redPx = 0; var totPx = 0
             val scanEnd = (barX + (barFullW * 1.1f).toInt()).coerceAtMost(w)
             for (dy in -3..3) {
@@ -179,64 +224,42 @@ class BotAccessibilityService : AccessibilityService() {
             val newRatio = if (totPx > 0) redPx.toFloat() / totPx else 1.0f
             BotState.hpDisplayPct = (newRatio * 100).toInt()
 
-            // ── Rilevamento perdita vita ───────────────────────────────────────
             val drop = BotState.lastHpRatio - newRatio
-            if (drop > 0.012f) {        // drop >1.2% → vita calata
-                BotState.hpDropCycles++
-                BotState.hpStableCycles = 0
+            if (drop > 0.012f) {
+                BotState.hpDropCycles++; BotState.hpStableCycles = 0
             } else {
-                BotState.hpStableCycles++
-                BotState.hpDropCycles = 0
+                BotState.hpStableCycles++; BotState.hpDropCycles = 0
             }
             BotState.lastHpRatio = newRatio
             scannedHpRatio = newRatio
 
-            // Entra in difesa dopo 1 drop confermato
-            if (!BotState.underAttack && BotState.hpDropCycles >= 1) BotState.underAttack = true
-            // Esce da difesa dopo 4 cicli stabili
-            if (BotState.underAttack && BotState.hpStableCycles >= 4) {
+            if (!BotState.underAttack && BotState.hpDropCycles >= 1)  BotState.underAttack = true
+            if ( BotState.underAttack && BotState.hpStableCycles >= 4) {
                 BotState.underAttack = false; BotState.hpDropCycles = 0
             }
         }
     }
 
-    // ── Auto-rilevamento barra HP ─────────────────────────────────────────────
-    // Cerca la striscia orizzontale rossa nel top-left dello schermo.
-    // La barra HP in Mobile2 è nel pannello in alto a sinistra, sotto il ritratto.
-    // Dall'analisi degli screenshot: occupa il 5-7% dall'alto, il 25% da sinistra.
+    // Cerca la striscia rossa orizzontale (barra HP) nel top-left dello schermo
     private fun autoDetectHpBar(bmp: Bitmap, w: Int, h: Int) {
-        val maxY = (h * 0.08f).toInt()   // cerca solo nel top 8%
-        val maxX = (w * 0.28f).toInt()   // cerca solo nel left 28%
-
+        val maxY = (h * 0.08f).toInt(); val maxX = (w * 0.28f).toInt()
         for (y in 4 until maxY) {
             var firstRed = -1; var lastRed = -1; var redCount = 0
-
             for (x in 18 until maxX) {
                 val p = bmp.getPixel(x, y)
                 val r = Color.red(p); val g = Color.green(p); val b = Color.blue(p)
-                // Pixel tipico della barra HP: rosso scuro/medio, G e B bassi
                 if (r > 140 && g < 75 && b < 75) {
-                    if (firstRed < 0) firstRed = x
-                    lastRed = x; redCount++
+                    if (firstRed < 0) firstRed = x; lastRed = x; redCount++
                 }
             }
-
             val stripeW = if (firstRed >= 0) lastRed - firstRed + 1 else 0
-            val density = if (stripeW > 0) redCount.toFloat() / stripeW else 0f
-
-            // Barra valida: larga almeno 40px con densità rossa ≥ 65%
-            if (stripeW >= 40 && density >= 0.65f) {
-                autoBarX = firstRed
-                autoBarY = y
-                // Stima larghezza piena: continua a scorrere per trovare la fine
-                // dell'area della barra (pixel scuri = HP vuoto)
+            if (stripeW >= 40 && redCount.toFloat() / stripeW >= 0.65f) {
+                autoBarX = firstRed; autoBarY = y
                 var extX = lastRed + 1
                 while (extX < maxX) {
                     val p = bmp.getPixel(extX, y)
                     val r = Color.red(p); val g = Color.green(p); val b = Color.blue(p)
-                    // Sfondo della barra vuota: molto scuro
-                    if (r < 90 && g < 90 && b < 90) extX++
-                    else break
+                    if (r < 90 && g < 90 && b < 90) extX++ else break
                 }
                 autoBarFullW = (extX - firstRed).coerceAtLeast(stripeW + 10)
                 break
@@ -245,7 +268,10 @@ class BotAccessibilityService : AccessibilityService() {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    override fun onServiceConnected() { instance = this }
+    override fun onServiceConnected() {
+        instance = this
+        initAutoCoords()
+    }
     override fun onAccessibilityEvent(e: AccessibilityEvent?) {}
     override fun onInterrupt() { stopBot() }
     override fun onDestroy() { super.onDestroy(); stopBot(); if (instance === this) instance = null }
@@ -253,16 +279,16 @@ class BotAccessibilityService : AccessibilityService() {
     fun startBot() {
         if (BotState.isRunning) return
         handler.removeCallbacksAndMessages(null)
+        initAutoCoords()   // ricalcola sempre a ogni avvio
         BotState.isRunning      = true
         BotState.sessionStartMs = System.currentTimeMillis()
         BotState.lastHpRatio    = 1.0f
         BotState.hpDropCycles   = 0; BotState.hpStableCycles = 0
         BotState.underAttack    = false; BotState.hpDisplayPct = -1
-        huntCycles   = 0; potionUses = 0; inCombatCycles = 0; defendAngleIdx = 0
+        huntCycles = 0; potionUses = 0; inCombatCycles = 0; defendAngleIdx = 0
         lastSkill1Ms = 0L; lastSkill2Ms = 0L; lastSkill3Ms = 0L
         lastSkill4Ms = 0L; lastSkill5Ms = 0L
-        phase = Phase.HUNT
-        patrolDir = 0; patrolSteps = 0; cameraDir = 1
+        phase = Phase.HUNT; patrolDir = 0; patrolSteps = 0; cameraDir = 1
         targetX = 0f; targetY = 0f; prevTargetFound = false
         scannedHpRatio = 1.0f; hpBarConfigured = false
         autoBarX = -1; autoBarY = -1; autoBarFullW = 0
@@ -281,65 +307,56 @@ class BotAccessibilityService : AccessibilityService() {
     // HUNT
     // ═══════════════════════════════════════════════════════════════════════════
     private fun doHunt(cfg: BotConfig) {
-        val now       = System.currentTimeMillis()
+        val now = System.currentTimeMillis()
         val hasTarget = targetX > 0f && targetY > 0f
 
-        // Kill detection: target scomparso = mostro eliminato
         if (prevTargetFound && !hasTarget) BotState.killCount++
         prevTargetFound = hasTarget
 
-        // ── Trigger difesa ────────────────────────────────────────────────────
         if (hasTarget) {
             inCombatCycles++
-            // Fallback senza HP bar: se in combattimento da 5+ cicli → difesa
             if (!hpBarConfigured && inCombatCycles >= 5) BotState.underAttack = true
         } else {
             inCombatCycles = 0
             if (!hpBarConfigured) BotState.underAttack = false
         }
-
         if (BotState.underAttack) { phase = Phase.DEFEND; handler.post(loop); return }
 
-        // ── Pozione ───────────────────────────────────────────────────────────
-        val potionSet   = cfg.potionX > 0f
+        // Coordinate effettive (manuale se impostato, altrimenti automatico)
+        val potX = r(cfg.potionX, aPotionX); val potY = r(cfg.potionY, aPotionY)
+        val potionActive = potX > 0f
         val hpLow       = hpBarConfigured && scannedHpRatio in 0.01f..cfg.hpPotionThreshold
-        // Timer pozione di backup: ogni 12 cicli se non c'è HP bar
-        val timerPotion = potionSet && !hpBarConfigured && huntCycles > 0 && huntCycles % 12 == 0
-        if (potionSet && (hpLow || timerPotion)) { phase = Phase.POTION; handler.post(loop); return }
+        val timerPotion = potionActive && !hpBarConfigured && huntCycles > 0 && huntCycles % 12 == 0
+        if (potionActive && (hpLow || timerPotion)) { phase = Phase.POTION; handler.post(loop); return }
 
-        // ── Movimento ─────────────────────────────────────────────────────────
-        val useJoystick = cfg.joystickX > 0f && cfg.joystickY > 0f
-        val useCamera   = cfg.cameraAreaX > 0f
+        val jx = r(cfg.joystickX, aJoystickX); val jy = r(cfg.joystickY, aJoystickY)
+        val jr = r(cfg.joystickRadius, aJoystickR)
+        val cx = r(cfg.cameraAreaX, aCameraX); val cy = r(cfg.cameraAreaY, aCameraY)
+        val cr = r(cfg.cameraSwipeRange, aCameraRange)
+
+        val useJoystick = jx > 0f && jy > 0f
+        val useCamera   = cx > 0f
         val doCamera    = useCamera && !hasTarget && huntCycles > 0 && huntCycles % CAMERA_EVERY == 0
+        val ax = r(cfg.attackX, aAttackX); val ay = r(cfg.attackY, aAttackY)
 
         var t = 0L
 
         if (doCamera) {
-            val cx = cfg.cameraAreaX; val cy = cfg.cameraAreaY; val r = cfg.cameraSwipeRange
-            swipe(cx - cameraDir * r, cy, cx + cameraDir * r, cy, CAMERA_MS)
-            cameraDir = -cameraDir
-            t = CAMERA_MS + POST_MOVE_MS
+            swipe(cx - cameraDir * cr, cy, cx + cameraDir * cr, cy, CAMERA_MS)
+            cameraDir = -cameraDir; t = CAMERA_MS + POST_MOVE_MS
         } else if (useJoystick) {
             val dir = PATROL_DIRS[patrolDir]
-            joystickPush(
-                cfg.joystickX, cfg.joystickY,
-                cfg.joystickX + dir[0] * cfg.joystickRadius,
-                cfg.joystickY + dir[1] * cfg.joystickRadius,
-                JOYSTICK_MS
-            )
+            joystickPush(jx, jy, jx + dir[0] * jr, jy + dir[1] * jr, JOYSTICK_MS)
             patrolSteps++
             if (patrolSteps >= PATROL_STEPS[patrolDir]) { patrolSteps = 0; patrolDir = (patrolDir + 1) % 4 }
             t = JOYSTICK_MS + POST_MOVE_MS
         }
 
-        // ── Attacco ───────────────────────────────────────────────────────────
         val tx = targetX; val ty = targetY
         if (hasTarget) {
-            handler.postDelayed({ if (BotState.isRunning) tap(tx, ty) }, t)
-            t += TAP_MS + GAP_MS
+            handler.postDelayed({ if (BotState.isRunning) tap(tx, ty) }, t); t += TAP_MS + GAP_MS
         }
-        handler.postDelayed({ if (BotState.isRunning) tap(cfg.attackX, cfg.attackY) }, t)
-        t += TAP_MS + GAP_MS
+        handler.postDelayed({ if (BotState.isRunning) tap(ax, ay) }, t); t += TAP_MS + GAP_MS
 
         t = scheduleSkills(cfg, now, t)
         huntCycles++
@@ -347,46 +364,41 @@ class BotAccessibilityService : AccessibilityService() {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // DEFEND — attacca tutto intorno al personaggio
+    // DEFEND
     // ═══════════════════════════════════════════════════════════════════════════
     private fun doDefend(cfg: BotConfig) {
         val now = System.currentTimeMillis()
-
         if (!BotState.underAttack) {
             inCombatCycles = 0; phase = Phase.HUNT
             handler.postDelayed(loop, 100L); return
         }
 
-        // Pozione se HP basso
-        if (cfg.potionX > 0f && hpBarConfigured &&
-            scannedHpRatio in 0.01f..cfg.hpPotionThreshold) {
+        val potX = r(cfg.potionX, aPotionX); val potY = r(cfg.potionY, aPotionY)
+        if (potX > 0f && hpBarConfigured && scannedHpRatio in 0.01f..cfg.hpPotionThreshold) {
             phase = Phase.POTION; handler.post(loop); return
         }
 
+        val ax = r(cfg.attackX, aAttackX); val ay = r(cfg.attackY, aAttackY)
+        val px = r(cfg.playerX, aPlayerX);  val py = r(cfg.playerY, aPlayerY)
+        val dr = ri(cfg.defenseRadiusPx, aDefenseR)
+
         var t = 0L
 
-        // Tap circolare intorno al personaggio (8 angoli, uno per ciclo)
-        if (cfg.playerX > 0f && cfg.playerY > 0f && cfg.defenseRadiusPx > 0) {
+        // Tap circolare intorno al personaggio
+        if (px > 0f && py > 0f && dr > 0) {
             val angle = Math.toRadians(DEFEND_ANGLES[defendAngleIdx].toDouble())
-            val tapX  = cfg.playerX + (cos(angle) * cfg.defenseRadiusPx).toFloat()
-            val tapY  = cfg.playerY + (sin(angle) * cfg.defenseRadiusPx).toFloat()
-            tap(tapX, tapY)
-            t += TAP_MS + GAP_MS
+            val tapX  = px + (cos(angle) * dr).toFloat()
+            val tapY  = py + (sin(angle) * dr).toFloat()
+            tap(tapX, tapY); t += TAP_MS + GAP_MS
             defendAngleIdx = (defendAngleIdx + 1) % DEFEND_ANGLES.size
         }
 
-        // Attacco principale
-        handler.postDelayed({ if (BotState.isRunning) tap(cfg.attackX, cfg.attackY) }, t)
-        t += TAP_MS + GAP_MS
+        handler.postDelayed({ if (BotState.isRunning) tap(ax, ay) }, t); t += TAP_MS + GAP_MS
 
-        // Anche se c'è un target visibile, selezionalo
         val tx = targetX; val ty = targetY
         if (tx > 0f && ty > 0f) {
-            handler.postDelayed({ if (BotState.isRunning) tap(tx, ty) }, t)
-            t += TAP_MS + GAP_MS
-            // Attacca di nuovo dopo la selezione
-            handler.postDelayed({ if (BotState.isRunning) tap(cfg.attackX, cfg.attackY) }, t)
-            t += TAP_MS + GAP_MS
+            handler.postDelayed({ if (BotState.isRunning) tap(tx, ty) }, t); t += TAP_MS + GAP_MS
+            handler.postDelayed({ if (BotState.isRunning) tap(ax, ay) }, t); t += TAP_MS + GAP_MS
         }
 
         t = scheduleSkills(cfg, now, t)
@@ -397,10 +409,12 @@ class BotAccessibilityService : AccessibilityService() {
     // POTION
     // ═══════════════════════════════════════════════════════════════════════════
     private fun doPotion(cfg: BotConfig) {
-        tap(cfg.potionX, cfg.potionY)
+        val potX = r(cfg.potionX, aPotionX); val potY = r(cfg.potionY, aPotionY)
+        tap(potX, potY)
         potionUses++
+        val backX = r(cfg.backupPotionX, aBackupPotX)
         phase = when {
-            potionUses >= cfg.maxPotionsInSlot && cfg.backupPotionX > 0f -> Phase.REFILL
+            potionUses >= cfg.maxPotionsInSlot && backX > 0f -> Phase.REFILL
             BotState.underAttack -> Phase.DEFEND
             else -> Phase.HUNT
         }
@@ -411,39 +425,39 @@ class BotAccessibilityService : AccessibilityService() {
     // REFILL
     // ═══════════════════════════════════════════════════════════════════════════
     private fun doRefill(cfg: BotConfig) {
-        swipe(cfg.backupPotionX, cfg.backupPotionY, cfg.potionX, cfg.potionY, 400L)
+        val potX = r(cfg.potionX, aPotionX);    val potY = r(cfg.potionY, aPotionY)
+        val bkX  = r(cfg.backupPotionX, aBackupPotX); val bkY = r(cfg.backupPotionY, aBackupPotY)
+        swipe(bkX, bkY, potX, potY, 400L)
         potionUses = 0
         phase = if (BotState.underAttack) Phase.DEFEND else Phase.HUNT
         handler.postDelayed(loop, 700L)
     }
 
-    // ── Abilità sequenziali (condivise da HUNT e DEFEND) ─────────────────────
+    // ── Abilità ───────────────────────────────────────────────────────────────
     private fun scheduleSkills(cfg: BotConfig, now: Long, startT: Long): Long {
         var t = startT
-        if (cfg.skill1X > 0f && now - lastSkill1Ms >= cfg.skill1CooldownMs) {
+        val s1x = r(cfg.skill1X, aSkill1X); val s1y = r(cfg.skill1Y, aSkill1Y)
+        val s2x = r(cfg.skill2X, aSkill2X); val s2y = r(cfg.skill2Y, aSkill2Y)
+
+        if (s1x > 0f && now - lastSkill1Ms >= cfg.skill1CooldownMs) {
             lastSkill1Ms = now; val ft = t
-            handler.postDelayed({ if (BotState.isRunning) tap(cfg.skill1X, cfg.skill1Y) }, ft)
-            t += TAP_MS + GAP_MS
+            handler.postDelayed({ if (BotState.isRunning) tap(s1x, s1y) }, ft); t += TAP_MS + GAP_MS
         }
-        if (cfg.skill2X > 0f && now - lastSkill2Ms >= cfg.skill2CooldownMs) {
+        if (s2x > 0f && now - lastSkill2Ms >= cfg.skill2CooldownMs) {
             lastSkill2Ms = now; val ft = t
-            handler.postDelayed({ if (BotState.isRunning) tap(cfg.skill2X, cfg.skill2Y) }, ft)
-            t += TAP_MS + GAP_MS
+            handler.postDelayed({ if (BotState.isRunning) tap(s2x, s2y) }, ft); t += TAP_MS + GAP_MS
         }
         if (cfg.skill3X > 0f && cfg.skill3Y > 0f && now - lastSkill3Ms >= cfg.skill3CooldownMs) {
             lastSkill3Ms = now; val ft = t
-            handler.postDelayed({ if (BotState.isRunning) tap(cfg.skill3X, cfg.skill3Y) }, ft)
-            t += TAP_MS + GAP_MS
+            handler.postDelayed({ if (BotState.isRunning) tap(cfg.skill3X, cfg.skill3Y) }, ft); t += TAP_MS + GAP_MS
         }
         if (cfg.skill4X > 0f && cfg.skill4Y > 0f && now - lastSkill4Ms >= cfg.skill4CooldownMs) {
             lastSkill4Ms = now; val ft = t
-            handler.postDelayed({ if (BotState.isRunning) tap(cfg.skill4X, cfg.skill4Y) }, ft)
-            t += TAP_MS + GAP_MS
+            handler.postDelayed({ if (BotState.isRunning) tap(cfg.skill4X, cfg.skill4Y) }, ft); t += TAP_MS + GAP_MS
         }
         if (cfg.skill5X > 0f && cfg.skill5Y > 0f && now - lastSkill5Ms >= cfg.skill5CooldownMs) {
             lastSkill5Ms = now; val ft = t
-            handler.postDelayed({ if (BotState.isRunning) tap(cfg.skill5X, cfg.skill5Y) }, ft)
-            t += TAP_MS + GAP_MS
+            handler.postDelayed({ if (BotState.isRunning) tap(cfg.skill5X, cfg.skill5Y) }, ft); t += TAP_MS + GAP_MS
         }
         return t
     }
@@ -454,24 +468,21 @@ class BotAccessibilityService : AccessibilityService() {
         dispatchGesture(
             GestureDescription.Builder()
                 .addStroke(GestureDescription.StrokeDescription(path, 0, TAP_MS)).build(),
-            null, null
-        )
+            null, null)
     }
     private fun joystickPush(cx: Float, cy: Float, tx: Float, ty: Float, dur: Long) {
         val path = Path().apply { moveTo(cx, cy); lineTo(tx, ty) }
         dispatchGesture(
             GestureDescription.Builder()
                 .addStroke(GestureDescription.StrokeDescription(path, 0, dur)).build(),
-            null, null
-        )
+            null, null)
     }
     private fun swipe(x1: Float, y1: Float, x2: Float, y2: Float, dur: Long) {
         val path = Path().apply { moveTo(x1, y1); lineTo(x2, y2) }
         dispatchGesture(
             GestureDescription.Builder()
                 .addStroke(GestureDescription.StrokeDescription(path, 0, dur)).build(),
-            null, null
-        )
+            null, null)
     }
 
     companion object {
