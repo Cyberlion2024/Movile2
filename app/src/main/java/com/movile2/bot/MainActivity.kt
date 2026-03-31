@@ -14,6 +14,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var cfg: BotConfig
 
     private lateinit var etMonsterName: EditText
+    private lateinit var etPlayerName: EditText
     private lateinit var etMaxKills: EditText
     private lateinit var etSessionMinutes: EditText
     private lateinit var etAttackDelay: EditText
@@ -42,6 +43,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var etDefenseRadius: EditText
 
     private var pendingKey = ""
+    private var calibrationQueue: ArrayDeque<Pair<String, String>>? = null
 
     companion object {
         private const val REQ = 101
@@ -73,18 +75,20 @@ class MainActivity : AppCompatActivity() {
     // Se l'utente aveva 950/700 ecc. salvati, vengono rimpiazzati da 0 (= auto).
     private fun migrateToAutoCoords() {
         val prefs = getSharedPreferences("bot_config", android.content.Context.MODE_PRIVATE)
-        if (prefs.getBoolean("auto_coords_v5", false)) return
+        if (prefs.getBoolean("auto_coords_v6", false)) return
         val coordKeys = listOf(
             "attackX","attackY","skill1X","skill1Y","skill2X","skill2Y",
             "skill3X","skill3Y","skill4X","skill4Y","skill5X","skill5Y",
             "potionX","potionY","backupPotionX","backupPotionY",
             "joystickX","joystickY","joystickRadius",
             "cameraAreaX","cameraAreaY","cameraSwipeRange",
-            "playerX","playerY","defenseRadiusPx","hpBarFullWidth"
+            "playerX","playerY","defenseRadiusPx",
+            "hpBarX","hpBarY","hpBarFullWidth"
         )
         prefs.edit().apply {
             coordKeys.forEach { remove(it) }
-            putBoolean("auto_coords_v5", true)
+            remove("auto_coords_v5")
+            putBoolean("auto_coords_v6", true)
             apply()
         }
     }
@@ -108,6 +112,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun bind() {
         etMonsterName        = findViewById(R.id.etMonsterName)
+        etPlayerName         = findViewById(R.id.etPlayerName)
         etMaxKills           = findViewById(R.id.etMaxKills)
         etSessionMinutes     = findViewById(R.id.etSessionMinutes)
         etAttackDelay        = findViewById(R.id.etAttackDelay)
@@ -140,6 +145,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun populate() {
         etMonsterName.setText(cfg.monsterName)
+        etPlayerName.setText(cfg.playerName)
         etMaxKills.setText(cfg.maxKills.toString())
         etSessionMinutes.setText(cfg.sessionMinutes.toString())
         etAttackDelay.setText(cfg.attackDelayMs.toString())
@@ -191,6 +197,7 @@ class MainActivity : AppCompatActivity() {
         findViewById<Button>(R.id.btnPickCamera)  .setOnClickListener { pick(K_CAMERA,   "Punto Centrale Visuale",   tvCameraCoord) }
         findViewById<Button>(R.id.btnPickHpBar)   .setOnClickListener { pick(K_HP,       "Bordo Sinistro Barra HP",  tvHpBarCoord) }
         findViewById<Button>(R.id.btnPickPlayer)  .setOnClickListener { pick(K_PLAYER,   "Centro Personaggio",        tvPlayerCoord) }
+        findViewById<Button>(R.id.btnCalibrateHud).setOnClickListener { startCalibration() }
 
         findViewById<Button>(R.id.btnSave).setOnClickListener { save() }
         findViewById<Button>(R.id.btnResetCoords).setOnClickListener { resetToAuto() }
@@ -238,11 +245,51 @@ class MainActivity : AppCompatActivity() {
             K_PLAYER   -> cfg.copy(playerX = x, playerY = y).also          { tvPlayerCoord.text = xy(x, y) }
             else       -> cfg
         }
+        continueCalibrationIfNeeded()
+    }
+
+    private fun startCalibration() {
+        calibrationQueue = ArrayDeque(
+            listOf(
+                K_ATTACK to "Bottone Attacco (spada grande)",
+                K_SK1 to "Abilità 1",
+                K_SK2 to "Abilità 2",
+                K_SK3 to "Abilità 3",
+                K_SK4 to "Abilità 4",
+                K_SK5 to "Abilità 5",
+                "potion" to "Pozione rossa",
+                "backup" to "Pozione backup",
+                K_JOYSTICK to "Centro Joystick",
+                K_HP to "Bordo sinistro barra HP",
+                K_PLAYER to "Centro personaggio (petto)"
+            )
+        )
+        toast("Calibrazione avviata: tocca i punti richiesti in sequenza")
+        continueCalibrationIfNeeded()
+    }
+
+    private fun continueCalibrationIfNeeded() {
+        val q = calibrationQueue ?: return
+        if (q.isEmpty()) {
+            calibrationQueue = null
+            BotConfig.save(this, cfg)
+            populate()
+            toast("Calibrazione completata ✓")
+            return
+        }
+        val (key, label) = q.removeFirst()
+        pendingKey = key
+        @Suppress("DEPRECATION")
+        startActivityForResult(
+            Intent(this, CoordinatePickerActivity::class.java)
+                .putExtra(CoordinatePickerActivity.EXTRA_LABEL, label), REQ
+        )
     }
 
     private fun save() {
         cfg = cfg.copy(
             monsterName       = etMonsterName.text.toString().trim(),
+            playerName        = etPlayerName.text.toString().trim(),
             maxKills          = etMaxKills.text.toString().toIntOrNull()        ?: cfg.maxKills,
             sessionMinutes    = etSessionMinutes.text.toString().toIntOrNull()  ?: cfg.sessionMinutes,
             attackDelayMs     = etAttackDelay.text.toString().toLongOrNull()    ?: cfg.attackDelayMs,
