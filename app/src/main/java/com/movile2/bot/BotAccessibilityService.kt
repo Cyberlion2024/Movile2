@@ -28,6 +28,9 @@ class BotAccessibilityService : AccessibilityService() {
     private val NEXT_CYCLE_EXTRA = 150L
     private val SCAN_DELAY_MS    = 1000L
     private val CAMERA_EVERY     = 5
+    private val COMBAT_GRACE_MS  = 2500L
+    private val TARGET_GRACE_MS  = 1800L
+    private val LOOT_TAP_CD_MS   = 1200L
 
     // ── Coordinate automatiche (calcolate da risoluzione schermo) ─────────────
     // Layout Mobile2 Global derivato dall'analisi degli screenshot.
@@ -68,6 +71,8 @@ class BotAccessibilityService : AccessibilityService() {
     @Volatile private var prevTargetFound = false
     @Volatile private var scannedHpRatio  = 1.0f
     @Volatile private var hpBarConfigured = false
+    @Volatile private var lootX = 0f
+    @Volatile private var lootY = 0f
 
     // Auto HP bar detection dal pixel scanning
     @Volatile private var autoBarX     = -1
@@ -223,6 +228,8 @@ class BotAccessibilityService : AccessibilityService() {
         }
         if (count >= 10) {
             targetX = (sumX / count).toFloat(); targetY = (sumY / count).toFloat()
+            lastTargetSeenMs = System.currentTimeMillis()
+            lastTargetX = targetX; lastTargetY = targetY
         } else {
             targetX = 0f; targetY = 0f
         }
@@ -257,6 +264,7 @@ class BotAccessibilityService : AccessibilityService() {
             val drop = BotState.lastHpRatio - newRatio
             if (drop > 0.012f) {
                 BotState.hpDropCycles++; BotState.hpStableCycles = 0
+                lastDamageMs = System.currentTimeMillis()
             } else {
                 BotState.hpStableCycles++; BotState.hpDropCycles = 0
             }
@@ -267,6 +275,34 @@ class BotAccessibilityService : AccessibilityService() {
             if ( BotState.underAttack && BotState.hpStableCycles >= 4) {
                 BotState.underAttack = false; BotState.hpDropCycles = 0
             }
+        }
+
+        // ── 3. Loot a terra (Yang + drop col nome in verde) ─────────────────
+        detectLoot(bmp, w, h)
+    }
+
+    private fun detectLoot(bmp: Bitmap, w: Int, h: Int) {
+        val x0 = (w * 0.12f).toInt()
+        val x1 = (w * 0.88f).toInt()
+        val y0 = (h * 0.16f).toInt()
+        val y1 = (h * 0.86f).toInt()
+        var sx = 0L; var sy = 0L; var cnt = 0
+        for (y in y0 until y1 step 5) {
+            for (x in x0 until x1 step 5) {
+                val p = bmp.getPixel(x, y)
+                val r = Color.red(p); val g = Color.green(p); val b = Color.blue(p)
+                val whiteText = r > 175 && g > 175 && b > 175 && kotlin.math.abs(r - g) < 24 && kotlin.math.abs(r - b) < 24
+                val greenText = g > 155 && g > r + 25 && g > b + 18
+                if (whiteText || greenText) {
+                    sx += x; sy += y; cnt++
+                }
+            }
+        }
+        if (cnt >= 7) {
+            lootX = (sx / cnt).toFloat()
+            lootY = (sy / cnt).toFloat() + (h * 0.02f)
+        } else {
+            lootX = 0f; lootY = 0f
         }
     }
 
@@ -321,6 +357,9 @@ class BotAccessibilityService : AccessibilityService() {
         phase = Phase.HUNT; patrolDir = 0; patrolSteps = 0; cameraDir = 1
         targetX = 0f; targetY = 0f; prevTargetFound = false
         scannedHpRatio = 1.0f; hpBarConfigured = false
+        lootX = 0f; lootY = 0f
+        lastDamageMs = 0L; lastTargetSeenMs = 0L
+        lastLootTapMs = 0L; lastTargetX = 0f; lastTargetY = 0f
         autoBarX = -1; autoBarY = -1; autoBarFullW = 0
         handler.post(loop)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)
@@ -339,6 +378,7 @@ class BotAccessibilityService : AccessibilityService() {
     private fun doHunt(cfg: BotConfig) {
         val now = System.currentTimeMillis()
         val hasTarget = targetX > 0f && targetY > 0f
+        val recentCombat = (now - lastDamageMs) < COMBAT_GRACE_MS || (now - lastTargetSeenMs) < TARGET_GRACE_MS
 
         if (prevTargetFound && !hasTarget) BotState.killCount++
         prevTargetFound = hasTarget
@@ -350,13 +390,13 @@ class BotAccessibilityService : AccessibilityService() {
             inCombatCycles = 0
             if (!hpBarConfigured) BotState.underAttack = false
         }
-        if (BotState.underAttack) { phase = Phase.DEFEND; handler.post(loop); return }
+        if (BotState.underAttack || recentCombat) { phase = Phase.DEFEND; handler.post(loop); return }
 
         // Coordinate effettive (manuale se impostato, altrimenti automatico)
         val potX = r(cfg.potionX, aPotionX); val potY = r(cfg.potionY, aPotionY)
         val potionActive = potX > 0f
         val hpLow       = hpBarConfigured && scannedHpRatio in 0.01f..cfg.hpPotionThreshold
-        val timerPotion = potionActive && !hpBarConfigured && huntCycles > 0 && huntCycles % 12 == 0
+        val timerPotion = potionActive && (!hpBarConfigured || recentCombat) && huntCycles > 0 && huntCycles % 4 == 0
         if (potionActive && (hpLow || timerPotion)) { phase = Phase.POTION; handler.post(loop); return }
 
         val jx = r(cfg.joystickX, aJoystickX); val jy = r(cfg.joystickY, aJoystickY)
@@ -366,7 +406,7 @@ class BotAccessibilityService : AccessibilityService() {
 
         val useJoystick = jx > 0f && jy > 0f
         val useCamera   = cx > 0f
-        val doCamera    = useCamera && !hasTarget && huntCycles > 0 && huntCycles % CAMERA_EVERY == 0
+        val doCamera    = useCamera && !hasTarget && !recentCombat && huntCycles > 0 && huntCycles % CAMERA_EVERY == 0
         val ax = r(cfg.attackX, aAttackX); val ay = r(cfg.attackY, aAttackY)
 
         var t = 0L
@@ -382,11 +422,20 @@ class BotAccessibilityService : AccessibilityService() {
             t = JOYSTICK_MS + POST_MOVE_MS
         }
 
-        val tx = targetX; val ty = targetY
-        if (hasTarget) {
+        val tx = if (hasTarget) targetX else lastTargetX
+        val ty = if (hasTarget) targetY else lastTargetY
+        if (tx > 0f && ty > 0f && (hasTarget || recentCombat)) {
             handler.postDelayed({ if (BotState.isRunning) tap(tx, ty) }, t); t += TAP_MS + GAP_MS
         }
         handler.postDelayed({ if (BotState.isRunning) tap(ax, ay) }, t); t += TAP_MS + GAP_MS
+
+        // Raccolta loot quando non siamo più in combattimento
+        if (!hasTarget && !recentCombat && lootX > 0f && now - lastLootTapMs >= LOOT_TAP_CD_MS) {
+            val lx = lootX; val ly = lootY
+            handler.postDelayed({ if (BotState.isRunning) tap(lx, ly) }, t)
+            lastLootTapMs = now
+            t += TAP_MS + GAP_MS
+        }
 
         t = scheduleSkills(cfg, now, t)
         huntCycles++
@@ -398,13 +447,16 @@ class BotAccessibilityService : AccessibilityService() {
     // ═══════════════════════════════════════════════════════════════════════════
     private fun doDefend(cfg: BotConfig) {
         val now = System.currentTimeMillis()
-        if (!BotState.underAttack) {
+        val recentCombat = (now - lastDamageMs) < COMBAT_GRACE_MS || (now - lastTargetSeenMs) < TARGET_GRACE_MS
+        if (!BotState.underAttack && !recentCombat) {
             inCombatCycles = 0; phase = Phase.HUNT
             handler.postDelayed(loop, 100L); return
         }
 
         val potX = r(cfg.potionX, aPotionX); val potY = r(cfg.potionY, aPotionY)
-        if (potX > 0f && hpBarConfigured && scannedHpRatio in 0.01f..cfg.hpPotionThreshold) {
+        val potionByHp = potX > 0f && hpBarConfigured && scannedHpRatio in 0.01f..cfg.hpPotionThreshold
+        val potionByTimer = potX > 0f && !hpBarConfigured && now % 3200L < 250L
+        if (potionByHp || potionByTimer) {
             phase = Phase.POTION; handler.post(loop); return
         }
 

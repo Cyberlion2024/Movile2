@@ -14,6 +14,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var cfg: BotConfig
 
     private lateinit var etMonsterName: EditText
+    private lateinit var etPlayerName: EditText
     private lateinit var etMaxKills: EditText
     private lateinit var etSessionMinutes: EditText
     private lateinit var etAttackDelay: EditText
@@ -110,6 +111,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun bind() {
         etMonsterName        = findViewById(R.id.etMonsterName)
+        etPlayerName         = findViewById(R.id.etPlayerName)
         etMaxKills           = findViewById(R.id.etMaxKills)
         etSessionMinutes     = findViewById(R.id.etSessionMinutes)
         etAttackDelay        = findViewById(R.id.etAttackDelay)
@@ -142,6 +144,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun populate() {
         etMonsterName.setText(cfg.monsterName)
+        etPlayerName.setText(cfg.playerName)
         etMaxKills.setText(cfg.maxKills.toString())
         etSessionMinutes.setText(cfg.sessionMinutes.toString())
         etAttackDelay.setText(cfg.attackDelayMs.toString())
@@ -245,6 +248,7 @@ class MainActivity : AppCompatActivity() {
     private fun save() {
         cfg = cfg.copy(
             monsterName       = etMonsterName.text.toString().trim(),
+            playerName        = etPlayerName.text.toString().trim(),
             maxKills          = etMaxKills.text.toString().toIntOrNull()        ?: cfg.maxKills,
             sessionMinutes    = etSessionMinutes.text.toString().toIntOrNull()  ?: cfg.sessionMinutes,
             attackDelayMs     = etAttackDelay.text.toString().toLongOrNull()    ?: cfg.attackDelayMs,
