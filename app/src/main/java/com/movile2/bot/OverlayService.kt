@@ -27,22 +27,29 @@ class OverlayService : Service() {
     private var tvStatus: TextView? = null
     private var tvKills: TextView? = null
     private var btnToggle: TextView? = null
+    private var btnPotionOnly: TextView? = null
+    private var btnGroundLoot: TextView? = null
     private val handler = Handler(Looper.getMainLooper())
 
     private val ticker = object : Runnable {
         override fun run() {
-            val running = BotState.isRunning
-            val defend  = BotState.underAttack
-            val hpPct   = BotState.hpDisplayPct
+            val running    = BotState.isRunning
+            val defend     = BotState.underAttack
+            val hpPct      = BotState.hpDisplayPct
+            val potOnly    = BotState.potionOnlyMode
+            val groundLoot = BotState.groundLootMode
 
-            val hpStr = if (hpPct >= 0) " HP:${hpPct}%" else ""
-            // Mostra dove sta tappando la pozione: (x,y) e sorgente AUTO/MAN/EST
+            val hpStr  = if (hpPct >= 0) " HP:${hpPct}%" else ""
             val potStr = if (BotState.potSource.isNotEmpty())
                 " POZ[${BotState.potSource}]:${BotState.potTapX.toInt()},${BotState.potTapY.toInt()}"
             else ""
             tvKills?.text = "Kills: ${BotState.killCount}$hpStr$potStr"
 
             when {
+                potOnly && !running -> {
+                    tvStatus?.text = "💊 SOLO POZ"
+                    tvStatus?.setTextColor(Color.CYAN)
+                }
                 !running -> {
                     tvStatus?.text = "● STOP"
                     tvStatus?.setTextColor(Color.RED)
@@ -56,7 +63,21 @@ class OverlayService : Service() {
                     tvStatus?.setTextColor(Color.GREEN)
                 }
             }
+
             btnToggle?.text = if (running) "⏸ PAUSA" else "▶ START"
+
+            // Pulsante modalità solo pozioni
+            btnPotionOnly?.text = if (potOnly) "💊 POZ: ON" else "💊 POZ: OFF"
+            btnPotionOnly?.setBackgroundColor(
+                if (potOnly) Color.argb(230, 0, 140, 160) else Color.argb(220, 50, 50, 80)
+            )
+
+            // Pulsante raccolta terra individuale
+            btnGroundLoot?.text = if (groundLoot) "🎒 LOOT: ON" else "🎒 LOOT: OFF"
+            btnGroundLoot?.setBackgroundColor(
+                if (groundLoot) Color.argb(230, 0, 130, 80) else Color.argb(220, 50, 50, 80)
+            )
+
             handler.postDelayed(this, 500)
         }
     }
@@ -77,6 +98,8 @@ class OverlayService : Service() {
         super.onDestroy()
         handler.removeCallbacksAndMessages(null)
         BotAccessibilityService.instance?.stopBot()
+        BotAccessibilityService.instance?.stopPotionOnly()
+        BotState.groundLootMode = false
         overlayView?.let { runCatching { wm.removeView(it) } }
         overlayView = null
     }
@@ -92,7 +115,7 @@ class OverlayService : Service() {
             setPadding(14, 10, 14, 10)
         }
 
-        // ── Handle di trascinamento (unico punto drag) ───────────────────────
+        // ── Handle di trascinamento ───────────────────────────────────────────
         val dragHandle = TextView(this).apply {
             text = "☰ BOT"
             setTextColor(Color.argb(200, 150, 200, 255))
@@ -151,11 +174,49 @@ class OverlayService : Service() {
             BotState.killCount = 0
         }
 
+        // ── Pulsante SOLO POZIONI ─────────────────────────────────────────────
+        // Preme continuamente tutti gli slot pozione configurati, senza attaccare.
+        btnPotionOnly = TextView(this).apply {
+            text = "💊 POZ: OFF"
+            setTextColor(Color.WHITE)
+            textSize = 13f
+            setBackgroundColor(Color.argb(220, 50, 50, 80))
+            setPadding(18, 10, 18, 10)
+        }
+        btnPotionOnly!!.setOnClickListener {
+            val bot = BotAccessibilityService.instance
+            if (bot == null) {
+                tvStatus?.text = "Abilita Accessibilità!"
+                tvStatus?.setTextColor(Color.YELLOW)
+                return@setOnClickListener
+            }
+            if (BotState.potionOnlyMode) {
+                bot.stopPotionOnly()
+            } else {
+                bot.startPotionOnly()
+            }
+        }
+
+        // ── Pulsante RACCOLTA TERRA INDIVIDUALE ───────────────────────────────
+        // Quando attivo: tappa su ogni oggetto (nome personaggio + yang) uno per uno.
+        btnGroundLoot = TextView(this).apply {
+            text = "🎒 LOOT: OFF"
+            setTextColor(Color.WHITE)
+            textSize = 13f
+            setBackgroundColor(Color.argb(220, 50, 50, 80))
+            setPadding(18, 10, 18, 10)
+        }
+        btnGroundLoot!!.setOnClickListener {
+            BotState.groundLootMode = !BotState.groundLootMode
+        }
+
         root.addView(dragHandle)
         root.addView(tvStatus)
         root.addView(tvKills)
         root.addView(btnToggle)
         root.addView(btnStop)
+        root.addView(btnPotionOnly)
+        root.addView(btnGroundLoot)
         overlayView = root
 
         val lp = WindowManager.LayoutParams(
@@ -168,7 +229,6 @@ class OverlayService : Service() {
             PixelFormat.TRANSLUCENT
         ).apply { gravity = Gravity.TOP or Gravity.START; x = 16; y = 180 }
 
-        // Il drag è SOLO sull'handle, i pulsanti ricevono i click normalmente
         var dX = 0f; var dY = 0f; var sX = 0; var sY = 0
         dragHandle.setOnTouchListener { _, e ->
             when (e.action) {

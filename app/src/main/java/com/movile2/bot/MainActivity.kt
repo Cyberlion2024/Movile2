@@ -40,6 +40,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvPotion7Coord: TextView
     private lateinit var tvInventoryPotionCoord: TextView
 
+    // Modalità solo pozioni
+    private lateinit var etPotionOnlyCd: EditText
+
     private lateinit var tvJoystickCoord: TextView
     private lateinit var etJoystickRadius: EditText
     private lateinit var tvCameraCoord: TextView
@@ -125,39 +128,40 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun bind() {
-        etMonsterName        = findViewById(R.id.etMonsterName)
-        etPlayerName         = findViewById(R.id.etPlayerName)
-        etMaxKills           = findViewById(R.id.etMaxKills)
-        etSessionMinutes     = findViewById(R.id.etSessionMinutes)
-        etAttackDelay        = findViewById(R.id.etAttackDelay)
-        tvAttackCoord        = findViewById(R.id.tvAttackCoord)
-        tvSkill1Coord        = findViewById(R.id.tvSkill1Coord)
-        etSkill1Cd           = findViewById(R.id.etSkill1Cd)
-        tvSkill2Coord        = findViewById(R.id.tvSkill2Coord)
-        etSkill2Cd           = findViewById(R.id.etSkill2Cd)
-        tvSkill3Coord        = findViewById(R.id.tvSkill3Coord)
-        etSkill3Cd           = findViewById(R.id.etSkill3Cd)
-        tvSkill4Coord        = findViewById(R.id.tvSkill4Coord)
-        etSkill4Cd           = findViewById(R.id.etSkill4Cd)
-        tvSkill5Coord        = findViewById(R.id.tvSkill5Coord)
-        etSkill5Cd           = findViewById(R.id.etSkill5Cd)
-        tvPotion1Coord       = findViewById(R.id.tvPotion1Coord)
-        tvPotion2Coord       = findViewById(R.id.tvPotion2Coord)
-        tvPotion3Coord       = findViewById(R.id.tvPotion3Coord)
-        tvPotion4Coord       = findViewById(R.id.tvPotion4Coord)
-        tvPotion5Coord       = findViewById(R.id.tvPotion5Coord)
-        tvPotion6Coord       = findViewById(R.id.tvPotion6Coord)
-        tvPotion7Coord       = findViewById(R.id.tvPotion7Coord)
+        etMonsterName          = findViewById(R.id.etMonsterName)
+        etPlayerName           = findViewById(R.id.etPlayerName)
+        etMaxKills             = findViewById(R.id.etMaxKills)
+        etSessionMinutes       = findViewById(R.id.etSessionMinutes)
+        etAttackDelay          = findViewById(R.id.etAttackDelay)
+        tvAttackCoord          = findViewById(R.id.tvAttackCoord)
+        tvSkill1Coord          = findViewById(R.id.tvSkill1Coord)
+        etSkill1Cd             = findViewById(R.id.etSkill1Cd)
+        tvSkill2Coord          = findViewById(R.id.tvSkill2Coord)
+        etSkill2Cd             = findViewById(R.id.etSkill2Cd)
+        tvSkill3Coord          = findViewById(R.id.tvSkill3Coord)
+        etSkill3Cd             = findViewById(R.id.etSkill3Cd)
+        tvSkill4Coord          = findViewById(R.id.tvSkill4Coord)
+        etSkill4Cd             = findViewById(R.id.etSkill4Cd)
+        tvSkill5Coord          = findViewById(R.id.tvSkill5Coord)
+        etSkill5Cd             = findViewById(R.id.etSkill5Cd)
+        tvPotion1Coord         = findViewById(R.id.tvPotion1Coord)
+        tvPotion2Coord         = findViewById(R.id.tvPotion2Coord)
+        tvPotion3Coord         = findViewById(R.id.tvPotion3Coord)
+        tvPotion4Coord         = findViewById(R.id.tvPotion4Coord)
+        tvPotion5Coord         = findViewById(R.id.tvPotion5Coord)
+        tvPotion6Coord         = findViewById(R.id.tvPotion6Coord)
+        tvPotion7Coord         = findViewById(R.id.tvPotion7Coord)
         tvInventoryPotionCoord = findViewById(R.id.tvInventoryPotionCoord)
-        tvJoystickCoord      = findViewById(R.id.tvJoystickCoord)
-        etJoystickRadius     = findViewById(R.id.etJoystickRadius)
-        tvCameraCoord        = findViewById(R.id.tvCameraCoord)
-        etCameraSwipeRange   = findViewById(R.id.etCameraSwipeRange)
-        tvHpBarCoord         = findViewById(R.id.tvHpBarCoord)
-        etHpBarFullWidth     = findViewById(R.id.etHpBarFullWidth)
-        etHpPotionThreshold  = findViewById(R.id.etHpPotionThreshold)
-        tvPlayerCoord        = findViewById(R.id.tvPlayerCoord)
-        etDefenseRadius      = findViewById(R.id.etDefenseRadius)
+        etPotionOnlyCd         = findViewById(R.id.etPotionOnlyCd)
+        tvJoystickCoord        = findViewById(R.id.tvJoystickCoord)
+        etJoystickRadius       = findViewById(R.id.etJoystickRadius)
+        tvCameraCoord          = findViewById(R.id.tvCameraCoord)
+        etCameraSwipeRange     = findViewById(R.id.etCameraSwipeRange)
+        tvHpBarCoord           = findViewById(R.id.tvHpBarCoord)
+        etHpBarFullWidth       = findViewById(R.id.etHpBarFullWidth)
+        etHpPotionThreshold    = findViewById(R.id.etHpPotionThreshold)
+        tvPlayerCoord          = findViewById(R.id.tvPlayerCoord)
+        etDefenseRadius        = findViewById(R.id.etDefenseRadius)
     }
 
     private fun coord(x: Float, y: Float) = if (x > 0f) xy(x, y) else "non impostato"
@@ -168,33 +172,34 @@ class MainActivity : AppCompatActivity() {
         etMaxKills.setText(cfg.maxKills.toString())
         etSessionMinutes.setText(cfg.sessionMinutes.toString())
         etAttackDelay.setText(cfg.attackDelayMs.toString())
-        tvAttackCoord.text       = coord(cfg.attackX, cfg.attackY)
-        tvSkill1Coord.text       = coord(cfg.skill1X, cfg.skill1Y)
+        tvAttackCoord.text        = coord(cfg.attackX, cfg.attackY)
+        tvSkill1Coord.text        = coord(cfg.skill1X, cfg.skill1Y)
         etSkill1Cd.setText((cfg.skill1CooldownMs / 1000).toString())
-        tvSkill2Coord.text       = coord(cfg.skill2X, cfg.skill2Y)
+        tvSkill2Coord.text        = coord(cfg.skill2X, cfg.skill2Y)
         etSkill2Cd.setText((cfg.skill2CooldownMs / 1000).toString())
-        tvSkill3Coord.text       = coord(cfg.skill3X, cfg.skill3Y)
+        tvSkill3Coord.text        = coord(cfg.skill3X, cfg.skill3Y)
         etSkill3Cd.setText((cfg.skill3CooldownMs / 1000).toString())
-        tvSkill4Coord.text       = coord(cfg.skill4X, cfg.skill4Y)
+        tvSkill4Coord.text        = coord(cfg.skill4X, cfg.skill4Y)
         etSkill4Cd.setText((cfg.skill4CooldownMs / 1000).toString())
-        tvSkill5Coord.text       = coord(cfg.skill5X, cfg.skill5Y)
+        tvSkill5Coord.text        = coord(cfg.skill5X, cfg.skill5Y)
         etSkill5Cd.setText((cfg.skill5CooldownMs / 1000).toString())
-        tvPotion1Coord.text      = coord(cfg.potion1X, cfg.potion1Y)
-        tvPotion2Coord.text      = coord(cfg.potion2X, cfg.potion2Y)
-        tvPotion3Coord.text      = coord(cfg.potion3X, cfg.potion3Y)
-        tvPotion4Coord.text      = coord(cfg.potion4X, cfg.potion4Y)
-        tvPotion5Coord.text      = coord(cfg.potion5X, cfg.potion5Y)
-        tvPotion6Coord.text      = coord(cfg.potion6X, cfg.potion6Y)
-        tvPotion7Coord.text      = coord(cfg.potion7X, cfg.potion7Y)
+        tvPotion1Coord.text       = coord(cfg.potion1X, cfg.potion1Y)
+        tvPotion2Coord.text       = coord(cfg.potion2X, cfg.potion2Y)
+        tvPotion3Coord.text       = coord(cfg.potion3X, cfg.potion3Y)
+        tvPotion4Coord.text       = coord(cfg.potion4X, cfg.potion4Y)
+        tvPotion5Coord.text       = coord(cfg.potion5X, cfg.potion5Y)
+        tvPotion6Coord.text       = coord(cfg.potion6X, cfg.potion6Y)
+        tvPotion7Coord.text       = coord(cfg.potion7X, cfg.potion7Y)
         tvInventoryPotionCoord.text = coord(cfg.inventoryPotionX, cfg.inventoryPotionY)
-        tvJoystickCoord.text     = coord(cfg.joystickX, cfg.joystickY)
+        etPotionOnlyCd.setText((cfg.potionOnlyCdMs / 1000).toString())
+        tvJoystickCoord.text      = coord(cfg.joystickX, cfg.joystickY)
         etJoystickRadius.setText(if (cfg.joystickRadius > 0f) cfg.joystickRadius.toInt().toString() else "0")
-        tvCameraCoord.text       = coord(cfg.cameraAreaX, cfg.cameraAreaY)
+        tvCameraCoord.text        = coord(cfg.cameraAreaX, cfg.cameraAreaY)
         etCameraSwipeRange.setText(if (cfg.cameraSwipeRange > 0f) cfg.cameraSwipeRange.toInt().toString() else "0")
-        tvHpBarCoord.text        = coord(cfg.hpBarX, cfg.hpBarY)
+        tvHpBarCoord.text         = coord(cfg.hpBarX, cfg.hpBarY)
         etHpBarFullWidth.setText(cfg.hpBarFullWidth.toString())
         etHpPotionThreshold.setText((cfg.hpPotionThreshold * 100).toInt().toString())
-        tvPlayerCoord.text       = coord(cfg.playerX, cfg.playerY)
+        tvPlayerCoord.text        = coord(cfg.playerX, cfg.playerY)
         etDefenseRadius.setText(cfg.defenseRadiusPx.toString())
     }
 
@@ -286,17 +291,17 @@ class MainActivity : AppCompatActivity() {
     private fun startCalibration() {
         calibrationQueue = ArrayDeque(
             listOf(
-                K_ATTACK to "Bottone Attacco (spada grande)",
-                K_SK1 to "Abilità 1",
-                K_SK2 to "Abilità 2",
-                K_SK3 to "Abilità 3",
-                K_SK4 to "Abilità 4",
-                K_SK5 to "Abilità 5",
-                K_POTION to "Pozione rossa",
-                K_BACKUP to "Pozione backup",
-                K_JOYSTICK to "Centro Joystick",
-                K_HP to "Bordo sinistro barra HP",
-                K_PLAYER to "Centro personaggio (petto)"
+                K_ATTACK    to "Bottone Attacco (spada grande)",
+                K_SK1       to "Abilità 1",
+                K_SK2       to "Abilità 2",
+                K_SK3       to "Abilità 3",
+                K_SK4       to "Abilità 4",
+                K_SK5       to "Abilità 5",
+                K_POT1      to "Slot Pozione 1 (rossa)",
+                K_INV_POT   to "Pozione rossa nell'inventario",
+                K_JOYSTICK  to "Centro Joystick",
+                K_HP        to "Bordo sinistro barra HP",
+                K_PLAYER    to "Centro personaggio (petto)"
             )
         )
         toast("Calibrazione avviata: tocca i punti richiesti in sequenza")
@@ -325,19 +330,20 @@ class MainActivity : AppCompatActivity() {
         cfg = cfg.copy(
             monsterName       = etMonsterName.text.toString().trim(),
             playerName        = etPlayerName.text.toString().trim(),
-            maxKills          = etMaxKills.text.toString().toIntOrNull()        ?: cfg.maxKills,
-            sessionMinutes    = etSessionMinutes.text.toString().toIntOrNull()  ?: cfg.sessionMinutes,
-            attackDelayMs     = etAttackDelay.text.toString().toLongOrNull()    ?: cfg.attackDelayMs,
-            skill1CooldownMs  = (etSkill1Cd.text.toString().toLongOrNull()      ?: (cfg.skill1CooldownMs / 1000)) * 1000,
-            skill2CooldownMs  = (etSkill2Cd.text.toString().toLongOrNull()      ?: (cfg.skill2CooldownMs / 1000)) * 1000,
-            skill3CooldownMs  = (etSkill3Cd.text.toString().toLongOrNull()      ?: (cfg.skill3CooldownMs / 1000)) * 1000,
-            skill4CooldownMs  = (etSkill4Cd.text.toString().toLongOrNull()      ?: (cfg.skill4CooldownMs / 1000)) * 1000,
-            skill5CooldownMs  = (etSkill5Cd.text.toString().toLongOrNull()      ?: (cfg.skill5CooldownMs / 1000)) * 1000,
-            joystickRadius    = etJoystickRadius.text.toString().toFloatOrNull() ?: cfg.joystickRadius,
+            maxKills          = etMaxKills.text.toString().toIntOrNull()           ?: cfg.maxKills,
+            sessionMinutes    = etSessionMinutes.text.toString().toIntOrNull()     ?: cfg.sessionMinutes,
+            attackDelayMs     = etAttackDelay.text.toString().toLongOrNull()       ?: cfg.attackDelayMs,
+            skill1CooldownMs  = (etSkill1Cd.text.toString().toLongOrNull()         ?: (cfg.skill1CooldownMs / 1000)) * 1000,
+            skill2CooldownMs  = (etSkill2Cd.text.toString().toLongOrNull()         ?: (cfg.skill2CooldownMs / 1000)) * 1000,
+            skill3CooldownMs  = (etSkill3Cd.text.toString().toLongOrNull()         ?: (cfg.skill3CooldownMs / 1000)) * 1000,
+            skill4CooldownMs  = (etSkill4Cd.text.toString().toLongOrNull()         ?: (cfg.skill4CooldownMs / 1000)) * 1000,
+            skill5CooldownMs  = (etSkill5Cd.text.toString().toLongOrNull()         ?: (cfg.skill5CooldownMs / 1000)) * 1000,
+            potionOnlyCdMs    = (etPotionOnlyCd.text.toString().toLongOrNull()     ?: (cfg.potionOnlyCdMs / 1000)).coerceAtLeast(1) * 1000,
+            joystickRadius    = etJoystickRadius.text.toString().toFloatOrNull()   ?: cfg.joystickRadius,
             cameraSwipeRange  = etCameraSwipeRange.text.toString().toFloatOrNull() ?: cfg.cameraSwipeRange,
-            hpBarFullWidth    = etHpBarFullWidth.text.toString().toIntOrNull()  ?: cfg.hpBarFullWidth,
+            hpBarFullWidth    = etHpBarFullWidth.text.toString().toIntOrNull()     ?: cfg.hpBarFullWidth,
             hpPotionThreshold = (etHpPotionThreshold.text.toString().toFloatOrNull() ?: (cfg.hpPotionThreshold * 100)) / 100f,
-            defenseRadiusPx   = etDefenseRadius.text.toString().toIntOrNull()  ?: cfg.defenseRadiusPx,
+            defenseRadiusPx   = etDefenseRadius.text.toString().toIntOrNull()     ?: cfg.defenseRadiusPx,
         )
         BotConfig.save(this, cfg)
         toast("Impostazioni salvate ✓")

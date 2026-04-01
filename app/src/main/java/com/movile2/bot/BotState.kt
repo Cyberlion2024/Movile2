@@ -15,8 +15,18 @@ object BotState {
     // Debug overlay: dove sta tappando la pozione (0 = non ancora trovata)
     @Volatile var potTapX: Float = 0f
     @Volatile var potTapY: Float = 0f
-    // "AUTO" = rilevata da screenshot, "MANUALE" = configurata dall'utente, "" = non trovata
+    // "AUTO" = rilevata da screenshot, "MAN" = configurata dall'utente, "" = non trovata
     @Volatile var potSource: String = ""
+
+    // ── Modalità Solo Pozioni ─────────────────────────────────────────────────
+    // Quando true: loop separato che preme gli slot pozione continuamente,
+    // SENZA attaccare né muoversi. Funziona anche con isRunning=false.
+    @Volatile var potionOnlyMode: Boolean = false
+
+    // ── Raccolta terra individuale ────────────────────────────────────────────
+    // Quando true: invece del centroide unico, il bot tappa su ogni oggetto
+    // trovato (nome personaggio bianco + yang dorato) uno per uno.
+    @Volatile var groundLootMode: Boolean = false
 
     var onUpdate: (() -> Unit)? = null
 }

@@ -33,9 +33,6 @@ data class BotConfig(
     val skill5CooldownMs: Long = 15000L,
 
     // ── Slot pozione vita (fino a 7) ─────────────────────────────────────────
-    // Ogni slot è configurabile dall'utente toccando lo schermo.
-    // Quando uno slot si svuota (pixel detection → nessun rosso), il bot passa
-    // al successivo. Quando tutti sono vuoti, trascina dall'inventario al slot 1.
     val potion1X: Float = 0f, val potion1Y: Float = 0f,
     val potion2X: Float = 0f, val potion2Y: Float = 0f,
     val potion3X: Float = 0f, val potion3Y: Float = 0f,
@@ -47,6 +44,11 @@ data class BotConfig(
     // Posizione pozione rossa nell'inventario (per il refill automatico)
     val inventoryPotionX: Float = 0f,
     val inventoryPotionY: Float = 0f,
+
+    // ── Modalità solo pozioni ─────────────────────────────────────────────────
+    // Intervallo tra un ciclo di tap-pozioni e il successivo (in ms).
+    // Default 3000ms = ogni 3 secondi preme tutti gli slot attivi in sequenza.
+    val potionOnlyCdMs: Long = 3000L,
 
     val joystickX: Float = 0f,
     val joystickY: Float = 0f,
@@ -120,6 +122,7 @@ data class BotConfig(
                 potion7Y          = p.getFloat("potion7Y", 0f),
                 inventoryPotionX  = p.getFloat("inventoryPotionX", 0f),
                 inventoryPotionY  = p.getFloat("inventoryPotionY", 0f),
+                potionOnlyCdMs    = p.getLong("potionOnlyCdMs", 3000L),
                 joystickX         = p.getFloat("joystickX", 0f),
                 joystickY         = p.getFloat("joystickY", 0f),
                 joystickRadius    = p.getFloat("joystickRadius", 0f),
@@ -176,6 +179,7 @@ data class BotConfig(
                 putFloat("potion7Y", cfg.potion7Y)
                 putFloat("inventoryPotionX", cfg.inventoryPotionX)
                 putFloat("inventoryPotionY", cfg.inventoryPotionY)
+                putLong("potionOnlyCdMs", cfg.potionOnlyCdMs)
                 putFloat("joystickX", cfg.joystickX)
                 putFloat("joystickY", cfg.joystickY)
                 putFloat("joystickRadius", cfg.joystickRadius)

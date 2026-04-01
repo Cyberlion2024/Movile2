@@ -18,6 +18,10 @@ Android bot app in Kotlin for MMORPG automation using Accessibility Service + Ov
 | `BotConfig.kt` | Data class + SharedPreferences per persistere le impostazioni |
 | `BotState.kt` | Singleton condiviso per stato runtime (isRunning, killCount) |
 
+## Features v7 — Solo Pozioni + Raccolta Terra Individuale
+- **Modalità Solo Pozioni** (nuovo): loop indipendente che preme tutti gli slot pozione configurati ogni N secondi (configurabile), SENZA attaccare né muoversi. Attivabile dall'overlay (pulsante 💊 POZ) anche con il bot fermo.
+- **Raccolta terra individuale** (nuovo): trova ogni oggetto (nome personaggio = testo bianco, yang = pixel oro) come cluster separato e ci tappa su uno per uno con 350ms di delay. Attivabile dall'overlay (pulsante 🎒 LOOT).
+
 ## Features v6 — Sistema Pozioni Multi-Slot
 - **Multi-touch simultaneo**: Attack (SEMPRE incluso) + Skill1..5 + Target nello stesso frame
 - **Loop unificato**: nessuna state machine; pozione inline senza interrompere il combattimento

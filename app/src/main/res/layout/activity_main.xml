@@ -778,6 +778,52 @@ abilita Movile2 Bot (non usare il menu principale Accessibilità)"
                 android:text="Imposta" android:textSize="11sp" android:paddingStart="10dp" android:paddingEnd="10dp" />
         </LinearLayout>
 
+        <!-- ── Modalità Solo Pozioni ─────────────────────────────────────── -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="💊 Modalità Solo Pozioni"
+            android:textSize="15sp"
+            android:textColor="#4fc3f7"
+            android:textStyle="bold"
+            android:paddingTop="8dp"
+            android:paddingBottom="4dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Preme tutti gli slot pozione configurati a intervallo regolare, senza attaccare né muoversi. Attivabile dal pannello flottante (pulsante 💊 POZ)."
+            android:textSize="11sp"
+            android:textColor="#aaaaaa"
+            android:background="#0d1a0d"
+            android:padding="8dp"
+            android:layout_marginBottom="8dp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="16dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Intervallo pozione (sec):"
+                android:textColor="#cccccc"
+                android:gravity="center_vertical" />
+
+            <EditText
+                android:id="@+id/etPotionOnlyCd"
+                android:layout_width="80dp"
+                android:layout_height="wrap_content"
+                android:inputType="number"
+                android:textColor="#ffffff"
+                android:background="#1e1e3a"
+                android:padding="8dp"
+                android:text="3" />
+        </LinearLayout>
+
         <!-- ── Salva + Reset + Overlay ───────────────────────────────────── -->
         <LinearLayout
             android:layout_width="match_parent"
