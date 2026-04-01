@@ -38,23 +38,41 @@ class BotAccessibilityService : AccessibilityService() {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // LOOP RACCOLTA
+    // LOOP RACCOLTA — gesto multi-stroke
+    //
+    // Tutti gli item trovati vengono raccolti con UN SOLO dispatchGesture.
+    // Ogni item = uno stroke da 60ms con offset temporale di 350ms.
+    // Questo è il massimo che possiamo fare: il server richiede un tap
+    // individuale per ogni dropId — non esiste raccolta AoE lato server.
+    //
+    // Vantaggi rispetto a handler.postDelayed multipli:
+    //  - Una sola chiamata al sistema Android
+    //  - Meno interferenze con i tocchi reali dell'utente
+    //  - Timing gestito internamente dal sistema gesture
     // ═══════════════════════════════════════════════════════════════════════════
     private val lootLoop = object : Runnable {
         override fun run() {
             if (!BotState.lootRunning) return
             val items = lootTargets
             BotState.lootItemsFound = items.size
-            var delay = 0L
-            for ((ix, iy) in items) {
-                handler.postDelayed({
-                    if (!BotState.lootRunning) return@postDelayed
-                    tap(ix, iy)
-                    handler.postDelayed({ if (BotState.lootRunning) tap(ix, iy) }, 250L)
-                }, delay)
-                delay += 600L
+
+            if (items.isEmpty()) {
+                handler.postDelayed(this, 500L)
+                return
             }
-            handler.postDelayed(this, delay + 400L)
+
+            // Costruisce un unico gesto con N stroke (uno per item)
+            val builder = GestureDescription.Builder()
+            var time = 0L
+            for ((ix, iy) in items.take(10)) {
+                val path = Path().apply { moveTo(ix, iy) }
+                builder.addStroke(GestureDescription.StrokeDescription(path, time, 60L))
+                time += 350L
+            }
+            try { dispatchGesture(builder.build(), null, null) } catch (_: Exception) {}
+
+            // Riparte dopo che tutti gli stroke sono terminati
+            handler.postDelayed(this, time + 500L)
         }
     }
 
