@@ -38,17 +38,25 @@ li{margin-bottom:8px;line-height:1.6;color:#ccc}
 <body>
 <div class="wrap">
   <h1>&#129302; Movile2 Bot</h1>
-  <p class="sub">Bot Android per MMORPG &mdash; Kotlin + Accessibility Service &mdash; <strong>v7</strong></p>
+  <p class="sub">Bot Android per MMORPG &mdash; Kotlin + Accessibility Service &mdash; <strong>v8</strong></p>
+
+  <div class="card">
+    <h2>&#10024; Novit&agrave; v8 &mdash; Pausa Joystick Automatica + Loot Conservativo</h2>
+    <ul>
+      <li><strong>Pausa automatica sul joystick</strong> <span class="new">NEW</span> &mdash; premi <strong>🕹️ IMPOSTA JOYSTICK</strong> e tocca il centro del tuo joystick. Da quel momento, ogni volta che usi il joystick <em>tutti</em> i bot (attacco, pozione, loot) si fermano istantaneamente. Quando alzi il dito, tutto riprende immediatamente</li>
+      <li><strong>Forwarding gesture trasparente</strong> <span class="new">NEW</span> &mdash; l&#39;overlay sul joystick intercetta il tocco e lo ritrasmette al gioco tramite <code>continueStroke</code>: il personaggio si muove esattamente come senza il bot</li>
+      <li><strong>Loot molto pi&ugrave; conservativo</strong> <span class="new">NEW</span> &mdash; zona ristretta al centro schermo (22%..68% x, 32%..72% y), raggio massimo 22% larghezza, solo colori yang (oro/ambra) e nomi item bianchi, soglia 4 pixel, max 5 bersagli. Rimosso il rilevamento generico &ldquo;bright warm&rdquo; che causava tap casuali su elementi UI</li>
+    </ul>
+    <div class="ok">&#9989; Come usare il joystick: premi <strong>🕹️ IMPOSTA JOYSTICK</strong> nel pannello &rarr; tocca il centro del joystick sullo schermo &rarr; un overlay invisibile 280&times;280dp viene posizionato l&igrave;. Da quel momento muoviti liberamente: attacco e pozioni si fermano mentre cammini e riprendono appena ti fermi.</div>
+  </div>
 
   <div class="card">
     <h2>&#10024; Novit&agrave; v7 &mdash; Loot Migliorato + Hide Pannello + Fix Attacco Manuale</h2>
     <ul>
-      <li><strong>Loot yang/oggetti potenziato</strong> <span class="new">NEW</span> &mdash; soglia abbassata a 3 pixel (era 5), due range colore per yang (brillante + ambra), area scansione espansa (10%..78% x, 20%..82% y), ordinamento per distanza dal personaggio</li>
-      <li><strong>Hide pannello</strong> <span class="new">NEW</span> &mdash; premi <strong>▼</strong> nella barra del pannello per collassarlo a una sola riga; premi <strong>▶</strong> per espandere. Il pannello non copre pi&ugrave; lo schermo di gioco</li>
-      <li><strong>Fix attacco manuale + pozione</strong> <span class="new">NEW</span> &mdash; quando la pozione bot spara mentre attacchi a mano, il bot invia automaticamente un re-tap sull&#39;attacco 70ms dopo per ripristinare il colpo</li>
-      <li><strong>Tap attacco pi&ugrave; breve</strong> <span class="new">NEW</span> &mdash; ridotto da 60ms a 40ms: il joystick ha pi&ugrave; finestre libere per registrare il movimento</li>
+      <li><strong>Hide pannello</strong> &mdash; premi <strong>▼</strong> nella barra del pannello per collassarlo a una sola riga; premi <strong>▶</strong> per espandere</li>
+      <li><strong>Fix attacco manuale + pozione</strong> &mdash; re-tap automatico sull&#39;attacco 70ms dopo ogni pozione</li>
+      <li><strong>Tap attacco pi&ugrave; breve</strong> &mdash; ridotto a 40ms per meno interferenza col joystick</li>
     </ul>
-    <div class="warn">&#9888; Il re-tap automatico funziona solo se la posizione ATT &egrave; impostata. Per l&#39;esperienza migliore con attacco manuale: imposta sempre la posizione ATT prima di usare solo POZ.</div>
   </div>
 
   <div class="card">

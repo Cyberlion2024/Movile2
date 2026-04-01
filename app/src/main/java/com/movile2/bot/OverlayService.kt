@@ -1,6 +1,5 @@
 package com.movile2.bot
 
-import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
@@ -26,12 +25,14 @@ class OverlayService : Service() {
     private lateinit var wm: WindowManager
     private var panel: LinearLayout? = null
     private var captureView: View? = null
+    private var joystickZoneView: View? = null   // overlay trasparente sul joystick
     private var tvStatus: TextView? = null
     private var btnAttack: TextView? = null
     private var btnSetAtt: TextView? = null
     private var btnPot: TextView? = null
     private var btnLoot: TextView? = null
     private var btnSetPoz: TextView? = null
+    private var btnSetJoy: TextView? = null
     private var contentLayout: LinearLayout? = null
     private var btnToggle: TextView? = null
     private var panelCollapsed = false
@@ -39,9 +40,13 @@ class OverlayService : Service() {
 
     private var potInterval: Long = 3000L
 
-    // ── Modalità cattura corrente ─────────────────────────────────────────────
-    private enum class CaptureMode { NONE, ATTACK, POTION }
+    private enum class CaptureMode { NONE, ATTACK, POTION, JOYSTICK }
     private var captureMode = CaptureMode.NONE
+
+    // ── Dimensione zona joystick in pixel ─────────────────────────────────────
+    // Il joystick tipico nei MMORPG mobile occupa ~140dp di raggio.
+    // Usiamo 280dp × 280dp come zona di intercettazione.
+    private val joyZoneDp = 280
 
     // ── Ticker — aggiorna testo ogni 500ms ────────────────────────────────────
     private val ticker = object : Runnable {
@@ -52,13 +57,19 @@ class OverlayService : Service() {
             val found  = BotState.lootItemsFound
             val slots  = BotState.potionSlots.size
             val hasAtt = BotState.attackPos != null
+            val hasJoy = BotState.joystickPos != null
 
             val parts = mutableListOf<String>()
-            if (attOn)  parts.add("⚔️ ATT")
-            if (potOn)  parts.add("💊 POZ")
-            if (lootOn) parts.add("🎒 LOOT($found)")
+            if (BotState.joystickActive) parts.add("🕹️ PAUSA")
+            else {
+                if (attOn)  parts.add("⚔️ ATT")
+                if (potOn)  parts.add("💊 POZ")
+                if (lootOn) parts.add("🎒 LOOT($found)")
+            }
             tvStatus?.text = if (parts.isEmpty()) "● INATTIVO" else parts.joinToString(" + ")
-            tvStatus?.setTextColor(if (parts.isEmpty()) Color.LTGRAY else Color.GREEN)
+            tvStatus?.setTextColor(
+                if (BotState.joystickActive) Color.YELLOW
+                else if (parts.isEmpty()) Color.LTGRAY else Color.GREEN)
 
             btnSetAtt?.text = if (hasAtt) "🎯 ATT ✓" else "🎯 IMPOSTA ATT"
 
@@ -77,6 +88,10 @@ class OverlayService : Service() {
             btnLoot?.setBackgroundColor(
                 if (lootOn) Color.argb(230, 20, 150, 50) else Color.argb(220, 50, 50, 80))
 
+            btnSetJoy?.text = if (hasJoy) "🕹️ JOYSTICK ✓" else "🕹️ IMPOSTA JOYSTICK"
+            btnSetJoy?.setBackgroundColor(
+                if (hasJoy) Color.argb(220, 30, 80, 30) else Color.argb(220, 60, 40, 10))
+
             handler.postDelayed(this, 500L)
         }
     }
@@ -94,9 +109,11 @@ class OverlayService : Service() {
         BotAccessibilityService.instance?.stopAttack()
         BotAccessibilityService.instance?.stopPotion()
         BotAccessibilityService.instance?.stopLoot()
+        BotState.joystickActive = false
         panel?.let { runCatching { wm.removeView(it) } }
         captureView?.let { runCatching { wm.removeView(it) } }
-        panel = null; captureView = null
+        joystickZoneView?.let { runCatching { wm.removeView(it) } }
+        panel = null; captureView = null; joystickZoneView = null
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -113,27 +130,22 @@ class OverlayService : Service() {
             setPadding(16, 12, 16, 12)
         }
 
-        // ── Barra superiore: drag + pulsante hide ─────────────────────────────
+        // ── Barra superiore: drag + hide ──────────────────────────────────────
         val topBar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-
         val drag = makeText("☰ BOT", 11f, Color.argb(180, 150, 200, 255))
         drag.layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-
         btnToggle = makeText("▼", 13f, Color.argb(200, 150, 200, 255))
         btnToggle!!.setPadding(12, 4, 4, 4)
-
         topBar.addView(drag)
         topBar.addView(btnToggle)
 
         tvStatus = makeText("● INATTIVO", 13f, Color.LTGRAY)
 
         // ── Contenuto collassabile ─────────────────────────────────────────────
-        val content = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-        }
+        val content = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
 
         // Attacco
         btnSetAtt = makeButton("🎯 IMPOSTA ATT", Color.argb(220, 100, 40, 0))
@@ -141,17 +153,10 @@ class OverlayService : Service() {
 
         btnAttack = makeButton("⚔️ ATT: OFF", Color.argb(220, 50, 50, 80))
         btnAttack!!.setOnClickListener {
-            val bot = BotAccessibilityService.instance ?: run {
-                showWarn("Abilita Accessibilità!")
-                return@setOnClickListener
-            }
-            if (BotState.attackRunning) {
-                bot.stopAttack()
-            } else {
-                if (BotState.attackPos == null) {
-                    showWarn("Prima imposta ATT!")
-                    return@setOnClickListener
-                }
+            val bot = BotAccessibilityService.instance ?: run { showWarn("Abilita Accessibilità!"); return@setOnClickListener }
+            if (BotState.attackRunning) bot.stopAttack()
+            else {
+                if (BotState.attackPos == null) { showWarn("Prima imposta ATT!"); return@setOnClickListener }
                 bot.startAttack()
             }
         }
@@ -162,17 +167,10 @@ class OverlayService : Service() {
 
         btnPot = makeButton("💊 POZ: OFF", Color.argb(220, 50, 50, 80))
         btnPot!!.setOnClickListener {
-            val bot = BotAccessibilityService.instance ?: run {
-                showWarn("Abilita Accessibilità!")
-                return@setOnClickListener
-            }
-            if (BotState.potionRunning) {
-                bot.stopPotion()
-            } else {
-                if (BotState.potionSlots.isEmpty()) {
-                    showWarn("Prima imposta la POZ!")
-                    return@setOnClickListener
-                }
+            val bot = BotAccessibilityService.instance ?: run { showWarn("Abilita Accessibilità!"); return@setOnClickListener }
+            if (BotState.potionRunning) bot.stopPotion()
+            else {
+                if (BotState.potionSlots.isEmpty()) { showWarn("Prima imposta POZ!"); return@setOnClickListener }
                 bot.startPotion(potInterval)
             }
         }
@@ -180,12 +178,13 @@ class OverlayService : Service() {
         // Loot
         btnLoot = makeButton("🎒 LOOT: OFF", Color.argb(220, 50, 50, 80))
         btnLoot!!.setOnClickListener {
-            val bot = BotAccessibilityService.instance ?: run {
-                showWarn("Abilita Accessibilità!")
-                return@setOnClickListener
-            }
+            val bot = BotAccessibilityService.instance ?: run { showWarn("Abilita Accessibilità!"); return@setOnClickListener }
             if (BotState.lootRunning) bot.stopLoot() else bot.startLoot()
         }
+
+        // Joystick
+        btnSetJoy = makeButton("🕹️ IMPOSTA JOYSTICK", Color.argb(220, 60, 40, 10))
+        btnSetJoy!!.setOnClickListener { startPickJoystick() }
 
         content.addView(space(6))
         content.addView(btnSetAtt)
@@ -197,6 +196,8 @@ class OverlayService : Service() {
         content.addView(btnPot)
         content.addView(space(4))
         content.addView(btnLoot)
+        content.addView(space(8))
+        content.addView(btnSetJoy)
 
         contentLayout = content
 
@@ -211,26 +212,21 @@ class OverlayService : Service() {
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
         ).apply { gravity = Gravity.TOP or Gravity.START; x = 16; y = 180 }
 
-        // ── Drag sulla barra superiore ─────────────────────────────────────────
-        var dX = 0f; var dY = 0f; var sX = 0; var sY = 0; var moved = false
+        // Drag
+        var dX = 0f; var dY = 0f; var sX = 0; var sY = 0
         drag.setOnTouchListener { _, e ->
             when (e.action) {
-                MotionEvent.ACTION_DOWN -> {
-                    dX = e.rawX; dY = e.rawY; sX = lp.x; sY = lp.y; moved = false; true
-                }
+                MotionEvent.ACTION_DOWN -> { dX = e.rawX; dY = e.rawY; sX = lp.x; sY = lp.y; true }
                 MotionEvent.ACTION_MOVE -> {
-                    val nx = (sX + (e.rawX - dX)).toInt()
-                    val ny = (sY + (e.rawY - dY)).toInt()
-                    if (Math.abs(nx - sX) > 4 || Math.abs(ny - sY) > 4) moved = true
-                    lp.x = nx; lp.y = ny
-                    wm.updateViewLayout(root, lp)
-                    true
+                    lp.x = (sX + (e.rawX - dX)).toInt()
+                    lp.y = (sY + (e.rawY - dY)).toInt()
+                    wm.updateViewLayout(root, lp); true
                 }
                 else -> false
             }
         }
 
-        // ── Pulsante hide/show ─────────────────────────────────────────────────
+        // Hide / show
         btnToggle!!.setOnClickListener {
             panelCollapsed = !panelCollapsed
             if (panelCollapsed) {
@@ -254,13 +250,7 @@ class OverlayService : Service() {
     private fun startPickAttack() {
         if (captureView != null) return
         captureMode = CaptureMode.ATTACK
-
-        tvStatus?.text = "Tocca il tasto ATTACCO... (5s)"
-        tvStatus?.setTextColor(Color.YELLOW)
-        if (panelCollapsed) {
-            tvStatus?.visibility = View.VISIBLE
-        }
-
+        showStatus("Tocca il tasto ATTACCO... (5s)", Color.YELLOW)
         val cv = makeCaptureOverlay()
         cv.setOnTouchListener { _, e ->
             if (e.action == MotionEvent.ACTION_DOWN && captureMode == CaptureMode.ATTACK) {
@@ -269,7 +259,6 @@ class OverlayService : Service() {
             }
             true
         }
-
         wm.addView(cv, captureOverlayParams())
         captureView = cv
         scheduleCaptureTimeout()
@@ -285,18 +274,11 @@ class OverlayService : Service() {
     private fun startPickPotion() {
         if (captureView != null) return
         captureMode = CaptureMode.POTION
-
         BotState.potionSlots.clear()
         BotState.potionRunning = false
         BotAccessibilityService.instance?.stopPotion()
         slotsAddedDuringCapture = 0
-
-        tvStatus?.text = "Tocca slot 1/3... (5s)"
-        tvStatus?.setTextColor(Color.YELLOW)
-        if (panelCollapsed) {
-            tvStatus?.visibility = View.VISIBLE
-        }
-
+        showStatus("Tocca slot 1/3... (5s)", Color.YELLOW)
         val cv = makeCaptureOverlay()
         cv.setOnTouchListener { _, e ->
             if (e.action == MotionEvent.ACTION_DOWN && captureMode == CaptureMode.POTION) {
@@ -306,18 +288,100 @@ class OverlayService : Service() {
                     finishCapture(null)
                 } else {
                     val next = slotsAddedDuringCapture + 1
-                    tvStatus?.text = "✓ Slot $slotsAddedDuringCapture  →  Tocca slot $next/3 o aspetta"
-                    tvStatus?.setTextColor(Color.YELLOW)
+                    showStatus("✓ Slot $slotsAddedDuringCapture  →  Tocca slot $next/3 o aspetta", Color.YELLOW)
                 }
             }
             true
         }
-
         wm.addView(cv, captureOverlayParams())
         captureView = cv
         scheduleCaptureTimeout()
     }
 
+    // ═══════════════════════════════════════════════════════════════════════════
+    // CATTURA POSIZIONE JOYSTICK
+    // Dopo il tocco, crea l'overlay trasparente fisso su quella zona.
+    // ═══════════════════════════════════════════════════════════════════════════
+    private fun startPickJoystick() {
+        if (captureView != null) return
+        captureMode = CaptureMode.JOYSTICK
+        showStatus("Tocca il CENTRO del joystick... (5s)", Color.YELLOW)
+        val cv = makeCaptureOverlay()
+        cv.setOnTouchListener { _, e ->
+            if (e.action == MotionEvent.ACTION_DOWN && captureMode == CaptureMode.JOYSTICK) {
+                BotState.joystickPos = e.rawX to e.rawY
+                finishCapture("🕹️ Joystick impostato! Overlay attivo.")
+                createJoystickZoneOverlay(e.rawX, e.rawY)
+            }
+            true
+        }
+        wm.addView(cv, captureOverlayParams())
+        captureView = cv
+        scheduleCaptureTimeout()
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // OVERLAY ZONA JOYSTICK
+    //
+    // Overlay trasparente posizionato sul joystick.
+    // NON ha FLAG_NOT_TOUCHABLE → intercetta i touch dell'utente.
+    // Ogni touch viene inoltrato al gioco tramite BotAccessibilityService
+    // usando la catena continueStroke (nessuna interruzione del joystick).
+    //
+    // BotState.joystickActive viene settato true/false automaticamente,
+    // e tutti i loop bot si mettono in pausa / riprendono di conseguenza.
+    // ═══════════════════════════════════════════════════════════════════════════
+    private fun createJoystickZoneOverlay(centerX: Float, centerY: Float) {
+        // Rimuove un eventuale overlay precedente
+        joystickZoneView?.let { runCatching { wm.removeView(it) }; joystickZoneView = null }
+
+        val density = resources.displayMetrics.density
+        val zonePx = (joyZoneDp * density).toInt()
+        val halfZone = zonePx / 2
+
+        val jv = View(this).apply {
+            setBackgroundColor(Color.argb(1, 0, 0, 0))  // quasi invisibile
+        }
+
+        jv.setOnTouchListener { _, e ->
+            val bot = BotAccessibilityService.instance
+            when (e.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    bot?.startJoystickForward(e.rawX, e.rawY)
+                    true
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    // Usa getHistoricalSize per movimenti più fluidi
+                    for (h in 0 until e.historySize) {
+                        bot?.updateJoystick(e.getHistoricalX(h), e.getHistoricalY(h))
+                    }
+                    bot?.updateJoystick(e.rawX, e.rawY)
+                    true
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    bot?.stopJoystickForward(e.rawX, e.rawY)
+                    true
+                }
+                else -> false
+            }
+        }
+
+        val jlp = overlayParams(zonePx, zonePx,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+            // FLAG_NOT_TOUCHABLE assente: vogliamo intercettare il tocco
+        ).apply {
+            gravity = Gravity.TOP or Gravity.START
+            x = (centerX - halfZone).toInt().coerceAtLeast(0)
+            y = (centerY - halfZone).toInt().coerceAtLeast(0)
+        }
+
+        wm.addView(jv, jlp)
+        joystickZoneView = jv
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // COMMON CAPTURE HELPERS
+    // ═══════════════════════════════════════════════════════════════════════════
     private fun finishCapture(msg: String?) {
         captureTimeoutRunnable?.let { handler.removeCallbacks(it) }
         captureTimeoutRunnable = null
@@ -325,27 +389,19 @@ class OverlayService : Service() {
         captureMode = CaptureMode.NONE
 
         if (msg != null) {
-            tvStatus?.text = msg
-            tvStatus?.setTextColor(Color.GREEN)
+            showStatus(msg, Color.GREEN)
         } else {
             val slots = BotState.potionSlots.size
-            if (slots == 0) {
-                tvStatus?.text = "Nessuno slot impostato"
-                tvStatus?.setTextColor(Color.LTGRAY)
-                return
-            }
+            if (slots == 0) { showStatus("Nessuno slot impostato", Color.LTGRAY); return }
             val bot = BotAccessibilityService.instance
             if (bot != null) {
                 bot.startPotion(potInterval)
-                tvStatus?.text = "💊 POZ: $slots slot attivi!"
-                tvStatus?.setTextColor(Color.GREEN)
+                showStatus("💊 POZ: $slots slot attivi!", Color.GREEN)
             } else {
-                tvStatus?.text = "$slots slot salvati. Abilita Accessibilità!"
-                tvStatus?.setTextColor(Color.YELLOW)
+                showStatus("$slots slot salvati. Abilita Accessibilità!", Color.YELLOW)
             }
         }
 
-        // Ripristina visibilità status se il pannello è collassato
         if (panelCollapsed) {
             handler.postDelayed({ if (panelCollapsed) tvStatus?.visibility = View.GONE }, 2500L)
         }
@@ -371,19 +427,22 @@ class OverlayService : Service() {
         captureView?.let { runCatching { wm.removeView(it) }; captureView = null }
     }
 
-    private fun showWarn(msg: String) {
+    private fun showStatus(msg: String, color: Int) {
         tvStatus?.text = msg
-        tvStatus?.setTextColor(Color.YELLOW)
+        tvStatus?.setTextColor(color)
+        if (panelCollapsed) tvStatus?.visibility = View.VISIBLE
+    }
+
+    private fun showWarn(msg: String) {
+        showStatus(msg, Color.YELLOW)
         if (panelCollapsed) {
-            tvStatus?.visibility = View.VISIBLE
             handler.postDelayed({ if (panelCollapsed) tvStatus?.visibility = View.GONE }, 2500L)
         }
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
     private fun makeText(txt: String, size: Float, color: Int) = TextView(this).apply {
-        text = txt; textSize = size; setTextColor(color)
-        setPadding(0, 0, 0, 0)
+        text = txt; textSize = size; setTextColor(color); setPadding(0, 0, 0, 0)
     }
 
     private fun makeButton(txt: String, bg: Int) = TextView(this).apply {
