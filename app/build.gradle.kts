@@ -17,6 +17,24 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    // ── Signing ───────────────────────────────────────────────────────────────
+    // In CI le variabili d'ambiente vengono iniettate dal workflow GitHub Actions.
+    // In locale, se non ci sono env var, la release usa il debug keystore standard.
+    signingConfigs {
+        create("release") {
+            val ksPath = System.getenv("KEYSTORE_PATH")
+            val ksPass = System.getenv("KEY_STORE_PASS")
+            val kAlias = System.getenv("KEY_ALIAS")
+            val kPass  = System.getenv("KEY_PASS")
+            if (ksPath != null && ksPass != null && kAlias != null && kPass != null) {
+                storeFile     = file(ksPath)
+                storePassword = ksPass
+                keyAlias      = kAlias
+                keyPassword   = kPass
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
@@ -24,6 +42,7 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 
