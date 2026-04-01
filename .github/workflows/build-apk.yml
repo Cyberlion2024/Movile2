@@ -38,7 +38,10 @@ jobs:
       #   keytool -genkeypair -v -keystore movile2bot.jks -alias movile2bot \
       #     -keyalg RSA -keysize 2048 -validity 10000
       - name: Decode keystore
-        run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > $RUNNER_TEMP/release.jks
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | tr -d '[:space:]' | base64 --decode > $RUNNER_TEMP/release.jks
+          file $RUNNER_TEMP/release.jks
+          keytool -list -keystore $RUNNER_TEMP/release.jks -storepass "${{ secrets.KEY_STORE_PASS }}" -noprompt
 
       - name: Build release APK
         env:
