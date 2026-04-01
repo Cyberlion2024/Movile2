@@ -20,11 +20,6 @@
             </intent-filter>
         </activity>
 
-        <activity
-            android:name=".CoordinatePickerActivity"
-            android:exported="false"
-            android:theme="@style/Theme.Movile2Bot.Transparent" />
-
         <service
             android:name=".OverlayService"
             android:enabled="true"
