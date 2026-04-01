@@ -172,12 +172,9 @@ class BotAccessibilityService : AccessibilityService() {
     ) {
         if (!BotState.lootRunning || index >= items.size) { onAllDone(); return }
         val (x, y) = items[index]
-        val path = Path().apply { moveTo(x, y) }
-        val stroke = GestureDescription.StrokeDescription(path, 0L, 60L)
-        val gesture = GestureDescription.Builder().addStroke(stroke).build()
 
         gestureInProgress = true
-        val dispatched = dispatchGesture(gesture, object : GestureResultCallback() {
+        val callback = object : GestureResultCallback() {
             override fun onCompleted(g: GestureDescription?) {
                 gestureInProgress = false
                 handler.post { tapItemsSequentially(items, index + 1, onAllDone) }
@@ -186,12 +183,59 @@ class BotAccessibilityService : AccessibilityService() {
                 gestureInProgress = false
                 handler.postDelayed({ tapItemsSequentially(items, index + 1, onAllDone) }, 100L)
             }
-        }, handler)
+        }
 
+        val dispatched = dispatchLootTap(x, y, callback)
         if (!dispatched) {
             gestureInProgress = false
             handler.postDelayed({ tapItemsSequentially(items, index + 1, onAllDone) }, 150L)
         }
+    }
+
+    // ── Tap loot: secondo dito se attacco è in corso, tap normale altrimenti ──
+    //
+    // Quando attack è attivo (willContinue), qualsiasi dispatchGesture autonomo
+    // cancellerebbe il dito attacco. Invece construiamo un GestureDescription con
+    // due stroke: continueStroke(attacco) + loot tap, così il dito 1 rimane giù
+    // e il dito 2 tappa l'oggetto. Il timer dell'attackLoop viene resincronizzato
+    // dopo ogni chunk inviato.
+    private fun dispatchLootTap(x: Float, y: Float, cb: GestureResultCallback): Boolean {
+        val lootPath = Path().apply { moveTo(x, y) }
+        val lootStroke = GestureDescription.StrokeDescription(lootPath, 0L, 60L)
+
+        if (BotState.attackRunning) {
+            val pos = BotState.attackPos
+            val prev = currentAttackStroke
+            if (pos != null && prev != null) {
+                val attackPath = Path().apply { moveTo(pos.first, pos.second) }
+                val continuedAttack = try {
+                    prev.continueStroke(attackPath, 0L, ATTACK_HOLD_MS, true)
+                } catch (_: Exception) { null }
+
+                if (continuedAttack != null) {
+                    currentAttackStroke = continuedAttack
+                    val gesture = try {
+                        GestureDescription.Builder()
+                            .addStroke(continuedAttack)
+                            .addStroke(lootStroke)
+                            .build()
+                    } catch (_: Exception) { null }
+
+                    if (gesture != null) {
+                        val ok = dispatchGesture(gesture, cb, handler)
+                        // Resincronizza il rinnovo dell'attacco dopo questo chunk
+                        handler.removeCallbacks(attackLoop)
+                        if (BotState.attackRunning)
+                            handler.postDelayed(attackLoop, ATTACK_HOLD_MS - 200L)
+                        return ok
+                    }
+                }
+            }
+        }
+
+        // Fallback: tap normale (attacco non attivo o stroke non disponibile)
+        return dispatchGesture(
+            GestureDescription.Builder().addStroke(lootStroke).build(), cb, handler)
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -315,17 +359,6 @@ class BotAccessibilityService : AccessibilityService() {
         handler.removeCallbacks(scanner)
         handler.removeCallbacks(lootLoop)
         lootTargets = emptyList()
-    }
-
-    // ── Tap raccolta oggetti — 60ms ───────────────────────────────────────────
-    private fun tap(x: Float, y: Float) {
-        try {
-            dispatchGesture(
-                GestureDescription.Builder()
-                    .addStroke(GestureDescription.StrokeDescription(
-                        Path().apply { moveTo(x, y) }, 0L, 60L))
-                    .build(), null, null)
-        } catch (_: Exception) {}
     }
 
     // ── Tap pozione — 35ms ────────────────────────────────────────────────────
