@@ -143,11 +143,6 @@ class BotAccessibilityService : AccessibilityService() {
         } catch (_: Exception) {
             tapPotion(px, py)
         }
-
-        // Resincronizza il timer del loop attacco dopo questo chunk
-        handler.removeCallbacks(attackLoop)
-        if (BotState.attackRunning)
-            handler.postDelayed(attackLoop, ATTACK_HOLD_MS - 200L)
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -222,12 +217,7 @@ class BotAccessibilityService : AccessibilityService() {
                     } catch (_: Exception) { null }
 
                     if (gesture != null) {
-                        val ok = dispatchGesture(gesture, cb, handler)
-                        // Resincronizza il rinnovo dell'attacco dopo questo chunk
-                        handler.removeCallbacks(attackLoop)
-                        if (BotState.attackRunning)
-                            handler.postDelayed(attackLoop, ATTACK_HOLD_MS - 200L)
-                        return ok
+                        return dispatchGesture(gesture, cb, handler)
                     }
                 }
             }
