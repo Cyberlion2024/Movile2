@@ -28,27 +28,77 @@ jobs:
           gradle-version: '8.9'
           cache-disabled: true
 
-      # ── Ripristina il keystore dal secret ─────────────────────────────────
-      # Aggiungi questi 4 secret in GitHub → Settings → Secrets → Actions:
-      #   KEYSTORE_BASE64  → output di: base64 -w 0 movile2bot.jks
-      #   KEY_STORE_PASS   → password del keystore
-      #   KEY_ALIAS        → alias della chiave
-      #   KEY_PASS         → password della chiave
-      # Per generare il keystore una volta sola (sul tuo PC):
-      #   keytool -genkeypair -v -keystore movile2bot.jks -alias movile2bot \
-      #     -keyalg RSA -keysize 2048 -validity 10000
-      - name: Decode keystore
+      # ── Keystore: usa il secret se esiste, altrimenti ne genera uno nuovo ──
+      # Prima esecuzione (secret vuoto):
+      #   → il workflow genera il keystore, stampa il base64 nel Job Summary
+      #   → apri il Job Summary, copia il valore e incollalo in:
+      #     GitHub → Settings → Secrets → Actions → KEYSTORE_BASE64
+      #   → aggiungi anche KEY_STORE_PASS / KEY_ALIAS / KEY_PASS con i valori mostrati
+      # Esecuzioni successive (secret impostato):
+      #   → usa sempre lo stesso keystore → aggiornamenti senza conflitti
+      - name: Prepare keystore
         run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | tr -d '[:space:]' | base64 --decode > $RUNNER_TEMP/release.jks
-          file $RUNNER_TEMP/release.jks
-          keytool -list -keystore $RUNNER_TEMP/release.jks -storepass "${{ secrets.KEY_STORE_PASS }}" -noprompt
+          KS_PATH="$RUNNER_TEMP/release.jks"
+          echo "KEYSTORE_PATH=$KS_PATH" >> $GITHUB_ENV
+
+          B64='${{ secrets.KEYSTORE_BASE64 }}'
+          RAW_PASS='${{ secrets.KEY_STORE_PASS }}'
+          RAW_ALIAS='${{ secrets.KEY_ALIAS }}'
+          RAW_KPASS='${{ secrets.KEY_PASS }}'
+
+          if [ -z "$B64" ]; then
+            echo "::warning::Secret KEYSTORE_BASE64 mancante — genero keystore automaticamente."
+
+            FINAL_PASS="${RAW_PASS:-movile2botkey}"
+            FINAL_ALIAS="${RAW_ALIAS:-movile2bot}"
+            FINAL_KPASS="${RAW_KPASS:-movile2botkey}"
+
+            keytool -genkeypair -v \
+              -keystore "$KS_PATH" \
+              -alias "$FINAL_ALIAS" \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -storepass "$FINAL_PASS" \
+              -keypass "$FINAL_KPASS" \
+              -dname "CN=Movile2Bot,O=Bot,C=IT" \
+              -storetype JKS
+
+            ENC=$(base64 -w 0 "$KS_PATH")
+
+            {
+              echo "## ⚠️ Keystore generato — imposta i secret una volta sola"
+              echo ""
+              echo "Vai su: **GitHub → repo → Settings → Secrets and variables → Actions**"
+              echo ""
+              echo "| Secret | Valore |"
+              echo "|--------|--------|"
+              echo "| \`KEY_STORE_PASS\` | \`$FINAL_PASS\` |"
+              echo "| \`KEY_ALIAS\`      | \`$FINAL_ALIAS\` |"
+              echo "| \`KEY_PASS\`       | \`$FINAL_KPASS\` |"
+              echo ""
+              echo "<details><summary><b>KEYSTORE_BASE64</b> — clicca per espandere e copiare</summary>"
+              echo ""
+              echo '```'
+              echo "$ENC"
+              echo '```'
+              echo "</details>"
+              echo ""
+              echo "Dopo aver impostato i 4 secret, esegui di nuovo il workflow."
+            } >> $GITHUB_STEP_SUMMARY
+          else
+            FINAL_PASS="$RAW_PASS"
+            FINAL_ALIAS="$RAW_ALIAS"
+            FINAL_KPASS="$RAW_KPASS"
+
+            printf '%s' "$B64" | tr -d '[:space:]' | base64 --decode > "$KS_PATH"
+          fi
+
+          keytool -list -keystore "$KS_PATH" -storepass "$FINAL_PASS" -noprompt
+
+          echo "KEY_STORE_PASS=$FINAL_PASS" >> $GITHUB_ENV
+          echo "KEY_ALIAS=$FINAL_ALIAS"     >> $GITHUB_ENV
+          echo "KEY_PASS=$FINAL_KPASS"      >> $GITHUB_ENV
 
       - name: Build release APK
-        env:
-          KEYSTORE_PATH: ${{ runner.temp }}/release.jks
-          KEY_STORE_PASS: ${{ secrets.KEY_STORE_PASS }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASS: ${{ secrets.KEY_PASS }}
         run: gradle --no-build-cache assembleRelease
 
       - name: Upload APK
