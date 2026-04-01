@@ -111,15 +111,46 @@ ITEM_ROD      → canna da pesca
 
 ---
 
+## Layout UI — CRITICO
+
+Il layout UI (posizioni bottoni attack/skill/pozione) è nel file **OBB/PAK** (non nell'APK).
+Il PAK viene scaricato al primo avvio del gioco e contiene gli UAsset Blueprint UMG.
+**Non è estraibile dall'APK** senza strumenti specializzati per UE4 PAK parsing.
+
+Il bot usa quindi un approccio **pixel-based in tempo reale**:
+- Scansiona lo screenshot per trovare l'icona della pozione HP (cluster rosso compatto)
+- Scansiona per trovare nomi mob rossi (MOB_COLOR confermato)
+- Scansiona per trovare la barra HP (striscia rossa orizzontale in alto a sinistra)
+- Le coordinate attack/skill sono stimate con fallback statico calibrato sulla screenshot
+
+## Strutture Dati Trovate
+
+| Variabile | Tipo | Significato |
+|-----------|------|-------------|
+| `CFhp` | float | Current Float HP (vita corrente) |
+| `TFhp` | float | Total Float HP (vita massima) |
+| `hpstat` | struct | Statistiche HP |
+| `maxhp` / `MaxHP` | int/float | HP massimo |
+| `sendQuickChange` | function | Cambia slot quick-bar |
+| `sendQuickChangeQ` | function | Queue di cambio quick-bar |
+| `FwSlotUpdate` | struct | Aggiornamento slot |
+| `Fskill` / `FskillQue` | struct | Skill e coda skill |
+| `metins` / `metinStoneOverride` | data | Pietre Metin (clone confermato) |
+
+## Input System
+
+- `SVirtualJoystick` — joystick virtuale UE4 built-in (posizione in DefaultInput.ini nel PAK)
+- `TouchInputControl` — sistema touch input UE4 mobile
+- Le coordinate joystick/bottoni si adattano alla risoluzione schermo via UE4 viewport scaling
+
 ## Implicazioni per il Bot
 
 1. **Usa solo dispositivi fisici reali** — il gioco rileva emulatori noti.
 2. **Pixel detection (rosso per nomi mob) CONFERMATA** — `MOB_COLOR` esiste nel codice nativo.
 3. **5 skill slots confermati** — implementazione attuale corretta.
 4. **Drop loot detection (centroide bianco/verde) CONFERMATA** — `dropLocs` usa posizioni precise.
-5. **AttackTimeMsec** — il timing di attacco è in millisecondi; 60ms del bot è ragionevole.
-6. **AGGRESSIVE_HP_PCT / AGGRESSIVE_SIGHT** — i mob aggressivi hanno un raggio di visione;
-   il bot dovrebbe muoversi fuori range se non vuole aggrare.
-7. **attackDistance** — esiste una distanza di attacco per ogni mob; il bot deve essere
-   abbastanza vicino al target prima di inviare il gesture di attacco.
+5. **HP ratio = CFhp / TFhp** — la barra HP è la rappresentazione visiva di questo rapporto.
+6. **Layout UI NON estraibile dall'APK** — il bot usa auto-detection via screenshot.
+7. **attackDistance** — esiste distanza di attacco per ogni mob; il bot deve essere vicino.
+8. **AGGRESSIVE_HP_PCT** — mob aggressivi; il bot non dovrebbe muoversi fuori range.
 

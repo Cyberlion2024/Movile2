@@ -10,9 +10,13 @@ object BotState {
     @Volatile var hpDropCycles: Int = 0
     @Volatile var hpStableCycles: Int = 0
     @Volatile var underAttack: Boolean = false
-
-    // Per debug overlay: % vita corrente (0-100), -1 = non configurata
     @Volatile var hpDisplayPct: Int = -1
+
+    // Debug overlay: dove sta tappando la pozione (0 = non ancora trovata)
+    @Volatile var potTapX: Float = 0f
+    @Volatile var potTapY: Float = 0f
+    // "AUTO" = rilevata da screenshot, "MANUALE" = configurata dall'utente, "" = non trovata
+    @Volatile var potSource: String = ""
 
     var onUpdate: (() -> Unit)? = null
 }

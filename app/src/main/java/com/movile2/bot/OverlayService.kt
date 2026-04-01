@@ -36,7 +36,11 @@ class OverlayService : Service() {
             val hpPct   = BotState.hpDisplayPct
 
             val hpStr = if (hpPct >= 0) " HP:${hpPct}%" else ""
-            tvKills?.text = "Kills: ${BotState.killCount}$hpStr"
+            // Mostra dove sta tappando la pozione: (x,y) e sorgente AUTO/MAN/EST
+            val potStr = if (BotState.potSource.isNotEmpty())
+                " POZ[${BotState.potSource}]:${BotState.potTapX.toInt()},${BotState.potTapY.toInt()}"
+            else ""
+            tvKills?.text = "Kills: ${BotState.killCount}$hpStr$potStr"
 
             when {
                 !running -> {
