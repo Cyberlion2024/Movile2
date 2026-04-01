@@ -12,7 +12,7 @@ import android.view.Display
 import android.view.accessibility.AccessibilityEvent
 import androidx.annotation.RequiresApi
 import androidx.core.content.ContextCompat
-import kotlin.math.abs
+import kotlin.math.sqrt
 
 class BotAccessibilityService : AccessibilityService() {
 
@@ -23,21 +23,27 @@ class BotAccessibilityService : AccessibilityService() {
 
     // ═══════════════════════════════════════════════════════════════════════════
     // LOOP POZIONE
-    // Preme continuamente sulla posizione impostata ogni potionIntervalMs.
+    // Preme tutti gli slot pozione impostati ogni potionIntervalMs.
+    // Non richiede azione manuale — parte automaticamente quando gli slot
+    // sono configurati.
     // ═══════════════════════════════════════════════════════════════════════════
     private val potionLoop = object : Runnable {
         override fun run() {
             if (!BotState.potionRunning) return
-            val x = BotState.potionX; val y = BotState.potionY
-            if (x > 0f && y > 0f) tap(x, y)
-            handler.postDelayed(this, BotState.potionIntervalMs.coerceAtLeast(500L))
+            val slots = BotState.potionSlots
+            var delay = 0L
+            for ((x, y) in slots) {
+                handler.postDelayed({ if (BotState.potionRunning) tap(x, y) }, delay)
+                delay += 200L
+            }
+            handler.postDelayed(this, BotState.potionIntervalMs.coerceAtLeast(500L) + delay)
         }
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // LOOP RACCOLTA
-    // Ogni ciclo: legge lootTargets (aggiornati dallo scanner) e tappa
-    // su ciascun oggetto trovato — doppio tap a 250ms per raccogliere.
+    // Raccoglie solo gli oggetti VICINI al personaggio (prossimità).
+    // Non tocca zone lontane che interferirebbero col joystick/movimento.
     // ═══════════════════════════════════════════════════════════════════════════
     private val lootLoop = object : Runnable {
         override fun run() {
@@ -59,14 +65,13 @@ class BotAccessibilityService : AccessibilityService() {
 
     // ═══════════════════════════════════════════════════════════════════════════
     // SCANNER SCREENSHOT
-    // Gira ogni 500ms quando lootRunning è true.
-    // Aggiorna lootTargets con la lista degli oggetti trovati.
+    // Gira ogni 400ms quando lootRunning è true.
     // ═══════════════════════════════════════════════════════════════════════════
     private val scanner = object : Runnable {
         override fun run() {
             if (!BotState.lootRunning) return
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) doScan()
-            handler.postDelayed(this, 500L)
+            handler.postDelayed(this, 400L)
         }
     }
 
@@ -85,28 +90,18 @@ class BotAccessibilityService : AccessibilityService() {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // RILEVAMENTO OGGETTI A TERRA
+    // RILEVAMENTO OGGETTI A TERRA — CON FILTRO DI PROSSIMITÀ
     //
-    // Cerca in una griglia di celle 40×40 px nella zona di gioco centrale.
-    // Rileva due tipi di pixel:
+    // Cerca oggetti (nome verde) e yang (giallo-oro) SOLO nella zona vicina
+    // al personaggio (entro il 30% della larghezza schermo dal centro).
+    // Questo evita di toccare il joystick o zone di movimento lontane.
     //
-    //   NOME PERSONAGGIO (verde)
-    //     In Mobile2/Metin2, gli oggetti che appartengono al tuo personaggio
-    //     mostrano il tuo nome sopra di loro in testo VERDE.
-    //     Soglia: G > 155, G-R > 45, G-B > 35
+    // Il personaggio in Metin2 è sempre al centro dello schermo (~50% x, ~55% y).
     //
-    //   YANG (giallo-oro)
-    //     Le monete yang cadono con testo giallo-oro brillante.
-    //     Soglia: R > 195, G > 155, B < 80, R-B > 120
-    //
-    // Una cella con ≥ 3 pixel validi = un oggetto da raccogliere.
-    // Ritorna fino a 10 oggetti, ordinati dal basso verso l'alto
-    // (gli oggetti più vicini al personaggio vengono raccolti per primi).
-    //
-    // Area esclusa:
-    //   Top 12%  — barra HP, minimappa
+    // Area esclusa dalla scansione:
+    //   Top 12%    — barra HP, minimappa
     //   Bottom 22% — skill, joystick
-    //   Left 8%   — pannello overlay
+    //   Left 8%    — pannello overlay
     //   Right 15%  — skill colonna destra
     // ═══════════════════════════════════════════════════════════════════════════
     private fun findLootItems(bmp: Bitmap): List<Pair<Float, Float>> {
@@ -116,17 +111,33 @@ class BotAccessibilityService : AccessibilityService() {
         val cell = 40
         val found = mutableListOf<Pair<Float, Float>>()
 
+        // Posizione del personaggio = centro schermo
+        val charX = w * 0.50f
+        val charY = h * 0.55f
+        // Raggio massimo entro cui raccogliere (30% della larghezza)
+        val maxDist = w * 0.30f
+
         var cy = y0
         while (cy + cell <= y1) {
             var cx = x0
             while (cx + cell <= x1) {
+                val itemX = (cx + cell / 2).toFloat()
+                val itemY = (cy + cell / 2).toFloat()
+
+                // ── Filtro prossimità: salta celle lontane dal personaggio ────
+                val dx = itemX - charX
+                val dy = itemY - charY
+                if (dx * dx + dy * dy > maxDist * maxDist) {
+                    cx += cell; continue
+                }
+
                 var hits = 0
-                for (dy in 0 until cell step 3) {
-                    for (dx in 0 until cell step 3) {
-                        val p  = bmp.getPixel(cx + dx, cy + dy)
-                        val r  = Color.red(p)
-                        val g  = Color.green(p)
-                        val b  = Color.blue(p)
+                for (dy2 in 0 until cell step 3) {
+                    for (dx2 in 0 until cell step 3) {
+                        val p = bmp.getPixel(cx + dx2, cy + dy2)
+                        val r = Color.red(p)
+                        val g = Color.green(p)
+                        val b = Color.blue(p)
 
                         // Nome personaggio: testo verde
                         val playerName = g > 155 && g - r > 45 && g - b > 35 && r < 140
@@ -138,7 +149,7 @@ class BotAccessibilityService : AccessibilityService() {
                     }
                 }
                 if (hits >= 3) {
-                    found.add((cx + cell / 2).toFloat() to (cy + cell / 2).toFloat())
+                    found.add(itemX to itemY)
                     if (found.size >= 10) return found.sortedByDescending { it.second }
                 }
                 cx += cell
@@ -151,9 +162,9 @@ class BotAccessibilityService : AccessibilityService() {
     // ═══════════════════════════════════════════════════════════════════════════
     // API PUBBLICA
     // ═══════════════════════════════════════════════════════════════════════════
-    fun startPotion(x: Float, y: Float, intervalMs: Long) {
+    fun startPotion(intervalMs: Long = BotState.potionIntervalMs) {
+        if (BotState.potionSlots.isEmpty()) return
         if (BotState.potionRunning) stopPotion()
-        BotState.potionX = x; BotState.potionY = y
         BotState.potionIntervalMs = intervalMs.coerceAtLeast(500L)
         BotState.potionRunning = true
         handler.post(potionLoop)

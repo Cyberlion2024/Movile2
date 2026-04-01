@@ -29,6 +29,7 @@ class OverlayService : Service() {
     private var tvStatus: TextView? = null
     private var btnPot: TextView? = null
     private var btnLoot: TextView? = null
+    private var btnSetPoz: TextView? = null
     private val handler = Handler(Looper.getMainLooper())
 
     // ── Intervallo pozione (ms) configurabile nel pannello ────────────────────
@@ -40,6 +41,7 @@ class OverlayService : Service() {
             val potOn  = BotState.potionRunning
             val lootOn = BotState.lootRunning
             val found  = BotState.lootItemsFound
+            val slots  = BotState.potionSlots.size
 
             when {
                 potOn && lootOn -> {
@@ -47,7 +49,7 @@ class OverlayService : Service() {
                     tvStatus?.setTextColor(Color.GREEN)
                 }
                 potOn -> {
-                    tvStatus?.text = "💊 POZ attivo"
+                    tvStatus?.text = "💊 POZ attivo ($slots slot)"
                     tvStatus?.setTextColor(Color.CYAN)
                 }
                 lootOn -> {
@@ -59,6 +61,9 @@ class OverlayService : Service() {
                     tvStatus?.setTextColor(Color.LTGRAY)
                 }
             }
+
+            val slotLabel = if (slots > 0) " ($slots)" else ""
+            btnSetPoz?.text = "🎯 IMPOSTA POZ$slotLabel"
 
             btnPot?.text  = if (potOn)  "💊 POZ: ON"  else "💊 POZ: OFF"
             btnPot?.setBackgroundColor(
@@ -109,12 +114,12 @@ class OverlayService : Service() {
         // ── Status ────────────────────────────────────────────────────────────
         tvStatus = makeText("● INATTIVO", 13f, Color.LTGRAY)
 
-        // ── Bottone: imposta posizione pozione ────────────────────────────────
-        // Quando premuto: schermo diventa toccabile per 5 secondi.
-        // Il primo tocco dell'utente sul gioco viene registrato come
-        // posizione della pozione.
-        val btnSetPoz = makeButton("🎯 IMPOSTA POZ", Color.argb(220, 130, 70, 0))
-        btnSetPoz.setOnClickListener { startPickPotion() }
+        // ── Bottone: imposta slot pozione ─────────────────────────────────────
+        // Prima pressione: azzera slot precedenti e avvia cattura.
+        // Ogni tocco sullo schermo aggiunge uno slot (max 3).
+        // Dopo il 3° tocco o 5s di timeout, la pozione parte automaticamente.
+        btnSetPoz = makeButton("🎯 IMPOSTA POZ", Color.argb(220, 130, 70, 0))
+        btnSetPoz!!.setOnClickListener { startPickPotion() }
 
         // ── Bottone: pozione ON/OFF ───────────────────────────────────────────
         btnPot = makeButton("💊 POZ: OFF", Color.argb(220, 50, 50, 80))
@@ -127,12 +132,12 @@ class OverlayService : Service() {
             if (BotState.potionRunning) {
                 bot.stopPotion()
             } else {
-                if (BotState.potionX <= 0f) {
+                if (BotState.potionSlots.isEmpty()) {
                     tvStatus?.text = "Prima imposta la POZ!"
                     tvStatus?.setTextColor(Color.YELLOW)
                     return@setOnClickListener
                 }
-                bot.startPotion(BotState.potionX, BotState.potionY, potInterval)
+                bot.startPotion(potInterval)
             }
         }
 
@@ -182,19 +187,33 @@ class OverlayService : Service() {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // CATTURA TOCCO PER IMPOSTARE POZIONE
+    // CATTURA TOCCHI PER IMPOSTARE SLOT POZIONE (max 3)
     //
-    // Aggiunge un View trasparente che copre tutto lo schermo per 5 secondi.
-    // Il primo tocco dell'utente viene salvato come posizione della pozione.
-    // Poi il View viene rimosso e il pannello torna normale.
+    // Quando premuto IMPOSTA POZ:
+    //   1. Azzera gli slot precedenti.
+    //   2. Overlay trasparente: ogni tocco aggiunge uno slot pozione.
+    //   3. Dopo il 3° tocco OR 5s di timeout:
+    //      - rimuove overlay
+    //      - avvia automaticamente la pozione
     // ═══════════════════════════════════════════════════════════════════════════
+    private val MAX_SLOTS = 3
+    private var slotsAddedDuringCapture = 0
+    private var captureTimeoutRunnable: Runnable? = null
+
     private fun startPickPotion() {
         if (captureView != null) return
-        tvStatus?.text = "Tocca la pozione... (5s)"
+
+        // Azzera slot precedenti e ferma pozione attiva
+        BotState.potionSlots.clear()
+        BotState.potionRunning = false
+        BotAccessibilityService.instance?.stopPotion()
+        slotsAddedDuringCapture = 0
+
+        tvStatus?.text = "Tocca slot 1/3... (5s)"
         tvStatus?.setTextColor(Color.YELLOW)
 
         val cv = View(this).apply {
-            setBackgroundColor(Color.argb(1, 0, 0, 0)) // quasi trasparente
+            setBackgroundColor(Color.argb(1, 0, 0, 0))
         }
         val lp = overlayParams(
             WindowManager.LayoutParams.MATCH_PARENT,
@@ -204,10 +223,16 @@ class OverlayService : Service() {
         cv.setOnTouchListener { _, e ->
             if (e.action == MotionEvent.ACTION_DOWN) {
                 val x = e.rawX; val y = e.rawY
-                BotState.potionX = x; BotState.potionY = y
-                removeCaptureView()
-                tvStatus?.text = "Pozione: ${x.toInt()},${y.toInt()}"
-                tvStatus?.setTextColor(Color.GREEN)
+                slotsAddedDuringCapture++
+                BotState.potionSlots.add(x to y)
+
+                if (slotsAddedDuringCapture >= MAX_SLOTS) {
+                    finishPickPotion()
+                } else {
+                    val next = slotsAddedDuringCapture + 1
+                    tvStatus?.text = "✓ Slot $slotsAddedDuringCapture  →  Tocca slot $next/3 o aspetta"
+                    tvStatus?.setTextColor(Color.YELLOW)
+                }
             }
             true
         }
@@ -216,15 +241,35 @@ class OverlayService : Service() {
         captureView = cv
 
         // Timeout automatico dopo 5 secondi
-        handler.postDelayed({
-            if (captureView != null) {
-                removeCaptureView()
-                if (BotState.potionX <= 0f) {
-                    tvStatus?.text = "Annullato"
-                    tvStatus?.setTextColor(Color.LTGRAY)
-                }
-            }
-        }, 5000L)
+        val timeout = Runnable {
+            if (captureView != null) finishPickPotion()
+        }
+        captureTimeoutRunnable = timeout
+        handler.postDelayed(timeout, 5000L)
+    }
+
+    private fun finishPickPotion() {
+        captureTimeoutRunnable?.let { handler.removeCallbacks(it) }
+        captureTimeoutRunnable = null
+        removeCaptureView()
+
+        val slots = BotState.potionSlots.size
+        if (slots == 0) {
+            tvStatus?.text = "Nessuno slot impostato"
+            tvStatus?.setTextColor(Color.LTGRAY)
+            return
+        }
+
+        // Avvia automaticamente la pozione
+        val bot = BotAccessibilityService.instance
+        if (bot != null) {
+            bot.startPotion(potInterval)
+            tvStatus?.text = "💊 POZ: $slots slot attivi!"
+            tvStatus?.setTextColor(Color.GREEN)
+        } else {
+            tvStatus?.text = "$slots slot salvati. Abilita Accessibilità!"
+            tvStatus?.setTextColor(Color.YELLOW)
+        }
     }
 
     private fun removeCaptureView() {

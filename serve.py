@@ -38,24 +38,25 @@ li{margin-bottom:8px;line-height:1.6;color:#ccc}
 <body>
 <div class="wrap">
   <h1>&#129302; Movile2 Bot</h1>
-  <p class="sub">Bot Android per MMORPG &mdash; Kotlin + Accessibility Service &mdash; <strong>v5</strong></p>
+  <p class="sub">Bot Android per MMORPG &mdash; Kotlin + Accessibility Service &mdash; <strong>v6</strong></p>
 
   <div class="card">
-    <h2>&#10024; Novit&agrave; v5 &mdash; Architettura Professionale</h2>
+    <h2>&#10024; Novit&agrave; v6 &mdash; Movimento Libero + Loot di Prossimit&agrave;</h2>
     <ul>
-      <li><strong>Multi-touch simultaneo</strong> <span class="new">NEW</span> &mdash; Attack + Skill1..5 + Target premuti <em>nello stesso frame</em> con <code>GestureDescription</code> multi-stroke (fino a 10 dita contemporanee)</li>
-      <li><strong>Loop unificato senza state machine</strong> <span class="new">NEW</span> &mdash; nessuna fase HUNT/DEFEND separata; la pozione viene usata inline senza interrompere il combattimento</li>
-      <li><strong>Ciclo di combattimento 320ms</strong> <span class="new">NEW</span> &mdash; attack spam a 320ms + 2 tap extra a 75/150ms; pattuglia a 550ms solo senza bersaglio</li>
-      <li><strong>Scan screenshot ogni 600ms</strong> <span class="new">NEW</span> &mdash; da 1000ms a 600ms; step 3 invece di 4 per pi&ugrave; precisione nella detection del centroide</li>
-      <li><strong>Rilevamento mostri migliorato</strong> &mdash; soglie allentate (R>160, diff&ge;38) per pi&ugrave; hit, min pixel 8 invece di 10</li>
-      <li><strong>Loot aggressivo</strong> <span class="new">NEW</span> &mdash; raccolta anche durante il combattimento (ogni 1.4s); post-kill multi-tap in 4 direzioni; finestra di 7s dopo ogni kill</li>
-      <li><strong>Pozione inline</strong> <span class="new">NEW</span> &mdash; tap pozione in priorit&agrave; massima senza cambiare ciclo; refill automatico se slot esaurito</li>
-      <li><strong>5 skill con cooldown indipendenti</strong> &mdash; tutte e 5 fire in multi-touch quando sono pronte; skill 1-3 attivate anche durante pattuglia</li>
-      <li><strong>Joystick virtuale</strong> &mdash; pattuglia N&rarr;E&rarr;S&rarr;W; si ferma automaticamente se c&#39;&egrave; un bersaglio</li>
-      <li><strong>Monitor HP + auto-detection barra</strong> &mdash; rileva automaticamente la barra HP in top-left; pozione se HP &lt; soglia</li>
-      <li><strong>Kill counter + timer sessione</strong> &mdash; auto-stop al raggiungimento del limite</li>
-      <li><strong>Overlay draggabile</strong> &mdash; pannello flottante con kills, stato e pulsanti Start/Stop</li>
+      <li><strong>Movimento completamente libero</strong> <span class="new">NEW</span> &mdash; il bot NON interferisce pi&ugrave; con il joystick o il movimento. Il giocatore si muove liberamente e il bot raccoglie solo ci&ograve; che &egrave; vicino al personaggio</li>
+      <li><strong>Loot di prossimit&agrave;</strong> <span class="new">NEW</span> &mdash; raccoglie oggetti e yang SOLO entro il 30% della larghezza schermo dal centro (posizione personaggio). Nessun tap lontano che blocca il movimento</li>
+      <li><strong>Pozione multi-slot</strong> <span class="new">NEW</span> &mdash; supporta fino a 3 slot pozione configurabili. Ogni slot viene premuto automaticamente ogni 3 secondi</li>
+      <li><strong>Pozione auto-start</strong> <span class="new">NEW</span> &mdash; dopo aver impostato gli slot, la pozione parte automaticamente senza bisogno di premere ON/OFF</li>
+      <li><strong>Configurazione slot con tocco</strong> <span class="new">NEW</span> &mdash; premi IMPOSTA POZ e tocca fino a 3 posizioni sullo schermo per impostare tutti gli slot pozione. Timeout 5s automatico</li>
+      <li><strong>Scanner pi&ugrave; reattivo</strong> <span class="new">NEW</span> &mdash; scan ogni 400ms (prima 500ms) per risposta pi&ugrave; veloce agli item vicini</li>
     </ul>
+    <div class="ok">
+      &#9989; <strong>Come usare v6:</strong>
+      <ol style="margin-top:8px">
+        <li>Premi <strong>IMPOSTA POZ</strong> &rarr; tocca 1, 2 o 3 slot pozione sullo schermo &rarr; la pozione parte da sola</li>
+        <li>Premi <strong>LOOT: ON</strong> &rarr; muoviti liberamente nel gioco, il bot raccoglie gli item quando ci passi vicino</li>
+      </ol>
+    </div>
   </div>
 
   <div class="card">
