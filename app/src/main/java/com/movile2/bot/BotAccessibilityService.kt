@@ -70,12 +70,13 @@ class BotAccessibilityService : AccessibilityService() {
         dispatchGesture(gesture, object : GestureResultCallback() {
             override fun onCancelled(g: GestureDescription?) {
                 // Il tocco reale (joystick) ha interrotto il gesto.
-                // Resettiamo lo stroke e riproviamo dopo 350ms — tempo sufficiente
-                // perché il dito dell'utente si sia alzato dal joystick.
+                // Riparte immediatamente: se il dito è ancora giù verrà
+                // cancellato di nuovo (onCancelled → retry), se è già su
+                // il gesto parte e rimane attivo.
                 if (!BotState.attackRunning) return
                 currentAttackStroke = null
                 handler.removeCallbacks(attackLoop)
-                handler.postDelayed(attackLoop, 350L)
+                handler.post(attackLoop)
             }
         }, handler)
     }
