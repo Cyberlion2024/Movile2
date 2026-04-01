@@ -62,12 +62,22 @@ class BotAccessibilityService : AccessibilityService() {
                 GestureDescription.StrokeDescription(path, 0L, ATTACK_HOLD_MS, true)
             }
         } catch (_: Exception) {
-            // Se il continueStroke fallisce (gesto annullato), ripartiamo da zero
+            // continueStroke fallito (gesto interrotto da tocco reale) — ripartiamo da zero
             GestureDescription.StrokeDescription(path, 0L, ATTACK_HOLD_MS, true)
         }
         currentAttackStroke = stroke
         val gesture = GestureDescription.Builder().addStroke(stroke).build()
-        dispatchGesture(gesture, null, handler)
+        dispatchGesture(gesture, object : GestureResultCallback() {
+            override fun onCancelled(g: GestureDescription?) {
+                // Il tocco reale (joystick) ha interrotto il gesto.
+                // Resettiamo lo stroke e riproviamo dopo 350ms — tempo sufficiente
+                // perché il dito dell'utente si sia alzato dal joystick.
+                if (!BotState.attackRunning) return
+                currentAttackStroke = null
+                handler.removeCallbacks(attackLoop)
+                handler.postDelayed(attackLoop, 350L)
+            }
+        }, handler)
     }
 
     private fun releaseAttack() {
