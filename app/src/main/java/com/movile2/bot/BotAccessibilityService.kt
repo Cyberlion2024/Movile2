@@ -20,15 +20,12 @@ class BotAccessibilityService : AccessibilityService() {
     @Volatile private var lootTargets: List<Pair<Float, Float>> = emptyList()
     private var gestureInProgress = false
 
-    // ── Durate gesti ──────────────────────────────────────────────────────────
-    private val ATTACK_TAP_MS  = 40L
-    private val ATTACK_GAP_MS  = 280L
-    private val POTION_TAP_MS  = 35L
+    private val ATTACK_TAP_MS = 40L
+    private val ATTACK_GAP_MS = 280L
+    private val POTION_TAP_MS = 35L
 
     // ═══════════════════════════════════════════════════════════════════════════
     // LOOP ATTACCO
-    // Se joystickActive → salta il dispatch ma ripianifica (ripende quando
-    // joystick viene rilasciato tramite resumeAll()).
     // ═══════════════════════════════════════════════════════════════════════════
     private val attackCallback = object : GestureResultCallback() {
         override fun onCompleted(g: GestureDescription?) { scheduleNextAttack() }
@@ -59,8 +56,6 @@ class BotAccessibilityService : AccessibilityService() {
 
     // ═══════════════════════════════════════════════════════════════════════════
     // LOOP POZIONE
-    // Se joystickActive → skip, la prossima iterazione pianificata riprenderà.
-    // In modalità attacco manuale: re-tap sull'attacco dopo la pozione.
     // ═══════════════════════════════════════════════════════════════════════════
     private val potionLoop = object : Runnable {
         override fun run() {
@@ -70,24 +65,18 @@ class BotAccessibilityService : AccessibilityService() {
             for ((px, py) in slots) {
                 handler.postDelayed({
                     if (!BotState.potionRunning || gestureInProgress) return@postDelayed
-                    if (BotState.joystickActive) return@postDelayed  // pausa joystick
+                    if (BotState.joystickActive) return@postDelayed
                     if (BotState.attackRunning) {
                         val aPos = BotState.attackPos
-                        if (aPos != null) {
-                            tapMultitouch(aPos.first, aPos.second, ATTACK_TAP_MS,
-                                          px, py, POTION_TAP_MS)
-                        } else {
-                            tapSingle(px, py, POTION_TAP_MS)
-                        }
+                        if (aPos != null) tapMultitouch(aPos.first, aPos.second, ATTACK_TAP_MS, px, py, POTION_TAP_MS)
+                        else tapSingle(px, py, POTION_TAP_MS)
                     } else {
                         tapSingle(px, py, POTION_TAP_MS)
                         val aPos = BotState.attackPos
                         if (aPos != null) {
                             handler.postDelayed({
-                                if (BotState.potionRunning && !BotState.attackRunning
-                                    && !BotState.joystickActive) {
+                                if (BotState.potionRunning && !BotState.attackRunning && !BotState.joystickActive)
                                     tapSingle(aPos.first, aPos.second, 60L)
-                                }
                             }, POTION_TAP_MS + 70L)
                         }
                     }
@@ -114,28 +103,16 @@ class BotAccessibilityService : AccessibilityService() {
         }
     }
 
-    private fun tapItemsSequentially(
-        items: List<Pair<Float, Float>>,
-        index: Int,
-        onAllDone: () -> Unit
-    ) {
-        if (!BotState.lootRunning || BotState.joystickActive || index >= items.size) {
-            onAllDone(); return
-        }
+    private fun tapItemsSequentially(items: List<Pair<Float, Float>>, index: Int, onAllDone: () -> Unit) {
+        if (!BotState.lootRunning || BotState.joystickActive || index >= items.size) { onAllDone(); return }
         val (x, y) = items[index]
         gestureInProgress = true
         val aPos = BotState.attackPos
-        val dispatched: Boolean
-        if (BotState.attackRunning && aPos != null) {
-            dispatched = tapMultitouch(aPos.first, aPos.second, ATTACK_TAP_MS, x, y, 55L)
-        } else {
-            dispatched = tapSingle(x, y, 55L)
-        }
-        val advance = { delay: Long ->
-            gestureInProgress = false
-            handler.postDelayed({ tapItemsSequentially(items, index + 1, onAllDone) }, delay)
-        }
-        if (dispatched) advance(100L) else advance(130L)
+        val dispatched = if (BotState.attackRunning && aPos != null)
+            tapMultitouch(aPos.first, aPos.second, ATTACK_TAP_MS, x, y, 55L)
+        else tapSingle(x, y, 55L)
+        gestureInProgress = false
+        handler.postDelayed({ tapItemsSequentially(items, index + 1, onAllDone) }, if (dispatched) 100L else 130L)
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -144,8 +121,7 @@ class BotAccessibilityService : AccessibilityService() {
     private val scanner = object : Runnable {
         override fun run() {
             if (!BotState.lootRunning) return
-            if (!BotState.joystickActive && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)
-                doScan()
+            if (!BotState.joystickActive && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) doScan()
             handler.postDelayed(this, 400L)
         }
     }
@@ -165,35 +141,29 @@ class BotAccessibilityService : AccessibilityService() {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // RILEVAMENTO OGGETTI A TERRA — v3 (conservativo)
+    // RILEVAMENTO OGGETTI A TERRA — v4
     //
-    // Zona ristretta al centro dello schermo dove cadono i drop:
-    //   X: 22%..68%  (esclude joystick sx, skill dx e HUD laterali)
-    //   Y: 32%..72%  (esclude barra HP top e bottoni skill bottom)
+    // Zona ristretta al centro dove cadono i drop in Metin2 mobile:
+    //   X: 30%..70%   Y: 35%..70%
     //
-    // Solo yang oro (il colore più affidabile e distinto):
-    //   Yang brillante : R>205, G>145, B<75, R-B>140
-    //   Yang ambra     : R>185, G>115, B<55, R-B>140, R > G*1.45
-    //   Nome item bianco caldo: R>220, G>200, B>165, R≥G≥B, R-B in [22,75]
+    // Colori strettissimi per evitare falsi positivi da animazioni/UI:
+    //   Yang puro:  R>240, G>185, B<20   (oro saturo, zero azzurro)
+    //   Item puro:  R>248, G>248, B>248  (bianco quasi puro — testo item)
     //
-    // Soglia: 4 pixel per cella 32×32 (step 3 → ~110 campioni max)
-    // Raggio max: 22% larghezza schermo dal centro personaggio
-    // Max 5 bersagli, ordinati dal più vicino al più lontano.
-    //
-    // La categoria "brightWarm" generica è stata rimossa perché
-    // causava falsi positivi su elementi UI (barre, testi, icone).
+    // Cella 20×20, step 3 → ~49 campioni max. Soglia: 2 pixel.
+    // Max 5 bersagli, dal più vicino al più lontano dal personaggio.
     // ═══════════════════════════════════════════════════════════════════════════
     private fun findLootItems(bmp: Bitmap): List<Pair<Float, Float>> {
         val w = bmp.width; val h = bmp.height
 
-        val x0 = (w * 0.22f).toInt(); val x1 = (w * 0.68f).toInt()
-        val y0 = (h * 0.32f).toInt(); val y1 = (h * 0.72f).toInt()
-        val cell = 32
+        val x0 = (w * 0.30f).toInt(); val x1 = (w * 0.70f).toInt()
+        val y0 = (h * 0.35f).toInt(); val y1 = (h * 0.70f).toInt()
+        val cell = 20
         val found = mutableListOf<Pair<Float, Float>>()
 
         val charX = w * 0.50f
-        val charY = h * 0.58f
-        val maxDist = w * 0.22f
+        val charY = h * 0.57f
+        val maxDist = w * 0.18f
         val maxDistSq = maxDist * maxDist
 
         var cy = y0
@@ -202,26 +172,21 @@ class BotAccessibilityService : AccessibilityService() {
             while (cx + cell <= x1) {
                 val itemX = (cx + cell / 2).toFloat()
                 val itemY = (cy + cell / 2).toFloat()
-                val dx = itemX - charX; val dy = itemY - charY
-                if (dx * dx + dy * dy > maxDistSq) { cx += cell; continue }
+                val ddx = itemX - charX; val ddy = itemY - charY
+                if (ddx * ddx + ddy * ddy > maxDistSq) { cx += cell; continue }
 
                 var hits = 0
                 for (dy2 in 0 until cell step 3) {
                     for (dx2 in 0 until cell step 3) {
                         val p = bmp.getPixel(cx + dx2, cy + dy2)
                         val r = Color.red(p); val g = Color.green(p); val b = Color.blue(p)
-
-                        val yangBright = r > 205 && g > 145 && b < 75 && r - b > 140
-                        val yangAmber  = r > 185 && g > 115 && b < 55 &&
-                                r - b > 140 && r > (g * 1.45f).toInt()
-                        val itemName   = r > 220 && g > 200 && b > 165 &&
-                                r >= g && g >= b && (r - b) in 22..75
-
-                        if (yangBright || yangAmber || itemName) hits++
+                        val yang = r > 240 && g > 185 && b < 20
+                        val item = r > 248 && g > 248 && b > 248
+                        if (yang || item) hits++
                     }
                 }
 
-                if (hits >= 4) {
+                if (hits >= 2) {
                     found.add(itemX to itemY)
                     if (found.size >= 5) break
                 }
@@ -238,102 +203,118 @@ class BotAccessibilityService : AccessibilityService() {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // JOYSTICK — FORWARDING GESTURE CHAIN
+    // JOYSTICK — FORWARDING TIMER-BASED
     //
-    // L'overlay joystick in OverlayService intercetta i touch dell'utente,
-    // chiama startJoystickForward / updateJoystick / stopJoystickForward.
+    // Bug della versione precedente: la catena callback continueStroke si rompe
+    // se il callback arriva DOPO che lo stroke è già scaduto → continueStroke
+    // lancia eccezione → startJoystickGesture crea un nuovo DOWN → il gioco
+    // vede due touch distinti → joystickActive rimane true per sempre.
     //
-    // Il forwarding usa StrokeDescription.continueStroke() per creare
-    // una catena di gesture brevi (80ms ciascuna) che il gioco vede come
-    // un singolo tocco continuo (joystick tenuto premuto + mosso).
+    // Soluzione: approccio timer-based. Un Runnable scatta ogni TICK_MS (80ms)
+    // e invia uno stroke da STROKE_MS (120ms). Poiché TICK < STROKE c'è sempre
+    // sovrapposizione → il gioco vede un tocco continuo senza gap.
     //
-    // I loop attack/potion/loot controllano joystickActive e saltano
-    // quando è true. resumeAll() li risveglia immediatamente al rilascio.
+    // Safety: se nessun updateJoystick() arriva per SAFETY_MS (2500ms),
+    // forziamo la fine come se l'utente avesse alzato il dito.
     // ═══════════════════════════════════════════════════════════════════════════
     @Volatile private var joystickForwarding = false
     @Volatile private var joystickCurrentX = 0f
     @Volatile private var joystickCurrentY = 0f
+    @Volatile private var joystickLastUpdateMs = 0L
     private var activeJoystickStroke: GestureDescription.StrokeDescription? = null
 
-    private val JOYSTICK_TICK_MS = 80L
+    private val TICK_MS   = 80L
+    private val STROKE_MS = 120L
+    private val SAFETY_MS = 2500L
 
-    private val joystickCallback = object : GestureResultCallback() {
-        override fun onCompleted(g: GestureDescription?) { continueJoystickChain() }
-        override fun onCancelled(g: GestureDescription?) { continueJoystickChain() }
-    }
+    private val joystickTickRunnable = object : Runnable {
+        override fun run() {
+            if (!joystickForwarding) return
 
-    private fun continueJoystickChain() {
-        if (!joystickForwarding) return
-        val prev = activeJoystickStroke ?: return
-        val x = joystickCurrentX; val y = joystickCurrentY
-        val path = Path().apply { moveTo(x, y) }
-        try {
-            val next = prev.continueStroke(path, 0L, JOYSTICK_TICK_MS, true)
-            activeJoystickStroke = next
-            dispatchGesture(
-                GestureDescription.Builder().addStroke(next).build(),
-                joystickCallback, handler)
-        } catch (_: Exception) {
-            // Se continueStroke fallisce, riparte con una nuova gesture
-            if (joystickForwarding) startJoystickGesture(x, y)
+            // Safety: nessun aggiornamento da SAFETY_MS → dito alzato senza ACTION_UP
+            if (System.currentTimeMillis() - joystickLastUpdateMs > SAFETY_MS) {
+                forceStopJoystick()
+                return
+            }
+
+            val x = joystickCurrentX; val y = joystickCurrentY
+            val path = Path().apply { moveTo(x, y) }
+            val prev = activeJoystickStroke
+
+            if (prev == null) {
+                // Prima stroke
+                val s = GestureDescription.StrokeDescription(path, 0L, STROKE_MS, true)
+                activeJoystickStroke = s
+                try { dispatchGesture(GestureDescription.Builder().addStroke(s).build(), null, null) }
+                catch (_: Exception) { activeJoystickStroke = null }
+            } else {
+                // Continua la stroke precedente
+                try {
+                    val next = prev.continueStroke(path, 0L, STROKE_MS, true)
+                    activeJoystickStroke = next
+                    dispatchGesture(GestureDescription.Builder().addStroke(next).build(), null, null)
+                } catch (_: Exception) {
+                    // Stroke precedente già scaduta: ne partiamo una nuova
+                    activeJoystickStroke = null
+                    val s = GestureDescription.StrokeDescription(path, 0L, STROKE_MS, true)
+                    activeJoystickStroke = s
+                    try { dispatchGesture(GestureDescription.Builder().addStroke(s).build(), null, null) }
+                    catch (_: Exception) { activeJoystickStroke = null }
+                }
+            }
+
+            handler.postDelayed(this, TICK_MS)
         }
     }
 
-    private fun startJoystickGesture(x: Float, y: Float) {
-        val path = Path().apply { moveTo(x, y) }
-        val stroke = GestureDescription.StrokeDescription(path, 0L, JOYSTICK_TICK_MS, true)
-        activeJoystickStroke = stroke
-        try {
-            dispatchGesture(
-                GestureDescription.Builder().addStroke(stroke).build(),
-                joystickCallback, handler)
-        } catch (_: Exception) {}
+    private fun forceStopJoystick() {
+        handler.removeCallbacks(joystickTickRunnable)
+        val prev = activeJoystickStroke
+        joystickForwarding = false
+        BotState.joystickActive = false
+        activeJoystickStroke = null
+        if (prev != null) {
+            val path = Path().apply { moveTo(joystickCurrentX, joystickCurrentY) }
+            try {
+                val fin = prev.continueStroke(path, 0L, 30L, false)
+                dispatchGesture(GestureDescription.Builder().addStroke(fin).build(), null, null)
+            } catch (_: Exception) {}
+        }
+        resumeAll()
     }
 
     fun startJoystickForward(x: Float, y: Float) {
+        handler.removeCallbacks(joystickTickRunnable)
         joystickForwarding = true
         BotState.joystickActive = true
         joystickCurrentX = x
         joystickCurrentY = y
-        startJoystickGesture(x, y)
+        joystickLastUpdateMs = System.currentTimeMillis()
+        activeJoystickStroke = null
+        handler.post(joystickTickRunnable)
     }
 
     fun updateJoystick(x: Float, y: Float) {
         joystickCurrentX = x
         joystickCurrentY = y
+        joystickLastUpdateMs = System.currentTimeMillis()
     }
 
     fun stopJoystickForward(x: Float, y: Float) {
-        joystickForwarding = false
-        BotState.joystickActive = false
-        val prev = activeJoystickStroke
-        activeJoystickStroke = null
-        if (prev != null) {
-            val path = Path().apply { moveTo(x, y) }
-            try {
-                val finalStroke = prev.continueStroke(path, 0L, 30L, false)
-                dispatchGesture(
-                    GestureDescription.Builder().addStroke(finalStroke).build(),
-                    null, null)
-            } catch (_: Exception) {}
-        }
-        // Riprende immediatamente tutti i loop attivi
-        resumeAll()
+        joystickCurrentX = x
+        joystickCurrentY = y
+        forceStopJoystick()
     }
 
-    // Risveglia immediatamente tutti i loop attivi dopo la pausa joystick
     private fun resumeAll() {
         if (BotState.attackRunning) {
-            handler.removeCallbacks(attackLoop)
-            handler.post(attackLoop)
+            handler.removeCallbacks(attackLoop); handler.post(attackLoop)
         }
         if (BotState.potionRunning) {
-            handler.removeCallbacks(potionLoop)
-            handler.post(potionLoop)
+            handler.removeCallbacks(potionLoop); handler.post(potionLoop)
         }
         if (BotState.lootRunning) {
-            handler.removeCallbacks(lootLoop)
-            handler.post(lootLoop)
+            handler.removeCallbacks(lootLoop); handler.post(lootLoop)
         }
     }
 
@@ -350,17 +331,12 @@ class BotAccessibilityService : AccessibilityService() {
         } catch (_: Exception) { false }
     }
 
-    private fun tapMultitouch(
-        x1: Float, y1: Float, dur1Ms: Long,
-        x2: Float, y2: Float, dur2Ms: Long
-    ): Boolean {
+    private fun tapMultitouch(x1: Float, y1: Float, dur1Ms: Long, x2: Float, y2: Float, dur2Ms: Long): Boolean {
         return try {
             dispatchGesture(
                 GestureDescription.Builder()
-                    .addStroke(GestureDescription.StrokeDescription(
-                        Path().apply { moveTo(x1, y1) }, 0L, dur1Ms))
-                    .addStroke(GestureDescription.StrokeDescription(
-                        Path().apply { moveTo(x2, y2) }, 0L, dur2Ms))
+                    .addStroke(GestureDescription.StrokeDescription(Path().apply { moveTo(x1, y1) }, 0L, dur1Ms))
+                    .addStroke(GestureDescription.StrokeDescription(Path().apply { moveTo(x2, y2) }, 0L, dur2Ms))
                     .build(), null, null)
         } catch (_: Exception) { false }
     }
@@ -399,8 +375,7 @@ class BotAccessibilityService : AccessibilityService() {
         BotState.lootItemsFound = 0
         gestureInProgress = false
         BotState.lootRunning = true
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)
-            handler.postDelayed(scanner, 200L)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) handler.postDelayed(scanner, 200L)
         handler.postDelayed(lootLoop, 600L)
     }
 
@@ -419,6 +394,7 @@ class BotAccessibilityService : AccessibilityService() {
     override fun onDestroy() {
         super.onDestroy()
         stopAttack(); stopPotion(); stopLoot()
+        handler.removeCallbacks(joystickTickRunnable)
         joystickForwarding = false
         BotState.joystickActive = false
         if (instance === this) instance = null

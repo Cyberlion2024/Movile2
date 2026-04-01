@@ -38,16 +38,16 @@ li{margin-bottom:8px;line-height:1.6;color:#ccc}
 <body>
 <div class="wrap">
   <h1>&#129302; Movile2 Bot</h1>
-  <p class="sub">Bot Android per MMORPG &mdash; Kotlin + Accessibility Service &mdash; <strong>v8</strong></p>
+  <p class="sub">Bot Android per MMORPG &mdash; Kotlin + Accessibility Service &mdash; <strong>v9</strong></p>
 
   <div class="card">
-    <h2>&#10024; Novit&agrave; v8 &mdash; Pausa Joystick Automatica + Loot Conservativo</h2>
+    <h2>&#10024; Novit&agrave; v9 &mdash; Fix Joystick Stabile + Fix Re-impostazione + Loot Preciso</h2>
     <ul>
-      <li><strong>Pausa automatica sul joystick</strong> <span class="new">NEW</span> &mdash; premi <strong>🕹️ IMPOSTA JOYSTICK</strong> e tocca il centro del tuo joystick. Da quel momento, ogni volta che usi il joystick <em>tutti</em> i bot (attacco, pozione, loot) si fermano istantaneamente. Quando alzi il dito, tutto riprende immediatamente</li>
-      <li><strong>Forwarding gesture trasparente</strong> <span class="new">NEW</span> &mdash; l&#39;overlay sul joystick intercetta il tocco e lo ritrasmette al gioco tramite <code>continueStroke</code>: il personaggio si muove esattamente come senza il bot</li>
-      <li><strong>Loot molto pi&ugrave; conservativo</strong> <span class="new">NEW</span> &mdash; zona ristretta al centro schermo (22%..68% x, 32%..72% y), raggio massimo 22% larghezza, solo colori yang (oro/ambra) e nomi item bianchi, soglia 4 pixel, max 5 bersagli. Rimosso il rilevamento generico &ldquo;bright warm&rdquo; che causava tap casuali su elementi UI</li>
+      <li><strong>Joystick forwarding timer-based</strong> <span class="new">FIX</span> &mdash; eliminato il bug &ldquo;joystickActive bloccato&rdquo;: la versione v8 usava callback su <code>continueStroke</code> che si rompeva quando il callback arrivava dopo la scadenza dello stroke. Ora un Runnable scatta ogni 80ms e invia stroke da 120ms (40ms di sovrapposizione garantita). Se nessun aggiornamento arriva per 2.5s la pausa viene resettata in sicurezza</li>
+      <li><strong>Re-impostazione posizioni sempre funzionante</strong> <span class="new">FIX</span> &mdash; la joystick zone overlay veniva disabilitata al touch durante le catture (IMPOSTA ATT / IMPOSTA POZ / IMPOSTA JOYSTICK), poi riabilitata al termine. Ora tutte le re-impostazioni funzionano anche se la zona joystick &egrave; attiva</li>
+      <li><strong>Loot solo oro puro e bianco puro</strong> <span class="new">FIX</span> &mdash; colori strettissimi: yang R&gt;240 G&gt;185 B&lt;20, item R&gt;248 G&gt;248 B&gt;248. Zona ristretta al centro (30%..70% x, 35%..70% y), raggio 18% larghezza, cella 20px, soglia 2 pixel. Nessun falso positivo da animazioni o UI</li>
     </ul>
-    <div class="ok">&#9989; Come usare il joystick: premi <strong>🕹️ IMPOSTA JOYSTICK</strong> nel pannello &rarr; tocca il centro del joystick sullo schermo &rarr; un overlay invisibile 280&times;280dp viene posizionato l&igrave;. Da quel momento muoviti liberamente: attacco e pozioni si fermano mentre cammini e riprendono appena ti fermi.</div>
+    <div class="ok">&#9989; Ordine di setup consigliato: 1&#41; IMPOSTA ATT &rarr; 2&#41; IMPOSTA POZ &rarr; 3&#41; IMPOSTA JOYSTICK &rarr; 4&#41; Abilita ATT/POZ/LOOT. Puoi reimpostare qualsiasi posizione in qualsiasi momento anche con il joystick attivo.</div>
   </div>
 
   <div class="card">
