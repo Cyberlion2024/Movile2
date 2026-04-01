@@ -32,6 +32,9 @@ class OverlayService : Service() {
     private var btnPot: TextView? = null
     private var btnLoot: TextView? = null
     private var btnSetPoz: TextView? = null
+    private var contentLayout: LinearLayout? = null
+    private var btnToggle: TextView? = null
+    private var panelCollapsed = false
     private val handler = Handler(Looper.getMainLooper())
 
     private var potInterval: Long = 3000L
@@ -50,7 +53,6 @@ class OverlayService : Service() {
             val slots  = BotState.potionSlots.size
             val hasAtt = BotState.attackPos != null
 
-            // Status
             val parts = mutableListOf<String>()
             if (attOn)  parts.add("⚔️ ATT")
             if (potOn)  parts.add("💊 POZ")
@@ -58,24 +60,19 @@ class OverlayService : Service() {
             tvStatus?.text = if (parts.isEmpty()) "● INATTIVO" else parts.joinToString(" + ")
             tvStatus?.setTextColor(if (parts.isEmpty()) Color.LTGRAY else Color.GREEN)
 
-            // Bottone imposta att
             btnSetAtt?.text = if (hasAtt) "🎯 ATT ✓" else "🎯 IMPOSTA ATT"
 
-            // Bottone attacco
             btnAttack?.text = if (attOn) "⚔️ ATT: ON" else "⚔️ ATT: OFF"
             btnAttack?.setBackgroundColor(
                 if (attOn) Color.argb(230, 180, 50, 0) else Color.argb(220, 50, 50, 80))
 
-            // Bottone imposta poz
             val slotLabel = if (slots > 0) " ($slots)" else ""
             btnSetPoz?.text = "🎯 IMPOSTA POZ$slotLabel"
 
-            // Bottone pozione
             btnPot?.text  = if (potOn)  "💊 POZ: ON"  else "💊 POZ: OFF"
             btnPot?.setBackgroundColor(
                 if (potOn) Color.argb(230, 0, 130, 160) else Color.argb(220, 50, 50, 80))
 
-            // Bottone loot
             btnLoot?.text = if (lootOn) "🎒 LOOT: ON" else "🎒 LOOT: OFF"
             btnLoot?.setBackgroundColor(
                 if (lootOn) Color.argb(230, 20, 150, 50) else Color.argb(220, 50, 50, 80))
@@ -116,10 +113,29 @@ class OverlayService : Service() {
             setPadding(16, 12, 16, 12)
         }
 
-        val drag = makeText("☰ BOT", 11f, Color.argb(180, 150, 200, 255))
-        tvStatus  = makeText("● INATTIVO", 13f, Color.LTGRAY)
+        // ── Barra superiore: drag + pulsante hide ─────────────────────────────
+        val topBar = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
 
-        // ── Attacco ───────────────────────────────────────────────────────────
+        val drag = makeText("☰ BOT", 11f, Color.argb(180, 150, 200, 255))
+        drag.layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+
+        btnToggle = makeText("▼", 13f, Color.argb(200, 150, 200, 255))
+        btnToggle!!.setPadding(12, 4, 4, 4)
+
+        topBar.addView(drag)
+        topBar.addView(btnToggle)
+
+        tvStatus = makeText("● INATTIVO", 13f, Color.LTGRAY)
+
+        // ── Contenuto collassabile ─────────────────────────────────────────────
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+
+        // Attacco
         btnSetAtt = makeButton("🎯 IMPOSTA ATT", Color.argb(220, 100, 40, 0))
         btnSetAtt!!.setOnClickListener { startPickAttack() }
 
@@ -140,7 +156,7 @@ class OverlayService : Service() {
             }
         }
 
-        // ── Pozione ───────────────────────────────────────────────────────────
+        // Pozione
         btnSetPoz = makeButton("🎯 IMPOSTA POZ", Color.argb(220, 130, 70, 0))
         btnSetPoz!!.setOnClickListener { startPickPotion() }
 
@@ -161,7 +177,7 @@ class OverlayService : Service() {
             }
         }
 
-        // ── Loot ─────────────────────────────────────────────────────────────
+        // Loot
         btnLoot = makeButton("🎒 LOOT: OFF", Color.argb(220, 50, 50, 80))
         btnLoot!!.setOnClickListener {
             val bot = BotAccessibilityService.instance ?: run {
@@ -171,19 +187,22 @@ class OverlayService : Service() {
             if (BotState.lootRunning) bot.stopLoot() else bot.startLoot()
         }
 
-        // ── Layout ────────────────────────────────────────────────────────────
-        root.addView(drag)
+        content.addView(space(6))
+        content.addView(btnSetAtt)
+        content.addView(space(4))
+        content.addView(btnAttack)
+        content.addView(space(8))
+        content.addView(btnSetPoz)
+        content.addView(space(4))
+        content.addView(btnPot)
+        content.addView(space(4))
+        content.addView(btnLoot)
+
+        contentLayout = content
+
+        root.addView(topBar)
         root.addView(tvStatus)
-        root.addView(space(8))
-        root.addView(btnSetAtt)
-        root.addView(space(4))
-        root.addView(btnAttack)
-        root.addView(space(8))
-        root.addView(btnSetPoz)
-        root.addView(space(4))
-        root.addView(btnPot)
-        root.addView(space(4))
-        root.addView(btnLoot)
+        root.addView(content)
         panel = root
 
         val lp = overlayParams(
@@ -192,14 +211,18 @@ class OverlayService : Service() {
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
         ).apply { gravity = Gravity.TOP or Gravity.START; x = 16; y = 180 }
 
-        // Drag
-        var dX = 0f; var dY = 0f; var sX = 0; var sY = 0
+        // ── Drag sulla barra superiore ─────────────────────────────────────────
+        var dX = 0f; var dY = 0f; var sX = 0; var sY = 0; var moved = false
         drag.setOnTouchListener { _, e ->
             when (e.action) {
-                MotionEvent.ACTION_DOWN -> { dX = e.rawX; dY = e.rawY; sX = lp.x; sY = lp.y; true }
+                MotionEvent.ACTION_DOWN -> {
+                    dX = e.rawX; dY = e.rawY; sX = lp.x; sY = lp.y; moved = false; true
+                }
                 MotionEvent.ACTION_MOVE -> {
-                    lp.x = (sX + (e.rawX - dX)).toInt()
-                    lp.y = (sY + (e.rawY - dY)).toInt()
+                    val nx = (sX + (e.rawX - dX)).toInt()
+                    val ny = (sY + (e.rawY - dY)).toInt()
+                    if (Math.abs(nx - sX) > 4 || Math.abs(ny - sY) > 4) moved = true
+                    lp.x = nx; lp.y = ny
                     wm.updateViewLayout(root, lp)
                     true
                 }
@@ -207,11 +230,26 @@ class OverlayService : Service() {
             }
         }
 
+        // ── Pulsante hide/show ─────────────────────────────────────────────────
+        btnToggle!!.setOnClickListener {
+            panelCollapsed = !panelCollapsed
+            if (panelCollapsed) {
+                contentLayout?.visibility = View.GONE
+                tvStatus?.visibility = View.GONE
+                btnToggle?.text = "▶"
+            } else {
+                contentLayout?.visibility = View.VISIBLE
+                tvStatus?.visibility = View.VISIBLE
+                btnToggle?.text = "▼"
+            }
+            wm.updateViewLayout(root, lp)
+        }
+
         wm.addView(root, lp)
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // CATTURA POSIZIONE ATTACCO (singolo tocco)
+    // CATTURA POSIZIONE ATTACCO
     // ═══════════════════════════════════════════════════════════════════════════
     private fun startPickAttack() {
         if (captureView != null) return
@@ -219,6 +257,9 @@ class OverlayService : Service() {
 
         tvStatus?.text = "Tocca il tasto ATTACCO... (5s)"
         tvStatus?.setTextColor(Color.YELLOW)
+        if (panelCollapsed) {
+            tvStatus?.visibility = View.VISIBLE
+        }
 
         val cv = makeCaptureOverlay()
         cv.setOnTouchListener { _, e ->
@@ -235,7 +276,7 @@ class OverlayService : Service() {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // CATTURA SLOT POZIONE (max 3 tocchi)
+    // CATTURA SLOT POZIONE
     // ═══════════════════════════════════════════════════════════════════════════
     private val MAX_SLOTS = 3
     private var slotsAddedDuringCapture = 0
@@ -252,6 +293,9 @@ class OverlayService : Service() {
 
         tvStatus?.text = "Tocca slot 1/3... (5s)"
         tvStatus?.setTextColor(Color.YELLOW)
+        if (panelCollapsed) {
+            tvStatus?.visibility = View.VISIBLE
+        }
 
         val cv = makeCaptureOverlay()
         cv.setOnTouchListener { _, e ->
@@ -259,7 +303,7 @@ class OverlayService : Service() {
                 slotsAddedDuringCapture++
                 BotState.potionSlots.add(e.rawX to e.rawY)
                 if (slotsAddedDuringCapture >= MAX_SLOTS) {
-                    finishCapture(null) // avvia pozione automaticamente
+                    finishCapture(null)
                 } else {
                     val next = slotsAddedDuringCapture + 1
                     tvStatus?.text = "✓ Slot $slotsAddedDuringCapture  →  Tocca slot $next/3 o aspetta"
@@ -281,11 +325,9 @@ class OverlayService : Service() {
         captureMode = CaptureMode.NONE
 
         if (msg != null) {
-            // Cattura singola (attacco)
             tvStatus?.text = msg
             tvStatus?.setTextColor(Color.GREEN)
         } else {
-            // Cattura pozione: avvia automaticamente
             val slots = BotState.potionSlots.size
             if (slots == 0) {
                 tvStatus?.text = "Nessuno slot impostato"
@@ -301,6 +343,11 @@ class OverlayService : Service() {
                 tvStatus?.text = "$slots slot salvati. Abilita Accessibilità!"
                 tvStatus?.setTextColor(Color.YELLOW)
             }
+        }
+
+        // Ripristina visibilità status se il pannello è collassato
+        if (panelCollapsed) {
+            handler.postDelayed({ if (panelCollapsed) tvStatus?.visibility = View.GONE }, 2500L)
         }
     }
 
@@ -327,6 +374,10 @@ class OverlayService : Service() {
     private fun showWarn(msg: String) {
         tvStatus?.text = msg
         tvStatus?.setTextColor(Color.YELLOW)
+        if (panelCollapsed) {
+            tvStatus?.visibility = View.VISIBLE
+            handler.postDelayed({ if (panelCollapsed) tvStatus?.visibility = View.GONE }, 2500L)
+        }
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

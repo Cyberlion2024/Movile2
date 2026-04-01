@@ -38,7 +38,18 @@ li{margin-bottom:8px;line-height:1.6;color:#ccc}
 <body>
 <div class="wrap">
   <h1>&#129302; Movile2 Bot</h1>
-  <p class="sub">Bot Android per MMORPG &mdash; Kotlin + Accessibility Service &mdash; <strong>v6</strong></p>
+  <p class="sub">Bot Android per MMORPG &mdash; Kotlin + Accessibility Service &mdash; <strong>v7</strong></p>
+
+  <div class="card">
+    <h2>&#10024; Novit&agrave; v7 &mdash; Loot Migliorato + Hide Pannello + Fix Attacco Manuale</h2>
+    <ul>
+      <li><strong>Loot yang/oggetti potenziato</strong> <span class="new">NEW</span> &mdash; soglia abbassata a 3 pixel (era 5), due range colore per yang (brillante + ambra), area scansione espansa (10%..78% x, 20%..82% y), ordinamento per distanza dal personaggio</li>
+      <li><strong>Hide pannello</strong> <span class="new">NEW</span> &mdash; premi <strong>▼</strong> nella barra del pannello per collassarlo a una sola riga; premi <strong>▶</strong> per espandere. Il pannello non copre pi&ugrave; lo schermo di gioco</li>
+      <li><strong>Fix attacco manuale + pozione</strong> <span class="new">NEW</span> &mdash; quando la pozione bot spara mentre attacchi a mano, il bot invia automaticamente un re-tap sull&#39;attacco 70ms dopo per ripristinare il colpo</li>
+      <li><strong>Tap attacco pi&ugrave; breve</strong> <span class="new">NEW</span> &mdash; ridotto da 60ms a 40ms: il joystick ha pi&ugrave; finestre libere per registrare il movimento</li>
+    </ul>
+    <div class="warn">&#9888; Il re-tap automatico funziona solo se la posizione ATT &egrave; impostata. Per l&#39;esperienza migliore con attacco manuale: imposta sempre la posizione ATT prima di usare solo POZ.</div>
+  </div>
 
   <div class="card">
     <h2>&#10024; Novit&agrave; v6 &mdash; Movimento Libero + Loot di Prossimit&agrave;</h2>
