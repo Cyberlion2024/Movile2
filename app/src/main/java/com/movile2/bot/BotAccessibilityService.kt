@@ -19,10 +19,13 @@ class BotAccessibilityService : AccessibilityService() {
 
     @Volatile private var lootTargets: List<Pair<Float, Float>> = emptyList()
 
+    // ── Flag per evitare sovrapposizioni tra pozione e loot ───────────────────
+    @Volatile private var gestureInProgress = false
+
     // ═══════════════════════════════════════════════════════════════════════════
     // LOOP POZIONE
-    // Usa tapLight (1ms) invece di 60ms per NON interferire con il tocco
-    // reale tenuto premuto dall'utente (es. tasto attacco).
+    //
+    // Usa tapPotion (35ms). Non sparare se un loot-tap è in corso.
     // ═══════════════════════════════════════════════════════════════════════════
     private val potionLoop = object : Runnable {
         override fun run() {
@@ -30,25 +33,28 @@ class BotAccessibilityService : AccessibilityService() {
             val slots = BotState.potionSlots
             var delay = 0L
             for ((x, y) in slots) {
-                handler.postDelayed({ if (BotState.potionRunning) tapLight(x, y) }, delay)
-                delay += 200L
+                handler.postDelayed({
+                    if (BotState.potionRunning && !gestureInProgress) tapPotion(x, y)
+                }, delay)
+                delay += 250L
             }
             handler.postDelayed(this, BotState.potionIntervalMs.coerceAtLeast(500L) + delay)
         }
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // LOOP RACCOLTA — gesto multi-stroke
+    // LOOP RACCOLTA — tap sequenziali con callback
     //
-    // Tutti gli item trovati vengono raccolti con UN SOLO dispatchGesture.
-    // Ogni item = uno stroke da 60ms con offset temporale di 350ms.
-    // Questo è il massimo che possiamo fare: il server richiede un tap
-    // individuale per ogni dropId — non esiste raccolta AoE lato server.
+    // Problema del multi-stroke (versione precedente):
+    //   Un singolo GestureDescription con 10 stroke da 350ms l'uno dura 3.5s.
+    //   Durante quei 3.5s Android blocca OGNI altro dispatchGesture (incluse
+    //   le pozioni). Se viene richiesto un secondo gesto, ENTRAMBI falliscono
+    //   silenziosamente (dispatchGesture restituisce false).
     //
-    // Vantaggi rispetto a handler.postDelayed multipli:
-    //  - Una sola chiamata al sistema Android
-    //  - Meno interferenze con i tocchi reali dell'utente
-    //  - Timing gestito internamente dal sistema gesture
+    // Soluzione: un tap per volta con GestureResultCallback.
+    //   onCompleted → il gesto è finito → passiamo al prossimo item.
+    //   onCancelled → qualcosa ha interrotto → saltiamo e andiamo avanti.
+    //   Così il loop è coordinato con il sistema Android e non blocca le pozioni.
     // ═══════════════════════════════════════════════════════════════════════════
     private val lootLoop = object : Runnable {
         override fun run() {
@@ -61,18 +67,42 @@ class BotAccessibilityService : AccessibilityService() {
                 return
             }
 
-            // Costruisce un unico gesto con N stroke (uno per item)
-            val builder = GestureDescription.Builder()
-            var time = 0L
-            for ((ix, iy) in items.take(10)) {
-                val path = Path().apply { moveTo(ix, iy) }
-                builder.addStroke(GestureDescription.StrokeDescription(path, time, 60L))
-                time += 350L
+            tapItemsSequentially(items, 0) {
+                if (BotState.lootRunning)
+                    handler.postDelayed(this, 300L)
             }
-            try { dispatchGesture(builder.build(), null, null) } catch (_: Exception) {}
+        }
+    }
 
-            // Riparte dopo che tutti gli stroke sono terminati
-            handler.postDelayed(this, time + 500L)
+    private fun tapItemsSequentially(
+        items: List<Pair<Float, Float>>,
+        index: Int,
+        onAllDone: () -> Unit
+    ) {
+        if (!BotState.lootRunning || index >= items.size) {
+            onAllDone()
+            return
+        }
+        val (x, y) = items[index]
+        val path = Path().apply { moveTo(x, y) }
+        val stroke = GestureDescription.StrokeDescription(path, 0L, 60L)
+        val gesture = GestureDescription.Builder().addStroke(stroke).build()
+
+        gestureInProgress = true
+        val dispatched = dispatchGesture(gesture, object : GestureResultCallback() {
+            override fun onCompleted(g: GestureDescription?) {
+                gestureInProgress = false
+                handler.post { tapItemsSequentially(items, index + 1, onAllDone) }
+            }
+            override fun onCancelled(g: GestureDescription?) {
+                gestureInProgress = false
+                handler.postDelayed({ tapItemsSequentially(items, index + 1, onAllDone) }, 100L)
+            }
+        }, handler)
+
+        if (!dispatched) {
+            gestureInProgress = false
+            handler.postDelayed({ tapItemsSequentially(items, index + 1, onAllDone) }, 150L)
         }
     }
 
@@ -102,23 +132,22 @@ class BotAccessibilityService : AccessibilityService() {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // RILEVAMENTO OGGETTI A TERRA — CON FILTRO DI PROSSIMITÀ
+    // RILEVAMENTO OGGETTI A TERRA
     //
-    // Cerca in celle 30×30 px (più fine rispetto alle 40×40 precedenti).
-    // Raccoglie SOLO ciò che è entro il 45% della larghezza schermo
-    // dal personaggio (centro ~50% x, ~55% y).
+    // Dallo screenshot analizzato: nel gioco compaiono questi tipi di testo:
+    //   - VERDE:       nome del personaggio sopra gli oggetti di sua proprietà
+    //   - GIALLO/ORO:  label "Yang" per la valuta
+    //   - BIANCO/CREMA: nomi degli item (Corazza dello..., ecc.)
     //
-    // Soglie colore:
-    //   Nome personaggio (verde):  G > 140, G-R > 40, G-B > 30, R < 150
-    //   Yang (giallo-oro):         R > 185, G > 140, B < 90, R-B > 110
+    // Raccoglie tutti e tre i tipi entro il 45% dal centro schermo.
     //
-    // Min pixel validi per cella abbassato da 3 → 2 (più sensibile al testo piccolo).
+    // Soglie pixel:
+    //   Nome personaggio (verde):  G>140, G-R>40, G-B>30, R<150
+    //   Yang (giallo-oro):         R>185, G>140, B<110, R>G-30, R>B+70
+    //   Item name (bianco/crema):  R>200, G>190, B>170, tutti alti ma R≥G≥B
+    //                              (bianco caldo — esclude sfondo chiaro del gioco)
     //
-    // Area esclusa:
-    //   Top 12%    — barra HP, minimappa
-    //   Bottom 22% — skill, joystick
-    //   Left 8%    — pannello overlay
-    //   Right 15%  — skill colonna destra
+    // Min 2 pixel per cella, celle 30×30 px.
     // ═══════════════════════════════════════════════════════════════════════════
     private fun findLootItems(bmp: Bitmap): List<Pair<Float, Float>> {
         val w = bmp.width; val h = bmp.height
@@ -127,10 +156,8 @@ class BotAccessibilityService : AccessibilityService() {
         val cell = 30
         val found = mutableListOf<Pair<Float, Float>>()
 
-        // Personaggio al centro dello schermo
         val charX = w * 0.50f
         val charY = h * 0.55f
-        // Raggio di raccolta: 45% della larghezza (era 30%, ora più ampio)
         val maxDist = w * 0.45f
         val maxDistSq = maxDist * maxDist
 
@@ -141,12 +168,9 @@ class BotAccessibilityService : AccessibilityService() {
                 val itemX = (cx + cell / 2).toFloat()
                 val itemY = (cy + cell / 2).toFloat()
 
-                // Filtro prossimità
                 val dx = itemX - charX
                 val dy = itemY - charY
-                if (dx * dx + dy * dy > maxDistSq) {
-                    cx += cell; continue
-                }
+                if (dx * dx + dy * dy > maxDistSq) { cx += cell; continue }
 
                 var hits = 0
                 for (dy2 in 0 until cell step 3) {
@@ -156,16 +180,21 @@ class BotAccessibilityService : AccessibilityService() {
                         val g = Color.green(p)
                         val b = Color.blue(p)
 
-                        // Nome personaggio: testo verde (soglie leggermente allargate)
+                        // Nome personaggio in verde
                         val playerName = g > 140 && g - r > 40 && g - b > 30 && r < 150
 
-                        // Yang: testo giallo-oro (soglie allargate per varianti colore)
-                        val yang = r > 185 && g > 140 && b < 90 && r - b > 110
+                        // Yang: giallo-oro (anche variante crema/arancio)
+                        val yang = r > 185 && g > 140 && b < 110 && r > b + 70
 
-                        if (playerName || yang) hits++
+                        // Nome item: bianco caldo (R≥G≥B, tutti alti)
+                        // Il "bianco caldo" dei nomi item si distingue dallo sfondo
+                        // chiaro del gioco perché il testo è piccolo e compatto
+                        val itemName = r > 210 && g > 190 && b > 160 &&
+                                r >= g && g >= b && r - b > 20 && r - b < 80
+
+                        if (playerName || yang || itemName) hits++
                     }
                 }
-                // Min 2 pixel (era 3) — più sensibile al testo piccolo
                 if (hits >= 2) {
                     found.add(itemX to itemY)
                     if (found.size >= 10) return found.sortedByDescending { it.second }
@@ -206,12 +235,13 @@ class BotAccessibilityService : AccessibilityService() {
     fun stopLoot() {
         BotState.lootRunning = false
         BotState.lootItemsFound = 0
+        gestureInProgress = false
         handler.removeCallbacks(scanner)
         handler.removeCallbacks(lootLoop)
         lootTargets = emptyList()
     }
 
-    // ── Tap normale (raccolta oggetti) — 60ms ─────────────────────────────────
+    // ── Tap raccolta oggetti — 60ms ───────────────────────────────────────────
     private fun tap(x: Float, y: Float) {
         try {
             dispatchGesture(
@@ -222,16 +252,16 @@ class BotAccessibilityService : AccessibilityService() {
         } catch (_: Exception) {}
     }
 
-    // ── Tap leggero (pozione) — 1ms ───────────────────────────────────────────
-    // Durata brevissima per NON cancellare il tocco reale tenuto premuto
-    // dall'utente (es. tasto attacco). Un gesto accessibility da 60ms blocca
-    // la coda input per tutta la sua durata; a 1ms l'interferenza è trascurabile.
-    private fun tapLight(x: Float, y: Float) {
+    // ── Tap pozione — 35ms ────────────────────────────────────────────────────
+    // Abbastanza lungo da essere registrato dal gioco (minimo ~20ms).
+    // Abbastanza corto da non bloccare il tocco reale tenuto premuto (attacco).
+    // NON viene sparato se gestureInProgress è true (loot in corso).
+    private fun tapPotion(x: Float, y: Float) {
         try {
             dispatchGesture(
                 GestureDescription.Builder()
                     .addStroke(GestureDescription.StrokeDescription(
-                        Path().apply { moveTo(x, y) }, 0L, 1L))
+                        Path().apply { moveTo(x, y) }, 0L, 35L))
                     .build(), null, null)
         } catch (_: Exception) {}
     }
