@@ -19,6 +19,7 @@ import android.view.WindowManager
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.app.NotificationCompat
+import kotlin.math.abs
 
 class OverlayService : Service() {
 
@@ -26,17 +27,11 @@ class OverlayService : Service() {
     private var panel: LinearLayout? = null
     private var panelLp: WindowManager.LayoutParams? = null
 
-    // Cattura posizione
     private var captureView: View? = null
     private var captureTimeoutRunnable: Runnable? = null
     private var slotsAddedDuringCapture = 0
     private val MAX_SLOTS = 3
 
-    // Overlay joystick — la LayoutParams viene salvata per aggiornare i flag
-    private var joystickZoneView: View? = null
-    private var joystickZoneLp: WindowManager.LayoutParams? = null
-
-    // Riferimenti UI
     private var tvStatus: TextView? = null
     private var btnAttack: TextView? = null
     private var btnSetAtt: TextView? = null
@@ -53,6 +48,33 @@ class OverlayService : Service() {
 
     private enum class CaptureMode { NONE, ATTACK, POTION, JOYSTICK }
     private var captureMode = CaptureMode.NONE
+
+    // ── Joystick detection via ACTION_OUTSIDE ──────────────────────────────────
+    // Il pannello ha FLAG_WATCH_OUTSIDE_TOUCH: riceve ACTION_OUTSIDE per ogni
+    // tocco fuori dal pannello stesso (incluso il joystick del gioco).
+    // NON blocchiamo mai il game input: nessun overlay sopra il joystick.
+    // Quando i tocchi ricadono nella zona joystick → joystickActive=true.
+    // Timer di 1.5s senza tocchi nella zona → joystickActive=false → bot riprendono.
+    private var joystickResumeRunnable: Runnable? = null
+    private val JOY_RESUME_DELAY_MS = 1500L
+
+    private fun onOutsideTouch(rx: Float, ry: Float) {
+        val center = BotState.joystickPos ?: return
+        val halfZone = (140f * resources.displayMetrics.density)
+        val dx = rx - center.first; val dy = ry - center.second
+        if (abs(dx) < halfZone && abs(dy) < halfZone) {
+            // Tocco nella zona joystick → pausa bot
+            BotState.joystickActive = true
+            // Resetta il timer di ripristino
+            joystickResumeRunnable?.let { handler.removeCallbacks(it) }
+            val r = Runnable {
+                BotAccessibilityService.instance?.resumeAfterJoystick()
+                    ?: run { BotState.joystickActive = false }
+            }
+            joystickResumeRunnable = r
+            handler.postDelayed(r, JOY_RESUME_DELAY_MS)
+        }
+    }
 
     // ── Ticker ────────────────────────────────────────────────────────────────
     private val ticker = object : Runnable {
@@ -113,14 +135,14 @@ class OverlayService : Service() {
         BotState.joystickActive = false
         panel?.let { runCatching { wm.removeView(it) } }
         captureView?.let { runCatching { wm.removeView(it) } }
-        joystickZoneView?.let { runCatching { wm.removeView(it) } }
-        panel = null; captureView = null; joystickZoneView = null
+        panel = null; captureView = null
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     // ═══════════════════════════════════════════════════════════════════════════
     // PANNELLO FLOTTANTE
+    // FLAG_WATCH_OUTSIDE_TOUCH → riceve ACTION_OUTSIDE per i tocchi fuori pannello
     // ═══════════════════════════════════════════════════════════════════════════
     private fun buildPanel() {
         wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
@@ -133,8 +155,7 @@ class OverlayService : Service() {
 
         // Barra superiore: drag + hide
         val topBar = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
+            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
         }
         val drag = makeText("☰ BOT", 11f, Color.argb(180, 150, 200, 255))
         drag.layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
@@ -179,6 +200,9 @@ class OverlayService : Service() {
             if (BotState.lootRunning) bot.stopLoot() else bot.startLoot()
         }
 
+        // Imposta zona joystick: il bot registra la posizione center del joystick.
+        // Nessun overlay viene creato sopra il joystick.
+        // I tocchi vengono rilevati tramite ACTION_OUTSIDE sul pannello.
         btnSetJoy = makeButton("🕹️ IMPOSTA JOYSTICK", Color.argb(220, 60, 40, 10))
         btnSetJoy!!.setOnClickListener { startPickJoystick() }
 
@@ -197,9 +221,16 @@ class OverlayService : Service() {
         val lp = overlayParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+            WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH   // ← chiave
         ).apply { gravity = Gravity.TOP or Gravity.START; x = 16; y = 180 }
         panelLp = lp
+
+        // ACTION_OUTSIDE sul pannello → rilevamento joystick
+        root.setOnTouchListener { _, e ->
+            if (e.action == MotionEvent.ACTION_OUTSIDE) onOutsideTouch(e.rawX, e.rawY)
+            false  // non consuma: drag su child funziona normalmente
+        }
 
         // Drag
         var dX = 0f; var dY = 0f; var sX = 0; var sY = 0
@@ -229,36 +260,11 @@ class OverlayService : Service() {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // JOYSTICK ZONE OVERLAY — FLAG_NOT_TOUCHABLE control
-    //
-    // BUG FIX: nella versione precedente la joystick zone intercettava i tap
-    // anche durante le catture (IMPOSTA ATT/POZ) impedendo di reimpostare.
-    // Ora prima di ogni cattura disabilitiamo il touch sull'overlay joystick
-    // (aggiungendo FLAG_NOT_TOUCHABLE via wm.updateViewLayout) e lo riabilitiamo
-    // al termine. Questo garantisce che il capture overlay MATCH_PARENT riceva
-    // tutti i tap senza interferenze.
-    // ═══════════════════════════════════════════════════════════════════════════
-    private fun disableJoystickZone() {
-        val jv = joystickZoneView ?: return
-        val jlp = joystickZoneLp ?: return
-        jlp.flags = jlp.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
-        runCatching { wm.updateViewLayout(jv, jlp) }
-    }
-
-    private fun enableJoystickZone() {
-        val jv = joystickZoneView ?: return
-        val jlp = joystickZoneLp ?: return
-        jlp.flags = jlp.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
-        runCatching { wm.updateViewLayout(jv, jlp) }
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════
     // CATTURA POSIZIONE ATTACCO
     // ═══════════════════════════════════════════════════════════════════════════
     private fun startPickAttack() {
         if (captureView != null) return
         captureMode = CaptureMode.ATTACK
-        disableJoystickZone()                             // ← FIX: non interferisce
         showStatus("Tocca il tasto ATTACCO... (5s)", Color.YELLOW)
         val cv = makeCaptureOverlay()
         cv.setOnTouchListener { _, e ->
@@ -278,9 +284,7 @@ class OverlayService : Service() {
     private fun startPickPotion() {
         if (captureView != null) return
         captureMode = CaptureMode.POTION
-        disableJoystickZone()                             // ← FIX
-        BotState.potionSlots.clear()
-        BotState.potionRunning = false
+        BotState.potionSlots.clear(); BotState.potionRunning = false
         BotAccessibilityService.instance?.stopPotion()
         slotsAddedDuringCapture = 0
         showStatus("Tocca slot 1/3... (5s)", Color.YELLOW)
@@ -292,7 +296,7 @@ class OverlayService : Service() {
                 if (slotsAddedDuringCapture >= MAX_SLOTS) {
                     finishCapture(null)
                 } else {
-                    showStatus("✓ Slot $slotsAddedDuringCapture → Tocca slot ${slotsAddedDuringCapture + 1}/3 o aspetta", Color.YELLOW)
+                    showStatus("✓ Slot $slotsAddedDuringCapture → Tocca ${slotsAddedDuringCapture + 1}/3 o aspetta", Color.YELLOW)
                 }
             }
             true
@@ -303,87 +307,23 @@ class OverlayService : Service() {
 
     // ═══════════════════════════════════════════════════════════════════════════
     // CATTURA POSIZIONE JOYSTICK
+    // Registra solo le coordinate del centro: NON crea nessun overlay.
+    // Il rilevamento avviene passivamente tramite ACTION_OUTSIDE.
     // ═══════════════════════════════════════════════════════════════════════════
     private fun startPickJoystick() {
         if (captureView != null) return
         captureMode = CaptureMode.JOYSTICK
-        disableJoystickZone()                             // ← FIX (se già esiste)
         showStatus("Tocca il CENTRO del joystick... (5s)", Color.YELLOW)
         val cv = makeCaptureOverlay()
         cv.setOnTouchListener { _, e ->
             if (e.action == MotionEvent.ACTION_DOWN && captureMode == CaptureMode.JOYSTICK) {
-                val cx = e.rawX; val cy = e.rawY
-                BotState.joystickPos = cx to cy
-                finishCapture("🕹️ Joystick impostato!")
-                createJoystickZoneOverlay(cx, cy)     // crea DOPO aver rimosso capture
+                BotState.joystickPos = e.rawX to e.rawY
+                finishCapture("🕹️ Zona joystick impostata!")
             }
             true
         }
         wm.addView(cv, captureOverlayParams()); captureView = cv
         scheduleCaptureTimeout()
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // OVERLAY JOYSTICK
-    //
-    // Overlay trasparente 280×280dp sul joystick dell'utente.
-    // Intercetta touch (NON ha FLAG_NOT_TOUCHABLE) e li inoltra al gioco
-    // tramite BotAccessibilityService.startJoystickForward / updateJoystick /
-    // stopJoystickForward (approccio timer-based, robusto).
-    //
-    // Tutti i loop bot si mettono in pausa (joystickActive=true) e riprendono
-    // immediatamente al rilascio (resumeAll()).
-    // ═══════════════════════════════════════════════════════════════════════════
-    private fun createJoystickZoneOverlay(centerX: Float, centerY: Float) {
-        joystickZoneView?.let { runCatching { wm.removeView(it) }; joystickZoneView = null }
-        joystickZoneLp = null
-
-        val density = resources.displayMetrics.density
-        val zonePx = (280 * density).toInt()
-        val halfZone = zonePx / 2
-
-        // jlp è dichiarata PRIMA del touch listener così la lambda può catturarla
-        val jlp = overlayParams(zonePx, zonePx, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE).apply {
-            gravity = Gravity.TOP or Gravity.START
-            x = (centerX - halfZone).toInt().coerceAtLeast(0)
-            y = (centerY - halfZone).toInt().coerceAtLeast(0)
-        }
-
-        val jv = View(this).apply { setBackgroundColor(Color.argb(1, 0, 0, 0)) }
-
-        jv.setOnTouchListener { _, e ->
-            val bot = BotAccessibilityService.instance
-            when (e.actionMasked) {
-                MotionEvent.ACTION_DOWN -> {
-                    // FIX CRITICO: dispatchGesture inietta eventi nel sistema che
-                    // verrebbero assorbiti di nuovo da questo overlay (è in cima).
-                    // Aggiungiamo FLAG_NOT_TOUCHABLE dopo aver ricevuto ACTION_DOWN
-                    // così tutti i dispatchGesture successivi bypassano l'overlay e
-                    // raggiungono il gioco. Android garantisce che ACTION_MOVE e
-                    // ACTION_UP dello STESSO gesto dell'utente arrivino comunque qui.
-                    jlp.flags = jlp.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
-                    runCatching { wm.updateViewLayout(jv, jlp) }
-                    bot?.startJoystickForward(e.rawX, e.rawY)
-                    true
-                }
-                MotionEvent.ACTION_MOVE -> {
-                    bot?.updateJoystick(e.rawX, e.rawY)
-                    true
-                }
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                    bot?.stopJoystickForward(e.rawX, e.rawY)
-                    // Rimuove FLAG_NOT_TOUCHABLE: pronto per il prossimo utilizzo
-                    jlp.flags = jlp.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
-                    runCatching { wm.updateViewLayout(jv, jlp) }
-                    true
-                }
-                else -> false
-            }
-        }
-
-        wm.addView(jv, jlp)
-        joystickZoneView = jv
-        joystickZoneLp = jlp
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -394,7 +334,6 @@ class OverlayService : Service() {
         captureTimeoutRunnable = null
         removeCaptureView()
         captureMode = CaptureMode.NONE
-        enableJoystickZone()                              // ← FIX: riabilita dopo cattura
 
         if (msg != null) {
             showStatus(msg, Color.GREEN)

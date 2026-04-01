@@ -41,13 +41,13 @@ li{margin-bottom:8px;line-height:1.6;color:#ccc}
   <p class="sub">Bot Android per MMORPG &mdash; Kotlin + Accessibility Service &mdash; <strong>v9</strong></p>
 
   <div class="card">
-    <h2>&#10024; Novit&agrave; v9 &mdash; Fix Joystick Stabile + Fix Re-impostazione + Loot Preciso</h2>
+    <h2>&#10024; Novit&agrave; v9 &mdash; Joystick via ACTION_OUTSIDE (nessun overlay)</h2>
     <ul>
-      <li><strong>Joystick forwarding timer-based</strong> <span class="new">FIX</span> &mdash; eliminato il bug &ldquo;joystickActive bloccato&rdquo;: la versione v8 usava callback su <code>continueStroke</code> che si rompeva quando il callback arrivava dopo la scadenza dello stroke. Ora un Runnable scatta ogni 80ms e invia stroke da 120ms (40ms di sovrapposizione garantita). Se nessun aggiornamento arriva per 2.5s la pausa viene resettata in sicurezza</li>
-      <li><strong>Re-impostazione posizioni sempre funzionante</strong> <span class="new">FIX</span> &mdash; la joystick zone overlay veniva disabilitata al touch durante le catture (IMPOSTA ATT / IMPOSTA POZ / IMPOSTA JOYSTICK), poi riabilitata al termine. Ora tutte le re-impostazioni funzionano anche se la zona joystick &egrave; attiva</li>
-      <li><strong>Loot solo oro puro e bianco puro</strong> <span class="new">FIX</span> &mdash; colori strettissimi: yang R&gt;240 G&gt;185 B&lt;20, item R&gt;248 G&gt;248 B&gt;248. Zona ristretta al centro (30%..70% x, 35%..70% y), raggio 18% larghezza, cella 20px, soglia 2 pixel. Nessun falso positivo da animazioni o UI</li>
+      <li><strong>Nessun overlay sul joystick</strong> <span class="new">FIX DEFINITIVO</span> &mdash; rimosso completamente l&#39;overlay trasparente sul joystick. Non c&#39;&egrave; pi&ugrave; nessun layer che intercetta il tocco &rarr; nessun blocco schermo, nessun riavvio telefono necessario. Il gioco riceve i tocchi nativamente, esattamente come senza il bot</li>
+      <li><strong>Rilevamento joystick tramite ACTION_OUTSIDE</strong> <span class="new">NEW</span> &mdash; il pannello bot ha il flag <code>FLAG_WATCH_OUTSIDE_TOUCH</code>: ogni tocco fuori dal pannello (incluso il joystick) genera un evento <code>ACTION_OUTSIDE</code> con le coordinate. Se cadono nella zona joystick (raggio 140dp dal centro impostato) &rarr; <code>joystickActive=true</code>. Timer da 1.5s senza tocchi nella zona &rarr; bot riprendono automaticamente</li>
+      <li><strong>Re-impostazione sempre funzionante</strong> <span class="new">FIX</span> &mdash; non esiste pi&ugrave; nessun overlay che interferisce con le catture. Premi IMPOSTA ATT/POZ/JOYSTICK in qualsiasi momento e funziona</li>
     </ul>
-    <div class="ok">&#9989; Ordine di setup consigliato: 1&#41; IMPOSTA ATT &rarr; 2&#41; IMPOSTA POZ &rarr; 3&#41; IMPOSTA JOYSTICK &rarr; 4&#41; Abilita ATT/POZ/LOOT. Puoi reimpostare qualsiasi posizione in qualsiasi momento anche con il joystick attivo.</div>
+    <div class="ok">&#9989; Come funziona: imposta il JOYSTICK una volta &rarr; ogni volta che usi il joystick i bot si fermano &rarr; 1.5s dopo che smetti di usarlo i bot riprendono. Il gioco riceve tutti i tocchi normalmente senza alcun ritardo artificiale.</div>
   </div>
 
   <div class="card">
