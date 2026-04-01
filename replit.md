@@ -18,6 +18,12 @@ Android bot app in Kotlin for MMORPG automation using Accessibility Service + Ov
 | `BotConfig.kt` | Data class + SharedPreferences per persistere le impostazioni |
 | `BotState.kt` | Singleton condiviso per stato runtime (isRunning, killCount) |
 
+## Features v8 — Attacco Tenuto Premuto (willContinue API)
+- **Attacco automatico continuo**: il bot tiene premuto il tasto attacco usando `willContinue=true` nell'Accessibility Service. Nessun rilascio finché non si preme STOP.
+- **Pozione multitouch sintetico**: quando la pozione è attiva insieme all'attacco, viene iniettata come secondo dito nello stesso `GestureDescription` (stroke indipendente, pointer ID diverso). Nessun conflitto, nessuna interruzione del tasto attacco.
+- **Rinnovo chunk automatico**: ogni 8s il dito viene "continuato" via `continueStroke()` senza mai alzarsi. Rilascio pulito con `willContinue=false` allo stop.
+- **Overlay aggiornato**: pulsante `🎯 IMPOSTA ATT` (cattura posizione con un tocco) + `⚔️ ATT: ON/OFF` affiancano i controlli pozione e loot esistenti.
+
 ## Features v7 — Solo Pozioni + Raccolta Terra Individuale
 - **Modalità Solo Pozioni** (nuovo): loop indipendente che preme tutti gli slot pozione configurati ogni N secondi (configurabile), SENZA attaccare né muoversi. Attivabile dall'overlay (pulsante 💊 POZ) anche con il bot fermo.
 - **Raccolta terra individuale** (nuovo): trova ogni oggetto (nome personaggio = testo bianco, yang = pixel oro) come cluster separato e ci tappa su uno per uno con 350ms di delay. Attivabile dall'overlay (pulsante 🎒 LOOT).

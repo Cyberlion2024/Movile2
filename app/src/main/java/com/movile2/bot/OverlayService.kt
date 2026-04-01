@@ -27,48 +27,55 @@ class OverlayService : Service() {
     private var panel: LinearLayout? = null
     private var captureView: View? = null
     private var tvStatus: TextView? = null
+    private var btnAttack: TextView? = null
+    private var btnSetAtt: TextView? = null
     private var btnPot: TextView? = null
     private var btnLoot: TextView? = null
     private var btnSetPoz: TextView? = null
     private val handler = Handler(Looper.getMainLooper())
 
-    // ── Intervallo pozione (ms) configurabile nel pannello ────────────────────
     private var potInterval: Long = 3000L
+
+    // ── Modalità cattura corrente ─────────────────────────────────────────────
+    private enum class CaptureMode { NONE, ATTACK, POTION }
+    private var captureMode = CaptureMode.NONE
 
     // ── Ticker — aggiorna testo ogni 500ms ────────────────────────────────────
     private val ticker = object : Runnable {
         override fun run() {
+            val attOn  = BotState.attackRunning
             val potOn  = BotState.potionRunning
             val lootOn = BotState.lootRunning
             val found  = BotState.lootItemsFound
             val slots  = BotState.potionSlots.size
+            val hasAtt = BotState.attackPos != null
 
-            when {
-                potOn && lootOn -> {
-                    tvStatus?.text = "💊 POZ + 🎒 LOOT ($found)"
-                    tvStatus?.setTextColor(Color.GREEN)
-                }
-                potOn -> {
-                    tvStatus?.text = "💊 POZ attivo ($slots slot)"
-                    tvStatus?.setTextColor(Color.CYAN)
-                }
-                lootOn -> {
-                    tvStatus?.text = "🎒 LOOT: $found oggetti"
-                    tvStatus?.setTextColor(Color.GREEN)
-                }
-                else -> {
-                    tvStatus?.text = "● INATTIVO"
-                    tvStatus?.setTextColor(Color.LTGRAY)
-                }
-            }
+            // Status
+            val parts = mutableListOf<String>()
+            if (attOn)  parts.add("⚔️ ATT")
+            if (potOn)  parts.add("💊 POZ")
+            if (lootOn) parts.add("🎒 LOOT($found)")
+            tvStatus?.text = if (parts.isEmpty()) "● INATTIVO" else parts.joinToString(" + ")
+            tvStatus?.setTextColor(if (parts.isEmpty()) Color.LTGRAY else Color.GREEN)
 
+            // Bottone imposta att
+            btnSetAtt?.text = if (hasAtt) "🎯 ATT ✓" else "🎯 IMPOSTA ATT"
+
+            // Bottone attacco
+            btnAttack?.text = if (attOn) "⚔️ ATT: ON" else "⚔️ ATT: OFF"
+            btnAttack?.setBackgroundColor(
+                if (attOn) Color.argb(230, 180, 50, 0) else Color.argb(220, 50, 50, 80))
+
+            // Bottone imposta poz
             val slotLabel = if (slots > 0) " ($slots)" else ""
             btnSetPoz?.text = "🎯 IMPOSTA POZ$slotLabel"
 
+            // Bottone pozione
             btnPot?.text  = if (potOn)  "💊 POZ: ON"  else "💊 POZ: OFF"
             btnPot?.setBackgroundColor(
                 if (potOn) Color.argb(230, 0, 130, 160) else Color.argb(220, 50, 50, 80))
 
+            // Bottone loot
             btnLoot?.text = if (lootOn) "🎒 LOOT: ON" else "🎒 LOOT: OFF"
             btnLoot?.setBackgroundColor(
                 if (lootOn) Color.argb(230, 20, 150, 50) else Color.argb(220, 50, 50, 80))
@@ -87,6 +94,7 @@ class OverlayService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         handler.removeCallbacksAndMessages(null)
+        BotAccessibilityService.instance?.stopAttack()
         BotAccessibilityService.instance?.stopPotion()
         BotAccessibilityService.instance?.stopLoot()
         panel?.let { runCatching { wm.removeView(it) } }
@@ -108,52 +116,68 @@ class OverlayService : Service() {
             setPadding(16, 12, 16, 12)
         }
 
-        // ── Handle drag ───────────────────────────────────────────────────────
         val drag = makeText("☰ BOT", 11f, Color.argb(180, 150, 200, 255))
+        tvStatus  = makeText("● INATTIVO", 13f, Color.LTGRAY)
 
-        // ── Status ────────────────────────────────────────────────────────────
-        tvStatus = makeText("● INATTIVO", 13f, Color.LTGRAY)
+        // ── Attacco ───────────────────────────────────────────────────────────
+        btnSetAtt = makeButton("🎯 IMPOSTA ATT", Color.argb(220, 100, 40, 0))
+        btnSetAtt!!.setOnClickListener { startPickAttack() }
 
-        // ── Bottone: imposta slot pozione ─────────────────────────────────────
-        // Prima pressione: azzera slot precedenti e avvia cattura.
-        // Ogni tocco sullo schermo aggiunge uno slot (max 3).
-        // Dopo il 3° tocco o 5s di timeout, la pozione parte automaticamente.
+        btnAttack = makeButton("⚔️ ATT: OFF", Color.argb(220, 50, 50, 80))
+        btnAttack!!.setOnClickListener {
+            val bot = BotAccessibilityService.instance ?: run {
+                showWarn("Abilita Accessibilità!")
+                return@setOnClickListener
+            }
+            if (BotState.attackRunning) {
+                bot.stopAttack()
+            } else {
+                if (BotState.attackPos == null) {
+                    showWarn("Prima imposta ATT!")
+                    return@setOnClickListener
+                }
+                bot.startAttack()
+            }
+        }
+
+        // ── Pozione ───────────────────────────────────────────────────────────
         btnSetPoz = makeButton("🎯 IMPOSTA POZ", Color.argb(220, 130, 70, 0))
         btnSetPoz!!.setOnClickListener { startPickPotion() }
 
-        // ── Bottone: pozione ON/OFF ───────────────────────────────────────────
         btnPot = makeButton("💊 POZ: OFF", Color.argb(220, 50, 50, 80))
         btnPot!!.setOnClickListener {
             val bot = BotAccessibilityService.instance ?: run {
-                tvStatus?.text = "Abilita Accessibilità!"
-                tvStatus?.setTextColor(Color.YELLOW)
+                showWarn("Abilita Accessibilità!")
                 return@setOnClickListener
             }
             if (BotState.potionRunning) {
                 bot.stopPotion()
             } else {
                 if (BotState.potionSlots.isEmpty()) {
-                    tvStatus?.text = "Prima imposta la POZ!"
-                    tvStatus?.setTextColor(Color.YELLOW)
+                    showWarn("Prima imposta la POZ!")
                     return@setOnClickListener
                 }
                 bot.startPotion(potInterval)
             }
         }
 
-        // ── Bottone: loot ON/OFF ──────────────────────────────────────────────
+        // ── Loot ─────────────────────────────────────────────────────────────
         btnLoot = makeButton("🎒 LOOT: OFF", Color.argb(220, 50, 50, 80))
         btnLoot!!.setOnClickListener {
             val bot = BotAccessibilityService.instance ?: run {
-                tvStatus?.text = "Abilita Accessibilità!"
-                tvStatus?.setTextColor(Color.YELLOW)
+                showWarn("Abilita Accessibilità!")
                 return@setOnClickListener
             }
             if (BotState.lootRunning) bot.stopLoot() else bot.startLoot()
         }
 
+        // ── Layout ────────────────────────────────────────────────────────────
         root.addView(drag)
         root.addView(tvStatus)
+        root.addView(space(8))
+        root.addView(btnSetAtt)
+        root.addView(space(4))
+        root.addView(btnAttack)
         root.addView(space(8))
         root.addView(btnSetPoz)
         root.addView(space(4))
@@ -187,14 +211,31 @@ class OverlayService : Service() {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // CATTURA TOCCHI PER IMPOSTARE SLOT POZIONE (max 3)
-    //
-    // Quando premuto IMPOSTA POZ:
-    //   1. Azzera gli slot precedenti.
-    //   2. Overlay trasparente: ogni tocco aggiunge uno slot pozione.
-    //   3. Dopo il 3° tocco OR 5s di timeout:
-    //      - rimuove overlay
-    //      - avvia automaticamente la pozione
+    // CATTURA POSIZIONE ATTACCO (singolo tocco)
+    // ═══════════════════════════════════════════════════════════════════════════
+    private fun startPickAttack() {
+        if (captureView != null) return
+        captureMode = CaptureMode.ATTACK
+
+        tvStatus?.text = "Tocca il tasto ATTACCO... (5s)"
+        tvStatus?.setTextColor(Color.YELLOW)
+
+        val cv = makeCaptureOverlay()
+        cv.setOnTouchListener { _, e ->
+            if (e.action == MotionEvent.ACTION_DOWN && captureMode == CaptureMode.ATTACK) {
+                BotState.attackPos = e.rawX to e.rawY
+                finishCapture("⚔️ Attacco impostato!")
+            }
+            true
+        }
+
+        wm.addView(cv, captureOverlayParams())
+        captureView = cv
+        scheduleCaptureTimeout()
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // CATTURA SLOT POZIONE (max 3 tocchi)
     // ═══════════════════════════════════════════════════════════════════════════
     private val MAX_SLOTS = 3
     private var slotsAddedDuringCapture = 0
@@ -202,8 +243,8 @@ class OverlayService : Service() {
 
     private fun startPickPotion() {
         if (captureView != null) return
+        captureMode = CaptureMode.POTION
 
-        // Azzera slot precedenti e ferma pozione attiva
         BotState.potionSlots.clear()
         BotState.potionRunning = false
         BotAccessibilityService.instance?.stopPotion()
@@ -212,22 +253,13 @@ class OverlayService : Service() {
         tvStatus?.text = "Tocca slot 1/3... (5s)"
         tvStatus?.setTextColor(Color.YELLOW)
 
-        val cv = View(this).apply {
-            setBackgroundColor(Color.argb(1, 0, 0, 0))
-        }
-        val lp = overlayParams(
-            WindowManager.LayoutParams.MATCH_PARENT,
-            WindowManager.LayoutParams.MATCH_PARENT,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-        )
+        val cv = makeCaptureOverlay()
         cv.setOnTouchListener { _, e ->
-            if (e.action == MotionEvent.ACTION_DOWN) {
-                val x = e.rawX; val y = e.rawY
+            if (e.action == MotionEvent.ACTION_DOWN && captureMode == CaptureMode.POTION) {
                 slotsAddedDuringCapture++
-                BotState.potionSlots.add(x to y)
-
+                BotState.potionSlots.add(e.rawX to e.rawY)
                 if (slotsAddedDuringCapture >= MAX_SLOTS) {
-                    finishPickPotion()
+                    finishCapture(null) // avvia pozione automaticamente
                 } else {
                     val next = slotsAddedDuringCapture + 1
                     tvStatus?.text = "✓ Slot $slotsAddedDuringCapture  →  Tocca slot $next/3 o aspetta"
@@ -237,43 +269,64 @@ class OverlayService : Service() {
             true
         }
 
-        wm.addView(cv, lp)
+        wm.addView(cv, captureOverlayParams())
         captureView = cv
+        scheduleCaptureTimeout()
+    }
 
-        // Timeout automatico dopo 5 secondi
-        val timeout = Runnable {
-            if (captureView != null) finishPickPotion()
+    private fun finishCapture(msg: String?) {
+        captureTimeoutRunnable?.let { handler.removeCallbacks(it) }
+        captureTimeoutRunnable = null
+        removeCaptureView()
+        captureMode = CaptureMode.NONE
+
+        if (msg != null) {
+            // Cattura singola (attacco)
+            tvStatus?.text = msg
+            tvStatus?.setTextColor(Color.GREEN)
+        } else {
+            // Cattura pozione: avvia automaticamente
+            val slots = BotState.potionSlots.size
+            if (slots == 0) {
+                tvStatus?.text = "Nessuno slot impostato"
+                tvStatus?.setTextColor(Color.LTGRAY)
+                return
+            }
+            val bot = BotAccessibilityService.instance
+            if (bot != null) {
+                bot.startPotion(potInterval)
+                tvStatus?.text = "💊 POZ: $slots slot attivi!"
+                tvStatus?.setTextColor(Color.GREEN)
+            } else {
+                tvStatus?.text = "$slots slot salvati. Abilita Accessibilità!"
+                tvStatus?.setTextColor(Color.YELLOW)
+            }
         }
+    }
+
+    private fun scheduleCaptureTimeout() {
+        val timeout = Runnable { if (captureView != null) finishCapture(null) }
         captureTimeoutRunnable = timeout
         handler.postDelayed(timeout, 5000L)
     }
 
-    private fun finishPickPotion() {
-        captureTimeoutRunnable?.let { handler.removeCallbacks(it) }
-        captureTimeoutRunnable = null
-        removeCaptureView()
-
-        val slots = BotState.potionSlots.size
-        if (slots == 0) {
-            tvStatus?.text = "Nessuno slot impostato"
-            tvStatus?.setTextColor(Color.LTGRAY)
-            return
-        }
-
-        // Avvia automaticamente la pozione
-        val bot = BotAccessibilityService.instance
-        if (bot != null) {
-            bot.startPotion(potInterval)
-            tvStatus?.text = "💊 POZ: $slots slot attivi!"
-            tvStatus?.setTextColor(Color.GREEN)
-        } else {
-            tvStatus?.text = "$slots slot salvati. Abilita Accessibilità!"
-            tvStatus?.setTextColor(Color.YELLOW)
-        }
+    private fun makeCaptureOverlay() = View(this).apply {
+        setBackgroundColor(Color.argb(1, 0, 0, 0))
     }
+
+    private fun captureOverlayParams() = overlayParams(
+        WindowManager.LayoutParams.MATCH_PARENT,
+        WindowManager.LayoutParams.MATCH_PARENT,
+        WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+    )
 
     private fun removeCaptureView() {
         captureView?.let { runCatching { wm.removeView(it) }; captureView = null }
+    }
+
+    private fun showWarn(msg: String) {
+        tvStatus?.text = msg
+        tvStatus?.setTextColor(Color.YELLOW)
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

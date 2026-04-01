@@ -18,14 +18,78 @@ class BotAccessibilityService : AccessibilityService() {
     private val handler = Handler(Looper.getMainLooper())
 
     @Volatile private var lootTargets: List<Pair<Float, Float>> = emptyList()
-
-    // ── Flag per evitare sovrapposizioni tra pozione e loot ───────────────────
     @Volatile private var gestureInProgress = false
+
+    // ── Stroke corrente dell'attacco (willContinue) ───────────────────────────
+    // Tenuto in memoria per poter essere "continuato" nelle iterazioni successive
+    // e per aggiungere la pozione come secondo dito nello stesso frame.
+    private var currentAttackStroke: GestureDescription.StrokeDescription? = null
+
+    // Durata di ogni "chunk" tenuto premuto prima di rinnovarlo (ms).
+    // Deve essere < MAX_GESTURE_DURATION (60s). 8s è un buon compromesso.
+    private val ATTACK_HOLD_MS = 8000L
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // LOOP ATTACCO — tiene premuto il tasto attacco continuamente
+    //
+    // Meccanismo willContinue=true:
+    //   - Ogni StrokeDescription con willContinue=true crea un "dito" che rimane
+    //     premuto finché non arriva un continueStroke con willContinue=false.
+    //   - Prima iterazione: nuovo stroke da zero.
+    //   - Iterazioni successive: continueStroke() riprende il dito già abbassato.
+    //   - Stop: invia un ultimo continueStroke con willContinue=false → dito su.
+    // ═══════════════════════════════════════════════════════════════════════════
+    private val attackLoop = object : Runnable {
+        override fun run() {
+            if (!BotState.attackRunning) {
+                releaseAttack()
+                return
+            }
+            val pos = BotState.attackPos ?: return
+            sendAttackChunk(pos.first, pos.second)
+            // Rinnoviamo 200ms prima della scadenza per evitare gap
+            handler.postDelayed(this, ATTACK_HOLD_MS - 200L)
+        }
+    }
+
+    private fun sendAttackChunk(ax: Float, ay: Float) {
+        val path = Path().apply { moveTo(ax, ay) }
+        val prev = currentAttackStroke
+        val stroke = try {
+            if (prev != null) {
+                prev.continueStroke(path, 0L, ATTACK_HOLD_MS, true)
+            } else {
+                GestureDescription.StrokeDescription(path, 0L, ATTACK_HOLD_MS, true)
+            }
+        } catch (_: Exception) {
+            // Se il continueStroke fallisce (gesto annullato), ripartiamo da zero
+            GestureDescription.StrokeDescription(path, 0L, ATTACK_HOLD_MS, true)
+        }
+        currentAttackStroke = stroke
+        val gesture = GestureDescription.Builder().addStroke(stroke).build()
+        dispatchGesture(gesture, null, handler)
+    }
+
+    private fun releaseAttack() {
+        val prev = currentAttackStroke ?: return
+        currentAttackStroke = null
+        val pos = BotState.attackPos ?: return
+        val path = Path().apply { moveTo(pos.first, pos.second) }
+        try {
+            val finalStroke = prev.continueStroke(path, 0L, 50L, false)
+            val gesture = GestureDescription.Builder().addStroke(finalStroke).build()
+            dispatchGesture(gesture, null, handler)
+        } catch (_: Exception) {}
+    }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // LOOP POZIONE
     //
-    // Usa tapPotion (35ms). Non sparare se un loot-tap è in corso.
+    // Se l'attacco è in corso (willContinue attivo), la pozione viene aggiunta
+    // come secondo dito nello stesso GestureDescription (multitouch sintetico).
+    // In questo modo i due "dita" hanno pointer ID diversi e non si cancellano.
+    //
+    // Se l'attacco NON è in corso, tap normale da 35ms.
     // ═══════════════════════════════════════════════════════════════════════════
     private val potionLoop = object : Runnable {
         override fun run() {
@@ -34,7 +98,13 @@ class BotAccessibilityService : AccessibilityService() {
             var delay = 0L
             for ((x, y) in slots) {
                 handler.postDelayed({
-                    if (BotState.potionRunning && !gestureInProgress) tapPotion(x, y)
+                    if (BotState.potionRunning && !gestureInProgress) {
+                        if (BotState.attackRunning) {
+                            tapPotionWithAttack(x, y)
+                        } else {
+                            tapPotion(x, y)
+                        }
+                    }
                 }, delay)
                 delay += 250L
             }
@@ -42,34 +112,55 @@ class BotAccessibilityService : AccessibilityService() {
         }
     }
 
+    // Tap pozione come secondo dito mentre l'attacco è tenuto premuto.
+    // Rinnova anche il chunk dell'attacco così il dito non si alza.
+    private fun tapPotionWithAttack(px: Float, py: Float) {
+        val pos = BotState.attackPos
+        val prev = currentAttackStroke
+        if (pos == null || prev == null) {
+            tapPotion(px, py)
+            return
+        }
+        val attackPath = Path().apply { moveTo(pos.first, pos.second) }
+        val continuedAttack = try {
+            prev.continueStroke(attackPath, 0L, ATTACK_HOLD_MS, true)
+        } catch (_: Exception) {
+            // Fallback: tap semplice
+            tapPotion(px, py)
+            return
+        }
+        currentAttackStroke = continuedAttack
+
+        val potionPath = Path().apply { moveTo(px, py) }
+        val potionStroke = GestureDescription.StrokeDescription(potionPath, 0L, 35L)
+
+        try {
+            val gesture = GestureDescription.Builder()
+                .addStroke(continuedAttack)
+                .addStroke(potionStroke)
+                .build()
+            dispatchGesture(gesture, null, handler)
+        } catch (_: Exception) {
+            tapPotion(px, py)
+        }
+
+        // Resincronizza il timer del loop attacco dopo questo chunk
+        handler.removeCallbacks(attackLoop)
+        if (BotState.attackRunning)
+            handler.postDelayed(attackLoop, ATTACK_HOLD_MS - 200L)
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
-    // LOOP RACCOLTA — tap sequenziali con callback
-    //
-    // Problema del multi-stroke (versione precedente):
-    //   Un singolo GestureDescription con 10 stroke da 350ms l'uno dura 3.5s.
-    //   Durante quei 3.5s Android blocca OGNI altro dispatchGesture (incluse
-    //   le pozioni). Se viene richiesto un secondo gesto, ENTRAMBI falliscono
-    //   silenziosamente (dispatchGesture restituisce false).
-    //
-    // Soluzione: un tap per volta con GestureResultCallback.
-    //   onCompleted → il gesto è finito → passiamo al prossimo item.
-    //   onCancelled → qualcosa ha interrotto → saltiamo e andiamo avanti.
-    //   Così il loop è coordinato con il sistema Android e non blocca le pozioni.
+    // LOOP RACCOLTA
     // ═══════════════════════════════════════════════════════════════════════════
     private val lootLoop = object : Runnable {
         override fun run() {
             if (!BotState.lootRunning) return
             val items = lootTargets
             BotState.lootItemsFound = items.size
-
-            if (items.isEmpty()) {
-                handler.postDelayed(this, 500L)
-                return
-            }
-
+            if (items.isEmpty()) { handler.postDelayed(this, 500L); return }
             tapItemsSequentially(items, 0) {
-                if (BotState.lootRunning)
-                    handler.postDelayed(this, 300L)
+                if (BotState.lootRunning) handler.postDelayed(this, 300L)
             }
         }
     }
@@ -79,10 +170,7 @@ class BotAccessibilityService : AccessibilityService() {
         index: Int,
         onAllDone: () -> Unit
     ) {
-        if (!BotState.lootRunning || index >= items.size) {
-            onAllDone()
-            return
-        }
+        if (!BotState.lootRunning || index >= items.size) { onAllDone(); return }
         val (x, y) = items[index]
         val path = Path().apply { moveTo(x, y) }
         val stroke = GestureDescription.StrokeDescription(path, 0L, 60L)
@@ -133,21 +221,6 @@ class BotAccessibilityService : AccessibilityService() {
 
     // ═══════════════════════════════════════════════════════════════════════════
     // RILEVAMENTO OGGETTI A TERRA
-    //
-    // Dallo screenshot analizzato: nel gioco compaiono questi tipi di testo:
-    //   - VERDE:       nome del personaggio sopra gli oggetti di sua proprietà
-    //   - GIALLO/ORO:  label "Yang" per la valuta
-    //   - BIANCO/CREMA: nomi degli item (Corazza dello..., ecc.)
-    //
-    // Raccoglie tutti e tre i tipi entro il 45% dal centro schermo.
-    //
-    // Soglie pixel:
-    //   Nome personaggio (verde):  G>140, G-R>40, G-B>30, R<150
-    //   Yang (giallo-oro):         R>185, G>140, B<110, R>G-30, R>B+70
-    //   Item name (bianco/crema):  R>200, G>190, B>170, tutti alti ma R≥G≥B
-    //                              (bianco caldo — esclude sfondo chiaro del gioco)
-    //
-    // Min 2 pixel per cella, celle 30×30 px.
     // ═══════════════════════════════════════════════════════════════════════════
     private fun findLootItems(bmp: Bitmap): List<Pair<Float, Float>> {
         val w = bmp.width; val h = bmp.height
@@ -167,7 +240,6 @@ class BotAccessibilityService : AccessibilityService() {
             while (cx + cell <= x1) {
                 val itemX = (cx + cell / 2).toFloat()
                 val itemY = (cy + cell / 2).toFloat()
-
                 val dx = itemX - charX
                 val dy = itemY - charY
                 if (dx * dx + dy * dy > maxDistSq) { cx += cell; continue }
@@ -176,22 +248,11 @@ class BotAccessibilityService : AccessibilityService() {
                 for (dy2 in 0 until cell step 3) {
                     for (dx2 in 0 until cell step 3) {
                         val p = bmp.getPixel(cx + dx2, cy + dy2)
-                        val r = Color.red(p)
-                        val g = Color.green(p)
-                        val b = Color.blue(p)
-
-                        // Nome personaggio in verde
+                        val r = Color.red(p); val g = Color.green(p); val b = Color.blue(p)
                         val playerName = g > 140 && g - r > 40 && g - b > 30 && r < 150
-
-                        // Yang: giallo-oro (anche variante crema/arancio)
                         val yang = r > 185 && g > 140 && b < 110 && r > b + 70
-
-                        // Nome item: bianco caldo (R≥G≥B, tutti alti)
-                        // Il "bianco caldo" dei nomi item si distingue dallo sfondo
-                        // chiaro del gioco perché il testo è piccolo e compatto
                         val itemName = r > 210 && g > 190 && b > 160 &&
                                 r >= g && g >= b && r - b > 20 && r - b < 80
-
                         if (playerName || yang || itemName) hits++
                     }
                 }
@@ -209,6 +270,21 @@ class BotAccessibilityService : AccessibilityService() {
     // ═══════════════════════════════════════════════════════════════════════════
     // API PUBBLICA
     // ═══════════════════════════════════════════════════════════════════════════
+
+    fun startAttack() {
+        if (BotState.attackPos == null) return
+        if (BotState.attackRunning) stopAttack()
+        currentAttackStroke = null
+        BotState.attackRunning = true
+        handler.post(attackLoop)
+    }
+
+    fun stopAttack() {
+        BotState.attackRunning = false
+        handler.removeCallbacks(attackLoop)
+        releaseAttack()
+    }
+
     fun startPotion(intervalMs: Long = BotState.potionIntervalMs) {
         if (BotState.potionSlots.isEmpty()) return
         if (BotState.potionRunning) stopPotion()
@@ -253,9 +329,6 @@ class BotAccessibilityService : AccessibilityService() {
     }
 
     // ── Tap pozione — 35ms ────────────────────────────────────────────────────
-    // Abbastanza lungo da essere registrato dal gioco (minimo ~20ms).
-    // Abbastanza corto da non bloccare il tocco reale tenuto premuto (attacco).
-    // NON viene sparato se gestureInProgress è true (loot in corso).
     private fun tapPotion(x: Float, y: Float) {
         try {
             dispatchGesture(
@@ -269,10 +342,10 @@ class BotAccessibilityService : AccessibilityService() {
     // ── Lifecycle ─────────────────────────────────────────────────────────────
     override fun onServiceConnected() { instance = this }
     override fun onAccessibilityEvent(e: AccessibilityEvent?) {}
-    override fun onInterrupt() { stopPotion(); stopLoot() }
+    override fun onInterrupt() { stopAttack(); stopPotion(); stopLoot() }
     override fun onDestroy() {
         super.onDestroy()
-        stopPotion(); stopLoot()
+        stopAttack(); stopPotion(); stopLoot()
         if (instance === this) instance = null
     }
 
