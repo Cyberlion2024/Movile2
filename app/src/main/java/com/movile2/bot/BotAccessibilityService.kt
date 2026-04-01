@@ -21,37 +21,44 @@ class BotAccessibilityService : AccessibilityService() {
     private var gestureInProgress = false
 
     // ── Durate gesti ──────────────────────────────────────────────────────────
-    private val ATTACK_TAP_MS   = 60L   // durata tap attacco
-    private val ATTACK_LOOP_MS  = 120L  // intervallo tra tap (≈8 tap/s)
-    private val POTION_TAP_MS   = 40L   // durata tap pozione
+    private val ATTACK_TAP_MS  = 60L   // durata tap attacco
+    private val ATTACK_GAP_MS  = 300L  // pausa DOPO ogni tap prima del prossimo
+    private val POTION_TAP_MS  = 40L   // durata tap pozione
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // LOOP ATTACCO — rapid-tap indipendente
+    // LOOP ATTACCO — callback-driven, gap garantito
     //
-    // Ogni 120ms dispatcha un tap da 60ms sul tasto attacco.
-    // Nessun willContinue → nessun conflitto con joystick/pozioni/loot.
-    // Se il tap viene cancellato (dito utente sullo schermo), il loop
-    // continua e il prossimo tap parte tra 120ms — praticamente immediato.
+    // Ciclo: [tap 60ms] → onCompleted/onCancelled → [gap 300ms] → [tap 60ms] → …
+    // Totale ciclo ≈ 360ms → ~2.8 attacchi/secondo.
+    //
+    // Il prossimo tap parte solo quando il precedente è TERMINATO (callback).
+    // Questo lascia 300ms puliti in cui Android non ha gesti attivi
+    // e il joystick dell'utente funziona liberamente.
     // ═══════════════════════════════════════════════════════════════════════════
+    private val attackCallback = object : GestureResultCallback() {
+        override fun onCompleted(g: GestureDescription?) { scheduleNextAttack() }
+        override fun onCancelled(g: GestureDescription?)  { scheduleNextAttack() }
+    }
+
+    private fun scheduleNextAttack() {
+        if (!BotState.attackRunning) return
+        handler.postDelayed(attackLoop, ATTACK_GAP_MS)
+    }
+
     private val attackLoop = object : Runnable {
         override fun run() {
             if (!BotState.attackRunning) return
-            val pos = BotState.attackPos ?: run {
-                handler.postDelayed(this, ATTACK_LOOP_MS); return
-            }
-            fireAttackTap(pos.first, pos.second)
-            handler.postDelayed(this, ATTACK_LOOP_MS)
+            val pos = BotState.attackPos ?: run { scheduleNextAttack(); return }
+            try {
+                val ok = dispatchGesture(
+                    GestureDescription.Builder()
+                        .addStroke(GestureDescription.StrokeDescription(
+                            Path().apply { moveTo(pos.first, pos.second) },
+                            0L, ATTACK_TAP_MS))
+                        .build(), attackCallback, handler)
+                if (!ok) scheduleNextAttack()   // dispatch fallito, ritenta
+            } catch (_: Exception) { scheduleNextAttack() }
         }
-    }
-
-    private fun fireAttackTap(ax: Float, ay: Float) {
-        try {
-            dispatchGesture(
-                GestureDescription.Builder()
-                    .addStroke(GestureDescription.StrokeDescription(
-                        Path().apply { moveTo(ax, ay) }, 0L, ATTACK_TAP_MS))
-                    .build(), null, null)
-        } catch (_: Exception) {}
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -270,12 +277,13 @@ class BotAccessibilityService : AccessibilityService() {
         if (BotState.attackPos == null) return
         if (BotState.attackRunning) stopAttack()
         BotState.attackRunning = true
-        handler.post(attackLoop)
+        handler.post(attackLoop)   // primo tap subito
     }
 
     fun stopAttack() {
         BotState.attackRunning = false
         handler.removeCallbacks(attackLoop)
+        // scheduleNextAttack controlla attackRunning → non riposta
     }
 
     fun startPotion(intervalMs: Long = BotState.potionIntervalMs) {
