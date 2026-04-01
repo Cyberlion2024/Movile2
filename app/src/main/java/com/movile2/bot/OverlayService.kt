@@ -342,28 +342,43 @@ class OverlayService : Service() {
         val zonePx = (280 * density).toInt()
         val halfZone = zonePx / 2
 
+        // jlp è dichiarata PRIMA del touch listener così la lambda può catturarla
+        val jlp = overlayParams(zonePx, zonePx, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE).apply {
+            gravity = Gravity.TOP or Gravity.START
+            x = (centerX - halfZone).toInt().coerceAtLeast(0)
+            y = (centerY - halfZone).toInt().coerceAtLeast(0)
+        }
+
         val jv = View(this).apply { setBackgroundColor(Color.argb(1, 0, 0, 0)) }
 
         jv.setOnTouchListener { _, e ->
             val bot = BotAccessibilityService.instance
             when (e.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
-                    bot?.startJoystickForward(e.rawX, e.rawY); true
+                    // FIX CRITICO: dispatchGesture inietta eventi nel sistema che
+                    // verrebbero assorbiti di nuovo da questo overlay (è in cima).
+                    // Aggiungiamo FLAG_NOT_TOUCHABLE dopo aver ricevuto ACTION_DOWN
+                    // così tutti i dispatchGesture successivi bypassano l'overlay e
+                    // raggiungono il gioco. Android garantisce che ACTION_MOVE e
+                    // ACTION_UP dello STESSO gesto dell'utente arrivino comunque qui.
+                    jlp.flags = jlp.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+                    runCatching { wm.updateViewLayout(jv, jlp) }
+                    bot?.startJoystickForward(e.rawX, e.rawY)
+                    true
                 }
                 MotionEvent.ACTION_MOVE -> {
-                    bot?.updateJoystick(e.rawX, e.rawY); true
+                    bot?.updateJoystick(e.rawX, e.rawY)
+                    true
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                    bot?.stopJoystickForward(e.rawX, e.rawY); true
+                    bot?.stopJoystickForward(e.rawX, e.rawY)
+                    // Rimuove FLAG_NOT_TOUCHABLE: pronto per il prossimo utilizzo
+                    jlp.flags = jlp.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
+                    runCatching { wm.updateViewLayout(jv, jlp) }
+                    true
                 }
                 else -> false
             }
-        }
-
-        val jlp = overlayParams(zonePx, zonePx, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE).apply {
-            gravity = Gravity.TOP or Gravity.START
-            x = (centerX - halfZone).toInt().coerceAtLeast(0)
-            y = (centerY - halfZone).toInt().coerceAtLeast(0)
         }
 
         wm.addView(jv, jlp)
