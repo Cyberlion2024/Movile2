@@ -13,10 +13,13 @@ object BotState {
     @Volatile var potionIntervalMs: Long = 3000L
     val potionSlots: CopyOnWriteArrayList<Pair<Float, Float>> = CopyOnWriteArrayList()
 
-    // ── Modalità abilità ──────────────────────────────────────────────────────
+    // ── Modalità abilità (5 slot, ognuno con il suo intervallo indipendente) ──
     @Volatile var skillsRunning: Boolean = false
-    @Volatile var skillIntervalMs: Long = 5000L
     val skillSlots: CopyOnWriteArrayList<Pair<Float, Float>> = CopyOnWriteArrayList()
+    // Intervalli in ms per ogni slot abilità (indice 0-4)
+    val skillIntervals: CopyOnWriteArrayList<Long> = CopyOnWriteArrayList(
+        listOf(5000L, 5000L, 5000L, 5000L, 5000L)
+    )
 
     // ── Modalità raccolta terra ───────────────────────────────────────────────
     @Volatile var lootRunning: Boolean = false

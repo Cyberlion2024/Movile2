@@ -48,7 +48,6 @@ class OverlayService : Service() {
 
     private val handler = Handler(Looper.getMainLooper())
     private var potInterval: Long = 3000L
-    private var skillInterval: Long = 5000L
 
     private enum class CaptureMode { NONE, ATTACK, POTION, SKILL, JOYSTICK }
     private var captureMode = CaptureMode.NONE
@@ -129,8 +128,11 @@ class OverlayService : Service() {
         super.onCreate()
         // Carica intervalli salvati
         val prefs = getSharedPreferences("bot_prefs", Context.MODE_PRIVATE)
-        potInterval   = prefs.getLong("pot_interval_ms", 3000L)
-        skillInterval = prefs.getLong("skill_interval_ms", 5000L)
+        potInterval = prefs.getLong("pot_interval_ms", 3000L)
+        for (idx in 0 until 5) {
+            val ms = prefs.getLong("skill${idx + 1}_interval_ms", 5000L)
+            if (idx < BotState.skillIntervals.size) BotState.skillIntervals[idx] = ms
+        }
         startForeground()
         buildPanel()
         handler.post(ticker)
@@ -215,7 +217,7 @@ class OverlayService : Service() {
             if (BotState.skillsRunning) bot.stopSkills()
             else {
                 if (BotState.skillSlots.isEmpty()) { showWarn("Prima imposta SKILL!"); return@setOnClickListener }
-                bot.startSkills(skillInterval)
+                bot.startSkills()
             }
         }
 

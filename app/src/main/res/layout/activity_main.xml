@@ -1,160 +1,294 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout
+<ScrollView
     xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:background="#0a0a1e"
-    android:padding="24dp"
-    android:gravity="center_horizontal">
-
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Movile2 Bot"
-        android:textColor="#aaccff"
-        android:textSize="26sp"
-        android:textStyle="bold"
-        android:layout_marginTop="24dp"
-        android:layout_marginBottom="32dp" />
-
-    <!-- Permessi -->
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="1. Permessi"
-        android:textColor="#8899bb"
-        android:textSize="13sp"
-        android:textAllCaps="true"
-        android:layout_marginBottom="10dp" />
-
-    <Button
-        android:id="@+id/btnAccessibility"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Attiva Servizio Accessibilità"
-        android:backgroundTint="#1a3a6a"
-        android:textColor="#ffffff"
-        android:layout_marginBottom="10dp" />
-
-    <Button
-        android:id="@+id/btnOverlay"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Permesso Pannello Flottante"
-        android:backgroundTint="#1a3a6a"
-        android:textColor="#ffffff"
-        android:layout_marginBottom="28dp" />
-
-    <!-- Impostazioni -->
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="2. Impostazioni"
-        android:textColor="#8899bb"
-        android:textSize="13sp"
-        android:textAllCaps="true"
-        android:layout_marginBottom="10dp" />
+    android:background="#0a0a1e">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:layout_marginBottom="10dp">
+        android:orientation="vertical"
+        android:padding="24dp"
+        android:gravity="center_horizontal">
 
         <TextView
-            android:layout_width="0dp"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="Intervallo pozione (secondi)"
-            android:textColor="#ccddff"
-            android:textSize="15sp" />
+            android:text="Movile2 Bot"
+            android:textColor="#aaccff"
+            android:textSize="26sp"
+            android:textStyle="bold"
+            android:layout_marginTop="24dp"
+            android:layout_marginBottom="32dp" />
 
-        <EditText
-            android:id="@+id/etInterval"
-            android:layout_width="80dp"
+        <!-- Permessi -->
+        <TextView
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="3"
-            android:inputType="number"
+            android:text="1. Permessi"
+            android:textColor="#8899bb"
+            android:textSize="13sp"
+            android:textAllCaps="true"
+            android:layout_marginBottom="10dp" />
+
+        <Button
+            android:id="@+id/btnAccessibility"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Attiva Servizio Accessibilità"
+            android:backgroundTint="#1a3a6a"
             android:textColor="#ffffff"
-            android:textColorHint="#666"
-            android:background="#1e1e3a"
-            android:padding="10dp"
-            android:textAlignment="center" />
-    </LinearLayout>
+            android:layout_marginBottom="10dp" />
 
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:layout_marginBottom="16dp">
+        <Button
+            android:id="@+id/btnOverlay"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Permesso Pannello Flottante"
+            android:backgroundTint="#1a3a6a"
+            android:textColor="#ffffff"
+            android:layout_marginBottom="28dp" />
+
+        <!-- Impostazioni -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="2. Impostazioni"
+            android:textColor="#8899bb"
+            android:textSize="13sp"
+            android:textAllCaps="true"
+            android:layout_marginBottom="10dp" />
+
+        <!-- Intervallo pozione -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="10dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="💊 Intervallo pozione (sec)"
+                android:textColor="#ccddff"
+                android:textSize="15sp" />
+
+            <EditText
+                android:id="@+id/etInterval"
+                android:layout_width="80dp"
+                android:layout_height="wrap_content"
+                android:hint="3"
+                android:inputType="number"
+                android:textColor="#ffffff"
+                android:textColorHint="#666"
+                android:background="#1e1e3a"
+                android:padding="10dp"
+                android:textAlignment="center" />
+        </LinearLayout>
+
+        <!-- Separatore abilità -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="✨ Cooldown abilità (secondi per slot)"
+            android:textColor="#bb99ff"
+            android:textSize="13sp"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="8dp" />
+
+        <!-- Skill 1 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="8dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Abilità 1"
+                android:textColor="#ccddff"
+                android:textSize="15sp" />
+
+            <EditText
+                android:id="@+id/etSkill1"
+                android:layout_width="80dp"
+                android:layout_height="wrap_content"
+                android:hint="5"
+                android:inputType="number"
+                android:textColor="#ffffff"
+                android:textColorHint="#666"
+                android:background="#1e1e3a"
+                android:padding="10dp"
+                android:textAlignment="center" />
+        </LinearLayout>
+
+        <!-- Skill 2 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="8dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Abilità 2"
+                android:textColor="#ccddff"
+                android:textSize="15sp" />
+
+            <EditText
+                android:id="@+id/etSkill2"
+                android:layout_width="80dp"
+                android:layout_height="wrap_content"
+                android:hint="5"
+                android:inputType="number"
+                android:textColor="#ffffff"
+                android:textColorHint="#666"
+                android:background="#1e1e3a"
+                android:padding="10dp"
+                android:textAlignment="center" />
+        </LinearLayout>
+
+        <!-- Skill 3 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="8dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Abilità 3"
+                android:textColor="#ccddff"
+                android:textSize="15sp" />
+
+            <EditText
+                android:id="@+id/etSkill3"
+                android:layout_width="80dp"
+                android:layout_height="wrap_content"
+                android:hint="5"
+                android:inputType="number"
+                android:textColor="#ffffff"
+                android:textColorHint="#666"
+                android:background="#1e1e3a"
+                android:padding="10dp"
+                android:textAlignment="center" />
+        </LinearLayout>
+
+        <!-- Skill 4 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="8dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Abilità 4"
+                android:textColor="#ccddff"
+                android:textSize="15sp" />
+
+            <EditText
+                android:id="@+id/etSkill4"
+                android:layout_width="80dp"
+                android:layout_height="wrap_content"
+                android:hint="5"
+                android:inputType="number"
+                android:textColor="#ffffff"
+                android:textColorHint="#666"
+                android:background="#1e1e3a"
+                android:padding="10dp"
+                android:textAlignment="center" />
+        </LinearLayout>
+
+        <!-- Skill 5 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="16dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Abilità 5"
+                android:textColor="#ccddff"
+                android:textSize="15sp" />
+
+            <EditText
+                android:id="@+id/etSkill5"
+                android:layout_width="80dp"
+                android:layout_height="wrap_content"
+                android:hint="5"
+                android:inputType="number"
+                android:textColor="#ffffff"
+                android:textColorHint="#666"
+                android:background="#1e1e3a"
+                android:padding="10dp"
+                android:textAlignment="center" />
+        </LinearLayout>
+
+        <Button
+            android:id="@+id/btnSave"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Salva"
+            android:backgroundTint="#2a4a2a"
+            android:textColor="#ffffff"
+            android:layout_marginBottom="28dp" />
+
+        <!-- Pannello -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="3. Pannello flottante"
+            android:textColor="#8899bb"
+            android:textSize="13sp"
+            android:textAllCaps="true"
+            android:layout_marginBottom="10dp" />
+
+        <Button
+            android:id="@+id/btnStart"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="▶  Avvia pannello"
+            android:backgroundTint="#14521e"
+            android:textColor="#ffffff"
+            android:layout_marginBottom="10dp" />
+
+        <Button
+            android:id="@+id/btnStop"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="■  Ferma pannello"
+            android:backgroundTint="#521414"
+            android:textColor="#ffffff" />
 
         <TextView
-            android:layout_width="0dp"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="Intervallo abilità (secondi)"
-            android:textColor="#ccddff"
-            android:textSize="15sp" />
+            android:layout_marginTop="32dp"
+            android:text="Pannello flottante:\n• 🎯 IMPOSTA ATT → tocca il tasto attacco nel gioco\n• ⚔️ ATT → attacca solo i mostri con nome rosso vicini\n• 🎯 IMPOSTA POZ → tocca 1-3 slot pozione\n• 💊 POZ → preme le pozioni all'intervallo impostato\n• 🎯 IMPOSTA SKILL → tocca 1-5 slot abilità\n• ✨ SKILL → usa ogni abilità col suo cooldown\n• 🎒 LOOT → raccoglie yang e oggetti"
+            android:textColor="#667799"
+            android:textSize="13sp"
+            android:lineSpacingMultiplier="1.5"
+            android:layout_marginBottom="24dp" />
 
-        <EditText
-            android:id="@+id/etSkillInterval"
-            android:layout_width="80dp"
-            android:layout_height="wrap_content"
-            android:hint="5"
-            android:inputType="number"
-            android:textColor="#ffffff"
-            android:textColorHint="#666"
-            android:background="#1e1e3a"
-            android:padding="10dp"
-            android:textAlignment="center" />
     </LinearLayout>
-
-    <Button
-        android:id="@+id/btnSave"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Salva"
-        android:backgroundTint="#2a4a2a"
-        android:textColor="#ffffff"
-        android:layout_marginBottom="28dp" />
-
-    <!-- Pannello -->
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="3. Pannello flottante"
-        android:textColor="#8899bb"
-        android:textSize="13sp"
-        android:textAllCaps="true"
-        android:layout_marginBottom="10dp" />
-
-    <Button
-        android:id="@+id/btnStart"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="▶  Avvia pannello"
-        android:backgroundTint="#14521e"
-        android:textColor="#ffffff"
-        android:layout_marginBottom="10dp" />
-
-    <Button
-        android:id="@+id/btnStop"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="■  Ferma pannello"
-        android:backgroundTint="#521414"
-        android:textColor="#ffffff" />
-
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="32dp"
-        android:text="Pannello flottante:\n• 🎯 IMPOSTA ATT → tocca il tasto attacco nel gioco\n• ⚔️ ATT → attacca solo i mostri con nome rosso vicini\n• 🎯 IMPOSTA POZ → tocca 1-3 slot pozione\n• 💊 POZ → preme le pozioni all'intervallo impostato\n• 🎯 IMPOSTA SKILL → tocca 1-5 slot abilità\n• ✨ SKILL → usa le abilità all'intervallo impostato\n• 🎒 LOOT → raccoglie yang e oggetti"
-        android:textColor="#667799"
-        android:textSize="13sp"
-        android:lineSpacingMultiplier="1.5" />
-
-</LinearLayout>
+</ScrollView>

@@ -144,21 +144,20 @@ class BotAccessibilityService : AccessibilityService() {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // LOOP ABILITÀ — tappa tutti gli slot abilità ogni skillIntervalMs
+    // LOOP ABILITÀ — 5 timer indipendenti, uno per slot, ognuno col suo cooldown
     // ═══════════════════════════════════════════════════════════════════════════
-    private val skillLoop = object : Runnable {
-        override fun run() {
-            if (!BotState.skillsRunning) return
-            val slots = BotState.skillSlots
-            var delay = 0L
-            for ((sx, sy) in slots) {
-                handler.postDelayed({
-                    if (!BotState.skillsRunning || BotState.joystickActive) return@postDelayed
+    private val skillLoops: Array<Runnable> = Array(5) { idx ->
+        object : Runnable {
+            override fun run() {
+                if (!BotState.skillsRunning) return
+                val slots = BotState.skillSlots
+                if (idx < slots.size && !BotState.joystickActive) {
+                    val (sx, sy) = slots[idx]
                     tapSingle(sx, sy, SKILL_TAP_MS)
-                }, delay)
-                delay += 150L
+                }
+                val interval = BotState.skillIntervals.getOrElse(idx) { 5000L }.coerceAtLeast(500L)
+                handler.postDelayed(this, interval)
             }
-            handler.postDelayed(this, BotState.skillIntervalMs.coerceAtLeast(500L) + delay)
         }
     }
 
@@ -278,7 +277,11 @@ class BotAccessibilityService : AccessibilityService() {
             handler.removeCallbacks(potionLoop); handler.post(potionLoop)
         }
         if (BotState.skillsRunning) {
-            handler.removeCallbacks(skillLoop); handler.post(skillLoop)
+            skillLoops.forEach { handler.removeCallbacks(it) }
+            BotState.skillSlots.forEachIndexed { idx, _ ->
+                val interval = BotState.skillIntervals.getOrElse(idx) { 5000L }.coerceAtLeast(500L)
+                handler.postDelayed(skillLoops[idx], interval)
+            }
         }
         if (BotState.lootRunning) {
             handler.removeCallbacks(lootLoop); handler.post(lootLoop)
@@ -338,15 +341,20 @@ class BotAccessibilityService : AccessibilityService() {
         BotState.potionRunning = false; handler.removeCallbacks(potionLoop)
     }
 
-    fun startSkills(intervalMs: Long = BotState.skillIntervalMs) {
+    fun startSkills() {
         if (BotState.skillSlots.isEmpty()) return
         if (BotState.skillsRunning) stopSkills()
-        BotState.skillIntervalMs = intervalMs.coerceAtLeast(500L)
-        BotState.skillsRunning = true; handler.post(skillLoop)
+        BotState.skillsRunning = true
+        // Avvia ogni slot col suo intervallo individuale
+        BotState.skillSlots.forEachIndexed { idx, _ ->
+            val interval = BotState.skillIntervals.getOrElse(idx) { 5000L }.coerceAtLeast(500L)
+            handler.postDelayed(skillLoops[idx], interval)
+        }
     }
 
     fun stopSkills() {
-        BotState.skillsRunning = false; handler.removeCallbacks(skillLoop)
+        BotState.skillsRunning = false
+        skillLoops.forEach { handler.removeCallbacks(it) }
     }
 
     fun startLoot() {
