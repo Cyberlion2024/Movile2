@@ -42,7 +42,7 @@ class BotAccessibilityService : AccessibilityService() {
         override fun run() {
             if (!BotState.attackRunning) return
             if (BotState.joystickActive) { scheduleNextAttack(); return }
-            // Attacca solo se è stato rilevato un mostro con nome rosso
+            // Attacca solo se è stato rilevato almeno 1 mob con nome rosso
             if (!BotState.mobNearby) { handler.postDelayed(this, 300L); return }
             val pos = BotState.attackPos ?: run { scheduleNextAttack(); return }
             try {
@@ -57,12 +57,21 @@ class BotAccessibilityService : AccessibilityService() {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // SCANNER MOSTRI — ogni 500ms cerca nomi rossi vicini al personaggio
-    // Colore nome mostro nemico: R>160, G<130, B<120
+    // SCANNER MOB — ogni 500ms conta i cluster di nomi rossi sullo schermo
+    //
+    // Algoritmo (da analisi libUE4.so):
+    //   UmobNamer.ismob=true + medusman=true → nome ROSSO (mob nemico).
+    //   UmobNamer.group=true                  → nome VERDE (membro gruppo) — ignorato.
+    //   isLocal=true / isPlayer               → nome BIANCO (proprio char) — ignorato.
+    //
+    // La detection divide lo schermo in una griglia di celle 40×40px.
+    // Ogni cella con almeno 3 pixel rossi vivaci viene marcata come "calda".
+    // Un BFS sulle celle calde conta i cluster contigui → numero di mob distinti.
+    // Il risultato viene salvato in BotState.detectedMobCount.
     // ═══════════════════════════════════════════════════════════════════════════
     private val mobScanner = object : Runnable {
         override fun run() {
-            if (!BotState.attackRunning) return
+            if (!BotState.attackRunning && !BotState.pullMode) return
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !BotState.joystickActive) {
                 doMobScan()
             }
@@ -78,45 +87,103 @@ class BotAccessibilityService : AccessibilityService() {
                     val hw = Bitmap.wrapHardwareBuffer(s.hardwareBuffer, s.colorSpace)
                     val bmp = hw?.copy(Bitmap.Config.ARGB_8888, false)
                     hw?.recycle(); s.hardwareBuffer.close()
-                    bmp?.let { b -> BotState.mobNearby = findRedMobNearby(b); b.recycle() }
+                    bmp?.let { b ->
+                        val count = countMobClusters(b)
+                        BotState.detectedMobCount = count
+                        BotState.mobNearby = count > 0
+                        b.recycle()
+                    }
                 }
-                override fun onFailure(e: Int) { BotState.mobNearby = false }
+                override fun onFailure(e: Int) {
+                    BotState.mobNearby = false
+                    BotState.detectedMobCount = 0
+                }
             })
     }
 
-    private fun findRedMobNearby(bmp: Bitmap): Boolean {
+    // ───────────────────────────────────────────────────────────────────────────
+    // countMobClusters: conta quanti mob distinti (con nome rosso) sono
+    // visibili nella zona centrale dello schermo.
+    //
+    // Zona di ricerca: 15%..85% x, 10%..65% y (area nomi mob in UE4)
+    // Colore nome nemico (UmobNamer.nameColor con medusman=true):
+    //   R > 160, G < 115, B < 115, R-G > 60
+    // Esclusi colori simili ma non-mob:
+    //   bianco (R≈G≈B alto) → proprio personaggio
+    //   verde  (G dominante) → membro gruppo
+    //
+    // Griglia 40×40px: ogni cella "calda" ha ≥3 pixel rossi nel 4×4 campionamento.
+    // BFS sulle celle calde conta i componenti connessi → numero mob distinti.
+    // Celle isolate (singola cella senza vicini caldi) scartate come rumore.
+    // ───────────────────────────────────────────────────────────────────────────
+    private fun countMobClusters(bmp: Bitmap): Int {
         val w = bmp.width; val h = bmp.height
-        // Zona di ricerca: 40% centrale dello schermo (dove appaiono i nomi mostri)
         val x0 = (w * 0.15f).toInt(); val x1 = (w * 0.85f).toInt()
-        val y0 = (h * 0.20f).toInt(); val y1 = (h * 0.65f).toInt()
-        // Centro personaggio
-        val charX = w * 0.50f; val charY = h * 0.57f
-        val maxDist = w * 0.35f; val maxDistSq = maxDist * maxDist
-        val step = 8
-        var redPixels = 0
-        var cy = y0
-        while (cy < y1) {
-            var cx = x0
-            while (cx < x1) {
-                val dx = cx - charX; val dy = cy - charY
-                if (dx * dx + dy * dy <= maxDistSq) {
-                    val p = bmp.getPixel(cx, cy)
-                    val r = Color.red(p); val g = Color.green(p); val b = Color.blue(p)
-                    // Nome mostro nemico: rosso vivace
-                    if (r > 160 && g < 130 && b < 120 && r - g > 60) {
-                        redPixels++
-                        if (redPixels >= 4) return true
+        val y0 = (h * 0.10f).toInt(); val y1 = (h * 0.65f).toInt()
+        val cellPx = 40   // dimensione cella in pixel
+        val sampleStep = 4 // step campionamento dentro la cella
+
+        val cols = (x1 - x0) / cellPx
+        val rows = (y1 - y0) / cellPx
+        if (cols <= 0 || rows <= 0) return 0
+
+        // Cella "calda" = almeno 3 pixel rossi nel campione 4-pixel-step
+        val hot = Array(rows) { BooleanArray(cols) }
+        for (row in 0 until rows) {
+            for (col in 0 until cols) {
+                val cx0 = x0 + col * cellPx
+                val cy0 = y0 + row * cellPx
+                var hits = 0
+                var sx = cx0
+                while (sx < cx0 + cellPx && sx < x1) {
+                    var sy = cy0
+                    while (sy < cy0 + cellPx && sy < y1) {
+                        val p = bmp.getPixel(sx, sy)
+                        val r = Color.red(p); val g = Color.green(p); val b = Color.blue(p)
+                        // Rosso vivace: nome mob nemico (medusman=true in UmobNamer)
+                        if (r > 160 && g < 115 && b < 115 && r - g > 60) hits++
+                        sy += sampleStep
+                    }
+                    sx += sampleStep
+                }
+                hot[row][col] = hits >= 3
+            }
+        }
+
+        // BFS per contare cluster connessi (4-connectivity)
+        val visited = Array(rows) { BooleanArray(cols) }
+        var clusters = 0
+        val dr = intArrayOf(-1, 1, 0, 0)
+        val dc = intArrayOf(0, 0, -1, 1)
+        for (startRow in 0 until rows) {
+            for (startCol in 0 until cols) {
+                if (!hot[startRow][startCol] || visited[startRow][startCol]) continue
+                // BFS
+                val queue = ArrayDeque<Pair<Int, Int>>()
+                queue.add(startRow to startCol)
+                visited[startRow][startCol] = true
+                var clusterSize = 0
+                while (queue.isNotEmpty()) {
+                    val (r, c) = queue.removeFirst()
+                    clusterSize++
+                    for (d in 0 until 4) {
+                        val nr = r + dr[d]; val nc = c + dc[d]
+                        if (nr in 0 until rows && nc in 0 until cols &&
+                            hot[nr][nc] && !visited[nr][nc]) {
+                            visited[nr][nc] = true
+                            queue.add(nr to nc)
+                        }
                     }
                 }
-                cx += step
+                // Scarta cluster di 1 cella sola (rumore, pixel rosso casuale)
+                if (clusterSize >= 2) clusters++
             }
-            cy += step
         }
-        return false
+        return clusters
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // LOOP POZIONE — quando attacco è OFF usa SOLO la pozione, niente attacco
+    // LOOP POZIONE — indipendente dall'attacco, usa multitouch se attacco attivo
     // ═══════════════════════════════════════════════════════════════════════════
     private val potionLoop = object : Runnable {
         override fun run() {
@@ -128,12 +195,10 @@ class BotAccessibilityService : AccessibilityService() {
                     if (!BotState.potionRunning || gestureInProgress) return@postDelayed
                     if (BotState.joystickActive) return@postDelayed
                     if (BotState.attackRunning) {
-                        // Attacco attivo: multitouch pozione + attacco insieme
                         val aPos = BotState.attackPos
                         if (aPos != null) tapMultitouch(aPos.first, aPos.second, ATTACK_TAP_MS, px, py, POTION_TAP_MS)
                         else tapSingle(px, py, POTION_TAP_MS)
                     } else {
-                        // Solo pozione: nessun tap di attacco
                         tapSingle(px, py, POTION_TAP_MS)
                     }
                 }, delay)
@@ -144,7 +209,12 @@ class BotAccessibilityService : AccessibilityService() {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // LOOP ABILITÀ — 5 timer indipendenti, uno per slot, ognuno col suo cooldown
+    // LOOP ABILITÀ — 5 timer indipendenti.
+    //
+    // In PULL MODE: ogni abilità viene premuta solo se ci sono abbastanza mob
+    // raggruppati (detectedMobCount >= pullTargetCount).
+    // Se non ci sono abbastanza mob, il timer salta e riprova al prossimo ciclo.
+    // In modalità normale: comportamento invariato, si attiva a ogni ciclo.
     // ═══════════════════════════════════════════════════════════════════════════
     private val skillLoops: Array<Runnable> = Array(5) { idx ->
         object : Runnable {
@@ -152,8 +222,15 @@ class BotAccessibilityService : AccessibilityService() {
                 if (!BotState.skillsRunning) return
                 val slots = BotState.skillSlots
                 if (idx < slots.size && !BotState.joystickActive) {
-                    val (sx, sy) = slots[idx]
-                    tapSingle(sx, sy, SKILL_TAP_MS)
+                    val canFire = if (BotState.pullMode) {
+                        BotState.detectedMobCount >= BotState.pullTargetCount
+                    } else {
+                        true
+                    }
+                    if (canFire) {
+                        val (sx, sy) = slots[idx]
+                        tapSingle(sx, sy, SKILL_TAP_MS)
+                    }
                 }
                 val interval = BotState.skillIntervals.getOrElse(idx) { 5000L }.coerceAtLeast(500L)
                 handler.postDelayed(this, interval)
@@ -181,7 +258,6 @@ class BotAccessibilityService : AccessibilityService() {
         if (!BotState.lootRunning || BotState.joystickActive || index >= items.size) { onAllDone(); return }
         val (x, y) = items[index]
         gestureInProgress = true
-        // Loot: mai attacco, solo tap sull'oggetto
         val dispatched = tapSingle(x, y, 55L)
         gestureInProgress = false
         handler.postDelayed({ tapItemsSequentially(items, index + 1, onAllDone) }, if (dispatched) 100L else 130L)
@@ -214,10 +290,10 @@ class BotAccessibilityService : AccessibilityService() {
 
     // ═══════════════════════════════════════════════════════════════════════════
     // RILEVAMENTO OGGETTI A TERRA
-    // Yang (bianco): R>220, G>220, B>220  — testo bianco yang a terra
-    // Item giallo/oro: R>220, G>170, B<60 — yang coin / drop dorato
-    // Item verde: R<120, G>170, B<100     — testo verde oggetti comuni
-    // Cella 12px per separare yang vicini tra loro
+    // Yang (oro): R>220, G>170, B<60    — moneta yang / drop dorato
+    // Testo verde: G>170, R<120, B<100  — nome oggetto comune
+    // Testo bianco: R>220, G>220, B>220 — yang testo bianco
+    // Cella 12px per separare oggetti vicini
     // ═══════════════════════════════════════════════════════════════════════════
     private fun findLootItems(bmp: Bitmap): List<Pair<Float, Float>> {
         val w = bmp.width; val h = bmp.height
@@ -241,9 +317,9 @@ class BotAccessibilityService : AccessibilityService() {
                     for (dx2 in 0 until cell step 2) {
                         val p = bmp.getPixel(cx + dx2, cy + dy2)
                         val r = Color.red(p); val g = Color.green(p); val b = Color.blue(p)
-                        val isWhite  = r > 220 && g > 220 && b > 220
-                        val isGold   = r > 220 && g > 170 && b < 60 && r > g
-                        val isGreen  = g > 170 && r < 120 && b < 100
+                        val isWhite = r > 220 && g > 220 && b > 220
+                        val isGold  = r > 220 && g > 170 && b < 60 && r > g
+                        val isGreen = g > 170 && r < 120 && b < 100
                         if (isWhite || isGold || isGreen) hits++
                     }
                 }
@@ -286,6 +362,10 @@ class BotAccessibilityService : AccessibilityService() {
         }
         if (BotState.walkRunning) {
             dispatchWalk()
+        }
+        // Se pull mode attivo ma attacco non attivo: tiene vivo il mob scanner
+        if (BotState.pullMode && !BotState.attackRunning) {
+            handler.removeCallbacks(mobScanner); handler.post(mobScanner)
         }
     }
 
@@ -360,7 +440,11 @@ class BotAccessibilityService : AccessibilityService() {
         BotState.attackRunning = false
         BotState.mobNearby = false
         handler.removeCallbacks(attackLoop)
-        handler.removeCallbacks(mobScanner)
+        // Ferma il mobScanner solo se pull mode non è attivo
+        if (!BotState.pullMode) {
+            handler.removeCallbacks(mobScanner)
+            BotState.detectedMobCount = 0
+        }
     }
 
     fun startPotion(intervalMs: Long = BotState.potionIntervalMs) {
@@ -378,7 +462,6 @@ class BotAccessibilityService : AccessibilityService() {
         if (BotState.skillSlots.isEmpty()) return
         if (BotState.skillsRunning) stopSkills()
         BotState.skillsRunning = true
-        // Avvia ogni slot col suo intervallo individuale
         BotState.skillSlots.forEachIndexed { idx, _ ->
             val interval = BotState.skillIntervals.getOrElse(idx) { 5000L }.coerceAtLeast(500L)
             handler.postDelayed(skillLoops[idx], interval)
@@ -391,7 +474,6 @@ class BotAccessibilityService : AccessibilityService() {
     }
 
     fun startLoot() {
-        // Loot non attacca mai: ferma l'attacco se era attivo
         stopAttack()
         if (BotState.lootRunning) return
         lootTargets = emptyList(); BotState.lootItemsFound = 0; gestureInProgress = false
@@ -416,8 +498,29 @@ class BotAccessibilityService : AccessibilityService() {
         BotState.walkRunning = false
     }
 
+    // Attiva pull mode: avvia il mob scanner se non è già attivo,
+    // e mantiene il contatore di cluster aggiornato per le skill.
+    fun startPullMode() {
+        BotState.pullMode = true
+        if (!BotState.attackRunning) {
+            // Scanner deve girare anche senza attacco per il conteggio pull
+            handler.removeCallbacks(mobScanner)
+            handler.post(mobScanner)
+        }
+    }
+
+    fun stopPullMode() {
+        BotState.pullMode = false
+        BotState.detectedMobCount = 0
+        // Spegni scanner se anche attacco è off
+        if (!BotState.attackRunning) {
+            handler.removeCallbacks(mobScanner)
+        }
+    }
+
     fun stopAll() {
         stopAttack(); stopPotion(); stopSkills(); stopLoot(); stopWalk()
+        stopPullMode()
     }
 
     override fun onServiceConnected() { instance = this }

@@ -154,3 +154,61 @@ Il bot usa quindi un approccio **pixel-based in tempo reale**:
 7. **attackDistance** — esiste distanza di attacco per ogni mob; il bot deve essere vicino.
 8. **AGGRESSIVE_HP_PCT** — mob aggressivi; il bot non dovrebbe muoversi fuori range.
 
+
+---
+
+## Analisi approfondita UmobNamer (02/04/2026)
+
+### Proprietà di UmobNamer (widget nome mob/giocatore sullo schermo)
+
+| Proprietà | Tipo | Significato |
+|-----------|------|-------------|
+| `ismob` | bool | È un mob (non un giocatore) |
+| `medusman` | bool | È nemico (turco: düşman = nemico) |
+| `group` | bool | È nel nostro stesso gruppo → nome VERDE |
+| `mefriend` | bool | È nella lista amici → nome colore amico |
+| `isGm` | bool | È un Game Master |
+| `isLocal` | bool | È il nostro personaggio → nome BIANCO |
+| `chatter` | bool | Sta parlando (chat bubble) |
+| `hideWidget` | bool | Nome nascosto |
+| `reload` | bool | Ricarica widget |
+| `rank` | int | Rank del mob (0=normale, 1..4=elite/boss) |
+| `nameColor` | FLinearColor | Colore corrente del nome |
+| `baseNameColor` | FLinearColor | Colore di default del nome |
+
+### Struttura Fxmob (mob in rete)
+
+| Campo | Tipo | Significato |
+|-------|------|-------------|
+| `mob_id` | int | ID numerico del mob |
+| `mover` | component | Componente di movimento |
+| `isPlayer` | bool | Distingue mob da giocatori |
+| `setRank(int)` | method | Imposta il rank del mob |
+
+Costruttori trovati:
+- `FxmobC1(FString name, int×18)` — nome + 18 parametri interi (vnum, hp, level, rank, etc.)
+- `FxmobC1(int×8)` — solo dati numerici
+
+### Classificazione colori nomi sullo schermo (confermata)
+
+| Colore pixel | Proprietà UmobNamer | Categoria | Azione bot |
+|---|---|---|---|
+| ROSSO (R>160, G<115, B<115, R-G>60) | `medusman=true, ismob=true` | Mob nemico | ATTACCA + CONTA CLUSTER |
+| VERDE (G>150, R<100, B<100) | `group=true` | Membro gruppo | IGNORA |
+| BIANCO (R>200, G>200, B>200) | `isLocal=true` | Proprio personaggio | IGNORA |
+| GIALLO/ORO | `rank≥3` o GM | Boss/Elite/GM | Attacca (stesso ciclo) |
+
+### Algoritmo Cluster Detection (implementato)
+
+1. Dividere la zona nomi (15%..85% x, 10%..65% y) in griglia di celle 40×40px
+2. Marcare ogni cella con ≥3 pixel rossi vivaci come "calda"
+3. BFS sulle celle calde per contare componenti connesse (mob distinti)
+4. Cluster di 1 cella sola = rumore → scartato
+5. Risultato → `BotState.detectedMobCount`
+
+### Pull Mode (raggruppamento mob)
+
+- `BotState.pullMode=true`: le abilità (SKILL) si attivano solo quando `detectedMobCount >= pullTargetCount`
+- Il bot continua ad attaccare e camminare normalmente per "tirare" i mob
+- Il mob scanner gira anche senza attacco attivo quando pullMode è attivo
+- `pullTargetCount` configurabile 1..5 tramite bottone 🎯 N MOB nell'overlay

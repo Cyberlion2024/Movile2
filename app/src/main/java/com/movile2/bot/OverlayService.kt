@@ -43,6 +43,8 @@ class OverlayService : Service() {
     private var btnSetSkill: TextView? = null
     private var btnSetJoy: TextView? = null
     private var btnWalk: TextView? = null
+    private var btnPull: TextView? = null
+    private var btnPullCount: TextView? = null
     private var contentLayout: LinearLayout? = null
     private var btnToggle: TextView? = null
     private var panelCollapsed = false
@@ -80,25 +82,30 @@ class OverlayService : Service() {
             val potOn   = BotState.potionRunning
             val skillOn = BotState.skillsRunning
             val lootOn  = BotState.lootRunning
+            val pullOn  = BotState.pullMode
             val found   = BotState.lootItemsFound
+            val mobCount   = BotState.detectedMobCount
+            val pullTarget = BotState.pullTargetCount
             val potSlots   = BotState.potionSlots.size
             val skillSlots = BotState.skillSlots.size
             val hasAtt  = BotState.attackPos != null
             val hasJoy  = BotState.joystickPos != null
             val mobNear = BotState.mobNearby
-
-            val walkOn = BotState.walkRunning
+            val walkOn  = BotState.walkRunning
 
             val parts = mutableListOf<String>()
             if (BotState.joystickActive) parts.add("🕹️ PAUSA JOY")
             else {
                 if (walkOn)  parts.add("🚶 WALK")
-                if (attOn)   parts.add(if (mobNear) "⚔️ ATT🔴" else "⚔️ ATT…")
+                if (attOn)   parts.add(if (mobNear) "⚔️ ATT🔴[$mobCount]" else "⚔️ ATT…")
                 if (potOn)   parts.add("💊 POZ")
-                if (skillOn) parts.add("✨ SKILL")
+                if (skillOn) {
+                    if (pullOn) parts.add("✨ PULL[$mobCount/${pullTarget}]")
+                    else parts.add("✨ SKILL")
+                }
                 if (lootOn)  parts.add("🎒 LOOT($found)")
             }
-            tvStatus?.text = if (parts.isEmpty()) "● INATTIVO" else parts.joinToString(" + ")
+            tvStatus?.text = if (parts.isEmpty()) "● INATTIVO" else parts.joinToString(" ")
             tvStatus?.setTextColor(
                 if (BotState.joystickActive) Color.YELLOW
                 else if (parts.isEmpty()) Color.LTGRAY else Color.GREEN)
@@ -120,8 +127,24 @@ class OverlayService : Service() {
 
             val ssl = if (skillSlots > 0) " ($skillSlots)" else ""
             btnSetSkill?.text = "🎯 IMPOSTA SKILL$ssl"
-            btnSkill?.text  = if (skillOn) "✨ SKILL: ON" else "✨ SKILL: OFF"
+
+            // Pull mode + skill
+            val skillLabel = if (skillOn) {
+                if (pullOn) "✨ SKILL: ON (PULL $mobCount/$pullTarget)"
+                else "✨ SKILL: ON"
+            } else "✨ SKILL: OFF"
+            btnSkill?.text = skillLabel
             btnSkill?.setBackgroundColor(if (skillOn) Color.argb(230,120,0,180) else Color.argb(220,50,50,80))
+
+            val pullLabel = if (pullOn) "🔵 PULL: ON" else "🔵 PULL: OFF"
+            btnPull?.text = pullLabel
+            btnPull?.setBackgroundColor(
+                if (pullOn && mobCount >= pullTarget) Color.argb(230, 0, 180, 80)
+                else if (pullOn) Color.argb(230, 0, 100, 180)
+                else Color.argb(220, 50, 50, 80))
+
+            btnPullCount?.text = "🎯 $pullTarget MOB"
+            btnPullCount?.setBackgroundColor(Color.argb(200, 40, 40, 90))
 
             btnLoot?.text = if (lootOn) "🎒 LOOT: ON" else "🎒 LOOT: OFF"
             btnLoot?.setBackgroundColor(if (lootOn) Color.argb(230,20,150,50) else Color.argb(220,50,50,80))
@@ -218,6 +241,20 @@ class OverlayService : Service() {
         btnSetSkill = makeButton("🎯 IMPOSTA SKILL", Color.argb(220, 80, 0, 120))
         btnSetSkill!!.setOnClickListener { startPickSkill() }
 
+        // ── Pull mode (raggruppamento mob prima di usare le skill) ────────────
+        // Cicla il target: tocca 🎯 N MOB per incrementare 1→2→3→4→5→1
+        btnPullCount = makeButton("🎯 ${BotState.pullTargetCount} MOB", Color.argb(200, 40, 40, 90))
+        btnPullCount!!.setOnClickListener {
+            BotState.pullTargetCount = (BotState.pullTargetCount % 5) + 1
+        }
+
+        btnPull = makeButton("🔵 PULL: OFF", Color.argb(220, 50, 50, 80))
+        btnPull!!.setOnClickListener {
+            val bot = BotAccessibilityService.instance ?: run { showWarn("Abilita Accessibilità!"); return@setOnClickListener }
+            if (BotState.pullMode) bot.stopPullMode()
+            else bot.startPullMode()
+        }
+
         btnSkill = makeButton("✨ SKILL: OFF", Color.argb(220, 50, 50, 80))
         btnSkill!!.setOnClickListener {
             val bot = BotAccessibilityService.instance ?: run { showWarn("Abilita Accessibilità!"); return@setOnClickListener }
@@ -261,15 +298,17 @@ class OverlayService : Service() {
         }
 
         content.addView(space(6))
-        content.addView(btnStopAll);  content.addView(space(10))
-        content.addView(btnSetJoy);   content.addView(space(4))
-        content.addView(btnWalk);     content.addView(space(10))
-        content.addView(btnSetPoz);   content.addView(space(4))
-        content.addView(btnPot);      content.addView(space(10))
-        content.addView(btnLoot);     content.addView(space(10))
-        content.addView(btnSetAtt);   content.addView(space(4))
-        content.addView(btnAttack);   content.addView(space(8))
-        content.addView(btnSetSkill); content.addView(space(4))
+        content.addView(btnStopAll);    content.addView(space(10))
+        content.addView(btnSetJoy);     content.addView(space(4))
+        content.addView(btnWalk);       content.addView(space(10))
+        content.addView(btnSetPoz);     content.addView(space(4))
+        content.addView(btnPot);        content.addView(space(10))
+        content.addView(btnLoot);       content.addView(space(10))
+        content.addView(btnSetAtt);     content.addView(space(4))
+        content.addView(btnAttack);     content.addView(space(8))
+        content.addView(btnSetSkill);   content.addView(space(4))
+        content.addView(btnPullCount);  content.addView(space(4))
+        content.addView(btnPull);       content.addView(space(4))
         content.addView(btnSkill)
         contentLayout = content
 

@@ -23,13 +23,17 @@ Usa AccessibilityService per inviare gesture e screenshot pixel-detection per ri
 ## Funzionalità attuali
 
 ### Pannello flottante (OverlayService)
-- **■ STOP TUTTO** — ferma immediatamente tutto (attacco, pozioni, abilità, loot, camminata)
+- **■ STOP TUTTO** — ferma immediatamente tutto (attacco, pozioni, abilità, loot, camminata, pull)
 - **🕹️ IMPOSTA JOYSTICK** — cattura posizione centro joystick toccando lo schermo
 - **🚶 WALK ON/OFF** — il bot spinge il joystick in avanti continuamente (400ms gestures a catena)
 - **🎯 IMPOSTA POZ** — cattura slot pozione (fino a 3)
 - **💊 POZ ON/OFF** — preme le pozioni all'intervallo configurato
 - **🎒 LOOT ON/OFF** — raccoglie yang (oro) e oggetti con nome verde; ferma l'attacco automaticamente
+- **🎯 IMPOSTA ATT** — cattura posizione bottone attacco
 - **⚔️ ATT ON/OFF** — attacco automatico (solo se mob rosso rilevato)
+- **🎯 IMPOSTA SKILL** — cattura fino a 5 slot abilità
+- **🎯 N MOB** — tocca per incrementare il target di raggruppamento (1→2→3→4→5→1)
+- **🔵 PULL ON/OFF** — modalità raggruppamento: le skill scattano solo quando N mob sono in schermo
 - **✨ SKILL ON/OFF** — abilità con cooldown individuali
 
 ### Camminata (Walk)
