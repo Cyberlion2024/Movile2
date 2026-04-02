@@ -217,17 +217,19 @@ class BotAccessibilityService : AccessibilityService() {
 
     // ═══════════════════════════════════════════════════════════════════════════
     // RILEVAMENTO OGGETTI A TERRA
-    // Yang puro: R>240, G>185, B<20
-    // Item bianco: R>248, G>248, B>248
+    // Yang (bianco): R>220, G>220, B>220  — testo bianco yang a terra
+    // Item giallo/oro: R>220, G>170, B<60 — yang coin / drop dorato
+    // Item verde: R<120, G>170, B<100     — testo verde oggetti comuni
+    // Cella 12px per separare yang vicini tra loro
     // ═══════════════════════════════════════════════════════════════════════════
     private fun findLootItems(bmp: Bitmap): List<Pair<Float, Float>> {
         val w = bmp.width; val h = bmp.height
-        val x0 = (w * 0.30f).toInt(); val x1 = (w * 0.70f).toInt()
-        val y0 = (h * 0.35f).toInt(); val y1 = (h * 0.70f).toInt()
-        val cell = 20
+        val x0 = (w * 0.20f).toInt(); val x1 = (w * 0.80f).toInt()
+        val y0 = (h * 0.25f).toInt(); val y1 = (h * 0.75f).toInt()
+        val cell = 12
         val found = mutableListOf<Pair<Float, Float>>()
         val charX = w * 0.50f; val charY = h * 0.57f
-        val maxDist = w * 0.18f; val maxDistSq = maxDist * maxDist
+        val maxDist = w * 0.38f; val maxDistSq = maxDist * maxDist
 
         var cy = y0
         while (cy + cell <= y1) {
@@ -238,17 +240,20 @@ class BotAccessibilityService : AccessibilityService() {
                 val ddx = itemX - charX; val ddy = itemY - charY
                 if (ddx * ddx + ddy * ddy > maxDistSq) { cx += cell; continue }
                 var hits = 0
-                for (dy2 in 0 until cell step 3) {
-                    for (dx2 in 0 until cell step 3) {
+                for (dy2 in 0 until cell step 2) {
+                    for (dx2 in 0 until cell step 2) {
                         val p = bmp.getPixel(cx + dx2, cy + dy2)
                         val r = Color.red(p); val g = Color.green(p); val b = Color.blue(p)
-                        if ((r > 240 && g > 185 && b < 20) || (r > 248 && g > 248 && b > 248)) hits++
+                        val isWhite  = r > 220 && g > 220 && b > 220
+                        val isGold   = r > 220 && g > 170 && b < 60 && r > g
+                        val isGreen  = g > 170 && r < 120 && b < 100
+                        if (isWhite || isGold || isGreen) hits++
                     }
                 }
-                if (hits >= 2) { found.add(itemX to itemY); if (found.size >= 5) break }
+                if (hits >= 3) { found.add(itemX to itemY); if (found.size >= 12) break }
                 cx += cell
             }
-            if (found.size >= 5) break
+            if (found.size >= 12) break
             cy += cell
         }
         return found.sortedBy { (fx, fy) ->
