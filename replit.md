@@ -1,143 +1,83 @@
 # Movile2 Bot
 
-## Project Overview
-Android bot app in Kotlin for MMORPG automation using Accessibility Service + Overlay.
+## Panoramica
+App Android (Kotlin) per automatizzare Mobile2 Global (clone Metin2 su Unreal Engine 4).
+Usa AccessibilityService per inviare gesture e screenshot pixel-detection per rilevare oggetti a terra.
 
-## Architecture
-- **Type**: Android APK (Kotlin + Gradle Kotlin DSL)
-- **Package**: `com.movile2.bot`
-- **Min SDK**: 26 / Target SDK: 34
-
-## Source Files
-| File | Descrizione |
-|---|---|
-| `MainActivity.kt` | Schermata impostazioni con tutti i campi configurabili |
-| `CoordinatePickerActivity.kt` | Activity trasparente per selezionare coordinate toccando lo schermo |
-| `BotAccessibilityService.kt` | Logica principale bot: ricerca a griglia, attacco, abilità, pozioni |
-| `OverlayService.kt` | Pannello flottante draggabile con Start/Stop e contatore kills |
-| `BotConfig.kt` | Data class + SharedPreferences per persistere le impostazioni |
-| `BotState.kt` | Singleton condiviso per stato runtime (isRunning, killCount) |
-
-## Features v8 — Attacco Tenuto Premuto (willContinue API)
-- **Attacco automatico continuo**: il bot tiene premuto il tasto attacco usando `willContinue=true` nell'Accessibility Service. Nessun rilascio finché non si preme STOP.
-- **Pozione multitouch sintetico**: quando la pozione è attiva insieme all'attacco, viene iniettata come secondo dito nello stesso `GestureDescription` (stroke indipendente, pointer ID diverso). Nessun conflitto, nessuna interruzione del tasto attacco.
-- **Rinnovo chunk automatico**: ogni 8s il dito viene "continuato" via `continueStroke()` senza mai alzarsi. Rilascio pulito con `willContinue=false` allo stop.
-- **Overlay aggiornato**: pulsante `🎯 IMPOSTA ATT` (cattura posizione con un tocco) + `⚔️ ATT: ON/OFF` affiancano i controlli pozione e loot esistenti.
-
-## Features v7 — Solo Pozioni + Raccolta Terra Individuale
-- **Modalità Solo Pozioni** (nuovo): loop indipendente che preme tutti gli slot pozione configurati ogni N secondi (configurabile), SENZA attaccare né muoversi. Attivabile dall'overlay (pulsante 💊 POZ) anche con il bot fermo.
-- **Raccolta terra individuale** (nuovo): trova ogni oggetto (nome personaggio = testo bianco, yang = pixel oro) come cluster separato e ci tappa su uno per uno con 350ms di delay. Attivabile dall'overlay (pulsante 🎒 LOOT).
-
-## Features v6 — Sistema Pozioni Multi-Slot
-- **Multi-touch simultaneo**: Attack (SEMPRE incluso) + Skill1..5 + Target nello stesso frame
-- **Loop unificato**: nessuna state machine; pozione inline senza interrompere il combattimento
-- **Ciclo combattimento 320ms**: attack spam + 2 tap extra a 75/150ms
-- **Scan ogni 600ms**: rilevamento mostri (R>160, diff≥38); pixel check slot pozione
-- **Loot aggressivo**: raccolta in combattimento, post-kill multi-tap 4 direzioni, finestra 7s
-- **Sistema Multi-Slot Pozioni (fino a 7)**:
-  - Pixel detection slot: rileva se l'icona rossa è presente → slot pieno/vuoto
-  - Rotazione automatica: slot 1→2→...→7 quando uno si svuota
-  - Refill inventario: drag automatico dalla posizione inventario allo slot 1 quando tutti vuoti
-  - POTION_CD 3s per evitare spam continuo
-- **5 skill tutte attive**: multi-touch quando pronte; skill 1-3 anche durante pattuglia
-- Joystick virtuale N→E→S→W; si ferma se c'è bersaglio
-- Monitor HP automatico (auto-detection barra top-left)
-- Kill counter + timer sessione + overlay draggabile
-
-## Architettura v5
-```
-doLoop() ogni 320ms (combat) / 550ms (patrol):
-  1. Kill counter aggiornato (prevTarget→no target = kill)
-  2. Pozione inline se hpLow (tap immediato, no fase separata)
-  3. if (inCombat):
-       multiTap([attack, target, skill1..5 pronte]) → 1 gesto multi-touch
-       +2 attack spam a 75/150ms via postDelayed
-       loot anche in combat se visibile (CD 1.4s)
-       → schedula prossimo loop a 320ms
-  4. else (no target):
-       loot aggressivo (tap diretto se visibile, multi-tap intorno player se post-kill)
-       skill 1-3 durante patrol
-       camera rotation ogni 4 cicli
-       joystick patrol N→E→S→W
-       → schedula prossimo loop a 550ms
-```
-
-## Configurazione consigliata
-1. Centro joystick: tocca il centro del joystick (basso-sinistra)
-2. Punto visuale: tocca la zona centrale-destra dello schermo (area senza UI)
-3. Bottone attacco: il bottone attacco principale (basso-destra)
-4. Abilità 1 e 2: le abilità speciali con cooldown
-5. Slot pozione: il bottone pozione se usato
-
-## Replit Setup
-- **Web server**: `serve.py` su porta 5000 (pagina informativa)
-- **Workflow**: "Start application" → `python serve.py`
-
-## Build APK
-Push su GitHub → GitHub Actions (`build-apk.yml`) builda automaticamente.
-APK scaricabile da Actions › Artifacts.
-
-Local build: `gradle assembleDebug` (richiede Android SDK + JDK 17)
+**Replit**: ospita solo `serve.py` (server informativo su porta 5000).  
+**APK**: buildato da GitHub Actions al push su `main`.
 
 ---
 
-## Analisi libUE4.so (31/03/2026)
+## Architettura
 
-### Findings chiave
-- **Emulator detection**: BlueStacks, NoxPlayer, MEmu, vPhone, ChromeOS-ARC → solo dispositivi fisici reali
-- **MOB_COLOR confermato**: nomi mob rosso vivace → R>170, G<110, B<110, diff≥45
-- **AttackTimeMsec**: 60ms TAP_MS confermato corretto
-- **AGGRESSIVE_HP_PCT / AGGRESSIVE_SIGHT**: mob con aggro e raggio visione
-- **SKILL_VNUM0-4**: 5 slot abilità confermati (già implementati)
-- **dropLocs / dropedAt**: drop con posizione precisa e lifetime → centroide OK
-- **Origine Metin2** (turco): yang, buyuAttack, buyuDef, coinBonusYuzde
-- **Nessun IP server** trovato nel .so → endpoint nel PAK/OBB
-
-### File generati
-- `mobile2_decompiled/ANALISI_LIBRERIA.md` — analisi completa
-- `mobile2_decompiled/libUE4_strings.txt` — 821.971 stringhe estratte
-- `mobile2_decompiled/xapk_contents/` — tutti gli APK decompressi
-
-## Analisi APK del gioco target (Mobile2 Global 2.23)
-
-Analisi eseguita il 30/03/2026 su `Mobile2_Global_2.23_APKPure.xapk`.
-
-### Struttura del gioco
-| Componente | Valore |
+| File | Ruolo |
 |---|---|
-| Package | `com.vendsoft.mobile2` |
-| Versione | 2.23 |
-| Min SDK | 21 / Target SDK 35 |
-| Engine | **Unreal Engine 4** |
-| Main Activity | `com.epicgames.ue4.GameActivity` |
-| Libreria nativa | `libUE4.so` (182 MB) — tutto il codice di gioco |
-| Game project | `Mobile2Global` |
-| Contenuti | `pakchunk0-Android_ETC2.pak` (UE4 pak file) |
+| `MainActivity.kt` | Schermata principale: permessi, intervallo pozione, avvia/ferma overlay |
+| `BotAccessibilityService.kt` | Logica bot: attacco, pozioni, abilità, raccolta terra, camminata |
+| `OverlayService.kt` | Pannello flottante draggabile con tutti i controlli |
+| `BotState.kt` | Singleton condiviso per lo stato runtime |
 
-### Struttura XAPK
-- `com.vendsoft.mobile2.apk` — wrapper Java + risorse Android
-- `config.arm64_v8a.apk` — librerie native arm64 (`libUE4.so` ecc.)
-- `config.en.apk` — stringhe localizzate
-- `config.xxhdpi.apk` — drawable xxhdpi
+---
 
-### Implicazioni per il bot
+## Funzionalità attuali
 
-**Accessibility tree**: NON funziona. UE4 non crea alcuna Android View per la UI di gioco. L'intera interfaccia (nomi mostri, HP bar, joystick, skill buttons) è renderizzata da UE4 via OpenGL/Vulkan su una SurfaceView opaca.
+### Pannello flottante (OverlayService)
+- **■ STOP TUTTO** — ferma immediatamente tutto (attacco, pozioni, abilità, loot, camminata)
+- **🕹️ IMPOSTA JOYSTICK** — cattura posizione centro joystick toccando lo schermo
+- **🚶 WALK ON/OFF** — il bot spinge il joystick in avanti continuamente (400ms gestures a catena)
+- **🎯 IMPOSTA POZ** — cattura slot pozione (fino a 3)
+- **💊 POZ ON/OFF** — preme le pozioni all'intervallo configurato
+- **🎒 LOOT ON/OFF** — raccoglie yang (oro) e oggetti con nome verde; ferma l'attacco automaticamente
+- **⚔️ ATT ON/OFF** — attacco automatico (solo se mob rosso rilevato)
+- **✨ SKILL ON/OFF** — abilità con cooldown individuali
 
-**Screen pixel detection**: UNICO modo per "vedere" lo stato del gioco. Il nostro approccio con `takeScreenshot()` + ricerca pixel rossi (nomi nemici) è corretto.
+### Camminata (Walk)
+- Spinge il joystick di `widthPixels × 0.07` px verso l'alto (avanti)  
+- Gesture da 400ms concatenate via `GestureResultCallback` → movimento continuo senza gap  
+- Pausa automatica quando l'utente usa il joystick manualmente (rilevato via `FLAG_WATCH_OUTSIDE_TOUCH`)  
+- Riprende insieme alle altre funzioni attive dopo `JOY_RESUME_DELAY_MS` (1.5s)
 
-**Gesti touch**: FUNZIONANO. UE4 riceve normalmente i `MotionEvent` Android sulla sua SurfaceView, quindi i gesti dell'Accessibility Service arrivano al gioco.
+### Raccolta terra (Loot)
+- **Attiva**: ferma sempre l'attacco (`stopAttack()` in `startLoot()`)  
+- **Funziona con**: pozioni (indipendenti), abilità, camminata  
+- **Rileva**:  
+  - Yang: pixel giallo-oro (R>220, G>170, B<60)  
+  - Oggetti col nome del personaggio: testo verde (G>170, R<120, B<100)  
+  - Testo bianco brillante generico (R>220, G>220, B>220)  
+- **Tap**: singolo (no multitouch con attacco), doppio su ogni oggetto con delay
 
-**Colori rilevabili**:
-- Nomi mostri nemici: rosso vivace (R>180, G<110, B<90) — già implementato
-- Barre HP nemiche: potenziale secondo canale di rilevamento
+### Pausa joystick manuale
+- Overlay con `FLAG_WATCH_OUTSIDE_TOUCH` riceve eventi `ACTION_OUTSIDE`  
+- Se il tocco è entro `140dp` dal centro joystick → `joystickActive = true` → tutte le azioni si fermano  
+- Dopo 1.5s senza tocchi → `resumeAfterJoystick()` → riprendono attacco, pozioni, abilità, loot, camminata
 
-### Nota FLAG_SECURE
-Se il gioco attiva `FLAG_SECURE`, `takeScreenshot()` restituisce schermo nero. In quel caso il bot opera in modalità cieca (joystick + attacco senza detection visiva).
+---
 
-### Classi Java notevoli nel DEX
-- `com.epicgames.ue4.GameActivity` — activity principale UE4
-- `com.epicgames.ue4.WebViewControl` — WebView per login/browser in-game
-- `com.epicgames.ue4.MediaPlayer14` — riproduzione video
-- `com.vendsoft.mobile2.OBBDownloaderService` — download OBB al primo avvio
-- `com.vendsoft.mobile2.AlarmReceiver` — notifiche locali
+## BotState — campi principali
+
+```kotlin
+attackRunning / attackPos / mobNearby   // Modalità attacco
+potionRunning / potionIntervalMs / potionSlots
+skillsRunning / skillSlots / skillIntervals
+lootRunning / lootItemsFound            // Raccolta terra
+walkRunning / joystickPos               // Camminata bot
+joystickActive                          // Pausa joystick manuale
+```
+
+---
+
+## Replit Setup
+- Workflow: **Start application** → `python serve.py` (porta 5000)
+
+## Build APK
+Push su `main` → GitHub Actions (`build-apk.yml`) → `gradle assembleDebug`  
+APK scaricabile da **Actions › Artifacts**
+
+---
+
+## Note gioco target (Mobile2 Global 2.23)
+- Engine: **Unreal Engine 4** — UI renderizzata su SurfaceView OpenGL/Vulkan
+- `AccessibilityService.takeScreenshot()` è l'unico modo per "vedere" il gioco
+- I gesti Accessibility (`MotionEvent`) arrivano correttamente alla SurfaceView UE4
+- Se il gioco attiva `FLAG_SECURE` → screenshot nero

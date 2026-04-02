@@ -42,6 +42,7 @@ class OverlayService : Service() {
     private var btnSkill: TextView? = null
     private var btnSetSkill: TextView? = null
     private var btnSetJoy: TextView? = null
+    private var btnWalk: TextView? = null
     private var contentLayout: LinearLayout? = null
     private var btnToggle: TextView? = null
     private var panelCollapsed = false
@@ -86,9 +87,12 @@ class OverlayService : Service() {
             val hasJoy  = BotState.joystickPos != null
             val mobNear = BotState.mobNearby
 
+            val walkOn = BotState.walkRunning
+
             val parts = mutableListOf<String>()
-            if (BotState.joystickActive) parts.add("🕹️ PAUSA")
+            if (BotState.joystickActive) parts.add("🕹️ PAUSA JOY")
             else {
+                if (walkOn)  parts.add("🚶 WALK")
                 if (attOn)   parts.add(if (mobNear) "⚔️ ATT🔴" else "⚔️ ATT…")
                 if (potOn)   parts.add("💊 POZ")
                 if (skillOn) parts.add("✨ SKILL")
@@ -98,6 +102,12 @@ class OverlayService : Service() {
             tvStatus?.setTextColor(
                 if (BotState.joystickActive) Color.YELLOW
                 else if (parts.isEmpty()) Color.LTGRAY else Color.GREEN)
+
+            btnWalk?.text = if (walkOn) "🚶 WALK: ON" else "🚶 WALK: OFF"
+            btnWalk?.setBackgroundColor(
+                if (walkOn) Color.argb(230, 0, 160, 200)
+                else if (hasJoy) Color.argb(220, 30, 60, 80)
+                else Color.argb(180, 40, 40, 40))
 
             btnSetAtt?.text = if (hasAtt) "🎯 ATT ✓" else "🎯 IMPOSTA ATT"
             btnAttack?.text = if (attOn) "⚔️ ATT: ON" else "⚔️ ATT: OFF"
@@ -141,10 +151,7 @@ class OverlayService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         handler.removeCallbacksAndMessages(null)
-        BotAccessibilityService.instance?.stopAttack()
-        BotAccessibilityService.instance?.stopPotion()
-        BotAccessibilityService.instance?.stopSkills()
-        BotAccessibilityService.instance?.stopLoot()
+        BotAccessibilityService.instance?.stopAll()
         BotState.joystickActive = false
         panel?.let { runCatching { wm.removeView(it) } }
         captureView?.let { runCatching { wm.removeView(it) } }
@@ -232,15 +239,38 @@ class OverlayService : Service() {
         btnSetJoy = makeButton("🕹️ IMPOSTA JOYSTICK", Color.argb(220, 60, 40, 10))
         btnSetJoy!!.setOnClickListener { startPickJoystick() }
 
+        // ── STOP TUTTO ────────────────────────────────────────────────────────
+        val btnStopAll = makeButton("■ STOP TUTTO", Color.argb(230, 160, 20, 20))
+        btnStopAll.setOnClickListener {
+            BotAccessibilityService.instance?.stopAll()
+                ?: run { BotState.attackRunning = false; BotState.potionRunning = false
+                         BotState.skillsRunning = false; BotState.lootRunning = false
+                         BotState.walkRunning = false }
+        }
+
+        // ── WALK ─────────────────────────────────────────────────────────────
+        btnWalk = makeButton("🚶 WALK: OFF", Color.argb(180, 40, 40, 40))
+        btnWalk!!.setOnClickListener {
+            val bot = BotAccessibilityService.instance ?: run { showWarn("Abilita Accessibilità!"); return@setOnClickListener }
+            if (BotState.walkRunning) {
+                bot.stopWalk()
+            } else {
+                if (BotState.joystickPos == null) { showWarn("Prima imposta JOYSTICK!"); return@setOnClickListener }
+                bot.startWalk()
+            }
+        }
+
         content.addView(space(6))
+        content.addView(btnStopAll);  content.addView(space(10))
+        content.addView(btnSetJoy);   content.addView(space(4))
+        content.addView(btnWalk);     content.addView(space(10))
+        content.addView(btnSetPoz);   content.addView(space(4))
+        content.addView(btnPot);      content.addView(space(10))
+        content.addView(btnLoot);     content.addView(space(10))
         content.addView(btnSetAtt);   content.addView(space(4))
         content.addView(btnAttack);   content.addView(space(8))
-        content.addView(btnSetPoz);   content.addView(space(4))
-        content.addView(btnPot);      content.addView(space(8))
         content.addView(btnSetSkill); content.addView(space(4))
-        content.addView(btnSkill);    content.addView(space(8))
-        content.addView(btnLoot);     content.addView(space(8))
-        content.addView(btnSetJoy)
+        content.addView(btnSkill)
         contentLayout = content
 
         root.addView(topBar); root.addView(tvStatus); root.addView(content)

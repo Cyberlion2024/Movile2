@@ -181,10 +181,8 @@ class BotAccessibilityService : AccessibilityService() {
         if (!BotState.lootRunning || BotState.joystickActive || index >= items.size) { onAllDone(); return }
         val (x, y) = items[index]
         gestureInProgress = true
-        val aPos = BotState.attackPos
-        val dispatched = if (BotState.attackRunning && aPos != null)
-            tapMultitouch(aPos.first, aPos.second, ATTACK_TAP_MS, x, y, 55L)
-        else tapSingle(x, y, 55L)
+        // Loot: mai attacco, solo tap sull'oggetto
+        val dispatched = tapSingle(x, y, 55L)
         gestureInProgress = false
         handler.postDelayed({ tapItemsSequentially(items, index + 1, onAllDone) }, if (dispatched) 100L else 130L)
     }
@@ -286,6 +284,9 @@ class BotAccessibilityService : AccessibilityService() {
         if (BotState.lootRunning) {
             handler.removeCallbacks(lootLoop); handler.post(lootLoop)
         }
+        if (BotState.walkRunning) {
+            dispatchWalk()
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -309,6 +310,38 @@ class BotAccessibilityService : AccessibilityService() {
                     .addStroke(GestureDescription.StrokeDescription(Path().apply { moveTo(x2, y2) }, 0L, dur2Ms))
                     .build(), null, null)
         } catch (_: Exception) { false }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // CAMMINATA — il bot spinge il joystick in avanti continuamente
+    //
+    // Invia gesture da centro joystick → punto in avanti (y - raggio).
+    // Ogni gesture dura 400ms; al completamento ne parte un'altra subito.
+    // Si ferma solo quando walkRunning diventa false.
+    // Riprende automaticamente dopo la pausa joystick manuale.
+    // ═══════════════════════════════════════════════════════════════════════════
+    private val walkCallback = object : GestureResultCallback() {
+        override fun onCompleted(g: GestureDescription?) { dispatchWalk() }
+        override fun onCancelled(g: GestureDescription?) { if (BotState.walkRunning) dispatchWalk() }
+    }
+
+    private fun dispatchWalk() {
+        if (!BotState.walkRunning || BotState.joystickActive) {
+            if (BotState.walkRunning) handler.postDelayed({ dispatchWalk() }, 300L)
+            return
+        }
+        val pos = BotState.joystickPos ?: return
+        val r = resources.displayMetrics.widthPixels * 0.07f
+        try {
+            dispatchGesture(
+                GestureDescription.Builder()
+                    .addStroke(GestureDescription.StrokeDescription(
+                        Path().apply { moveTo(pos.first, pos.second); lineTo(pos.first, pos.second - r) },
+                        0L, 400L))
+                    .build(), walkCallback, handler)
+        } catch (_: Exception) {
+            if (BotState.walkRunning) handler.postDelayed({ dispatchWalk() }, 150L)
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -358,6 +391,8 @@ class BotAccessibilityService : AccessibilityService() {
     }
 
     fun startLoot() {
+        // Loot non attacca mai: ferma l'attacco se era attivo
+        stopAttack()
         if (BotState.lootRunning) return
         lootTargets = emptyList(); BotState.lootItemsFound = 0; gestureInProgress = false
         BotState.lootRunning = true
@@ -371,12 +406,26 @@ class BotAccessibilityService : AccessibilityService() {
         lootTargets = emptyList()
     }
 
+    fun startWalk() {
+        if (BotState.joystickPos == null || BotState.walkRunning) return
+        BotState.walkRunning = true
+        dispatchWalk()
+    }
+
+    fun stopWalk() {
+        BotState.walkRunning = false
+    }
+
+    fun stopAll() {
+        stopAttack(); stopPotion(); stopSkills(); stopLoot(); stopWalk()
+    }
+
     override fun onServiceConnected() { instance = this }
     override fun onAccessibilityEvent(e: AccessibilityEvent?) {}
-    override fun onInterrupt() { stopAttack(); stopPotion(); stopSkills(); stopLoot() }
+    override fun onInterrupt() { stopAll() }
     override fun onDestroy() {
         super.onDestroy()
-        stopAttack(); stopPotion(); stopSkills(); stopLoot()
+        stopAll()
         BotState.joystickActive = false
         if (instance === this) instance = null
     }
