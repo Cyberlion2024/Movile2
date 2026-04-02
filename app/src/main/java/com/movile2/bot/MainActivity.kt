@@ -17,17 +17,23 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        val etInterval = findViewById<EditText>(R.id.etInterval)
-        val btnAccessibility  = findViewById<Button>(R.id.btnAccessibility)
-        val btnOverlay        = findViewById<Button>(R.id.btnOverlay)
-        val btnSave           = findViewById<Button>(R.id.btnSave)
-        val btnStart          = findViewById<Button>(R.id.btnStart)
-        val btnStop           = findViewById<Button>(R.id.btnStop)
+        val etInterval      = findViewById<EditText>(R.id.etInterval)
+        val etSkillInterval = findViewById<EditText>(R.id.etSkillInterval)
+        val btnAccessibility = findViewById<Button>(R.id.btnAccessibility)
+        val btnOverlay       = findViewById<Button>(R.id.btnOverlay)
+        val btnSave          = findViewById<Button>(R.id.btnSave)
+        val btnStart         = findViewById<Button>(R.id.btnStart)
+        val btnStop          = findViewById<Button>(R.id.btnStop)
 
-        // Carica intervallo salvato
-        val saved = getSharedPreferences(PREFS, MODE_PRIVATE).getLong("pot_interval_ms", 3000L)
-        etInterval.setText((saved / 1000).toString())
-        BotState.potionIntervalMs = saved
+        val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
+
+        // Carica valori salvati
+        val savedPot   = prefs.getLong("pot_interval_ms", 3000L)
+        val savedSkill = prefs.getLong("skill_interval_ms", 5000L)
+        etInterval.setText((savedPot / 1000).toString())
+        etSkillInterval.setText((savedSkill / 1000).toString())
+        BotState.potionIntervalMs = savedPot
+        BotState.skillIntervalMs  = savedSkill
 
         btnAccessibility.setOnClickListener {
             startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
@@ -43,11 +49,17 @@ class MainActivity : AppCompatActivity() {
         }
 
         btnSave.setOnClickListener {
-            val seconds = etInterval.text.toString().toLongOrNull()?.coerceAtLeast(1L) ?: 3L
-            val ms = seconds * 1000L
-            getSharedPreferences(PREFS, MODE_PRIVATE).edit().putLong("pot_interval_ms", ms).apply()
-            BotState.potionIntervalMs = ms
-            Toast.makeText(this, "Salvato: ogni ${seconds}s", Toast.LENGTH_SHORT).show()
+            val potSeconds   = etInterval.text.toString().toLongOrNull()?.coerceAtLeast(1L) ?: 3L
+            val skillSeconds = etSkillInterval.text.toString().toLongOrNull()?.coerceAtLeast(1L) ?: 5L
+            val potMs   = potSeconds * 1000L
+            val skillMs = skillSeconds * 1000L
+            prefs.edit()
+                .putLong("pot_interval_ms", potMs)
+                .putLong("skill_interval_ms", skillMs)
+                .apply()
+            BotState.potionIntervalMs = potMs
+            BotState.skillIntervalMs  = skillMs
+            Toast.makeText(this, "Salvato: pozze ogni ${potSeconds}s, abilità ogni ${skillSeconds}s", Toast.LENGTH_SHORT).show()
         }
 
         btnStart.setOnClickListener {

@@ -38,7 +38,18 @@ li{margin-bottom:8px;line-height:1.6;color:#ccc}
 <body>
 <div class="wrap">
   <h1>&#129302; Movile2 Bot</h1>
-  <p class="sub">Bot Android per MMORPG &mdash; Kotlin + Accessibility Service &mdash; <strong>v9</strong></p>
+  <p class="sub">Bot Android per MMORPG &mdash; Kotlin + Accessibility Service &mdash; <strong>v10</strong></p>
+
+  <div class="card">
+    <h2>&#10024; Novit&agrave; v10 &mdash; Fix Pozze Solo + Rilevamento Mostri Rossi + Slot Abilit&agrave;</h2>
+    <ul>
+      <li><strong>Fix modalit&agrave; solo pozze</strong> <span class="new">FIX</span> &mdash; quando l&apos;attacco &egrave; OFF e le pozze sono ON, il bot preme <em>solo</em> le pozze, senza nessun tap di attacco aggiuntivo</li>
+      <li><strong>Attacco con rilevamento mostri</strong> <span class="new">NEW</span> &mdash; quando ATT &egrave; ON, il bot scansiona lo schermo ogni 500ms cercando nomi di mostri rossi (R&gt;160, G&lt;130, B&lt;120) vicini al personaggio. Attacca solo se trova un mostro; se non ce ne sono si mette in attesa. Lo stato mostra &#x2694;&#xFE0F; ATT&#x1F534; quando c&apos;&egrave; un mostro, &#x2694;&#xFE0F; ATT&hellip; quando cerca</li>
+      <li><strong>Slot abilit&agrave; configurabili</strong> <span class="new">NEW</span> &mdash; premi &#x1F3AF; IMPOSTA SKILL nell&apos;overlay e tocca fino a 5 posizioni sullo schermo per impostare i tuoi slot abilit&agrave;. Premi &#x2728; SKILL: ON/OFF per attivarle. Il bot le usa in sequenza ogni N secondi (configurabile nell&apos;app)</li>
+      <li><strong>Intervallo abilit&agrave; in app</strong> <span class="new">NEW</span> &mdash; nella schermata principale ora c&apos;&egrave; il campo &ldquo;Intervallo abilit&agrave; (secondi)&rdquo; separato dall&apos;intervallo pozione</li>
+    </ul>
+    <div class="ok">&#9989; Pozze ON senza Attacco = solo pozze, nessun attacco. Attacco ON = attacca solo i mostri con nome rosso vicini al personaggio.</div>
+  </div>
 
   <div class="card">
     <h2>&#10024; Novit&agrave; v9 &mdash; Joystick via ACTION_OUTSIDE (nessun overlay)</h2>

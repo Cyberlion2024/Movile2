@@ -30,7 +30,8 @@ class OverlayService : Service() {
     private var captureView: View? = null
     private var captureTimeoutRunnable: Runnable? = null
     private var slotsAddedDuringCapture = 0
-    private val MAX_SLOTS = 3
+    private val MAX_POT_SLOTS = 3
+    private val MAX_SKILL_SLOTS = 5
 
     private var tvStatus: TextView? = null
     private var btnAttack: TextView? = null
@@ -38,6 +39,8 @@ class OverlayService : Service() {
     private var btnPot: TextView? = null
     private var btnLoot: TextView? = null
     private var btnSetPoz: TextView? = null
+    private var btnSkill: TextView? = null
+    private var btnSetSkill: TextView? = null
     private var btnSetJoy: TextView? = null
     private var contentLayout: LinearLayout? = null
     private var btnToggle: TextView? = null
@@ -45,16 +48,12 @@ class OverlayService : Service() {
 
     private val handler = Handler(Looper.getMainLooper())
     private var potInterval: Long = 3000L
+    private var skillInterval: Long = 5000L
 
-    private enum class CaptureMode { NONE, ATTACK, POTION, JOYSTICK }
+    private enum class CaptureMode { NONE, ATTACK, POTION, SKILL, JOYSTICK }
     private var captureMode = CaptureMode.NONE
 
     // ── Joystick detection via ACTION_OUTSIDE ──────────────────────────────────
-    // Il pannello ha FLAG_WATCH_OUTSIDE_TOUCH: riceve ACTION_OUTSIDE per ogni
-    // tocco fuori dal pannello stesso (incluso il joystick del gioco).
-    // NON blocchiamo mai il game input: nessun overlay sopra il joystick.
-    // Quando i tocchi ricadono nella zona joystick → joystickActive=true.
-    // Timer di 1.5s senza tocchi nella zona → joystickActive=false → bot riprendono.
     private var joystickResumeRunnable: Runnable? = null
     private val JOY_RESUME_DELAY_MS = 1500L
 
@@ -63,9 +62,7 @@ class OverlayService : Service() {
         val halfZone = (140f * resources.displayMetrics.density)
         val dx = rx - center.first; val dy = ry - center.second
         if (abs(dx) < halfZone && abs(dy) < halfZone) {
-            // Tocco nella zona joystick → pausa bot
             BotState.joystickActive = true
-            // Resetta il timer di ripristino
             joystickResumeRunnable?.let { handler.removeCallbacks(it) }
             val r = Runnable {
                 BotAccessibilityService.instance?.resumeAfterJoystick()
@@ -79,20 +76,24 @@ class OverlayService : Service() {
     // ── Ticker ────────────────────────────────────────────────────────────────
     private val ticker = object : Runnable {
         override fun run() {
-            val attOn  = BotState.attackRunning
-            val potOn  = BotState.potionRunning
-            val lootOn = BotState.lootRunning
-            val found  = BotState.lootItemsFound
-            val slots  = BotState.potionSlots.size
-            val hasAtt = BotState.attackPos != null
-            val hasJoy = BotState.joystickPos != null
+            val attOn   = BotState.attackRunning
+            val potOn   = BotState.potionRunning
+            val skillOn = BotState.skillsRunning
+            val lootOn  = BotState.lootRunning
+            val found   = BotState.lootItemsFound
+            val potSlots   = BotState.potionSlots.size
+            val skillSlots = BotState.skillSlots.size
+            val hasAtt  = BotState.attackPos != null
+            val hasJoy  = BotState.joystickPos != null
+            val mobNear = BotState.mobNearby
 
             val parts = mutableListOf<String>()
             if (BotState.joystickActive) parts.add("🕹️ PAUSA")
             else {
-                if (attOn)  parts.add("⚔️ ATT")
-                if (potOn)  parts.add("💊 POZ")
-                if (lootOn) parts.add("🎒 LOOT($found)")
+                if (attOn)   parts.add(if (mobNear) "⚔️ ATT🔴" else "⚔️ ATT…")
+                if (potOn)   parts.add("💊 POZ")
+                if (skillOn) parts.add("✨ SKILL")
+                if (lootOn)  parts.add("🎒 LOOT($found)")
             }
             tvStatus?.text = if (parts.isEmpty()) "● INATTIVO" else parts.joinToString(" + ")
             tvStatus?.setTextColor(
@@ -103,10 +104,15 @@ class OverlayService : Service() {
             btnAttack?.text = if (attOn) "⚔️ ATT: ON" else "⚔️ ATT: OFF"
             btnAttack?.setBackgroundColor(if (attOn) Color.argb(230,180,50,0) else Color.argb(220,50,50,80))
 
-            val sl = if (slots > 0) " ($slots)" else ""
-            btnSetPoz?.text = "🎯 IMPOSTA POZ$sl"
+            val psl = if (potSlots > 0) " ($potSlots)" else ""
+            btnSetPoz?.text = "🎯 IMPOSTA POZ$psl"
             btnPot?.text  = if (potOn)  "💊 POZ: ON"  else "💊 POZ: OFF"
             btnPot?.setBackgroundColor(if (potOn) Color.argb(230,0,130,160) else Color.argb(220,50,50,80))
+
+            val ssl = if (skillSlots > 0) " ($skillSlots)" else ""
+            btnSetSkill?.text = "🎯 IMPOSTA SKILL$ssl"
+            btnSkill?.text  = if (skillOn) "✨ SKILL: ON" else "✨ SKILL: OFF"
+            btnSkill?.setBackgroundColor(if (skillOn) Color.argb(230,120,0,180) else Color.argb(220,50,50,80))
 
             btnLoot?.text = if (lootOn) "🎒 LOOT: ON" else "🎒 LOOT: OFF"
             btnLoot?.setBackgroundColor(if (lootOn) Color.argb(230,20,150,50) else Color.argb(220,50,50,80))
@@ -121,6 +127,10 @@ class OverlayService : Service() {
     // ── Lifecycle ─────────────────────────────────────────────────────────────
     override fun onCreate() {
         super.onCreate()
+        // Carica intervalli salvati
+        val prefs = getSharedPreferences("bot_prefs", Context.MODE_PRIVATE)
+        potInterval   = prefs.getLong("pot_interval_ms", 3000L)
+        skillInterval = prefs.getLong("skill_interval_ms", 5000L)
         startForeground()
         buildPanel()
         handler.post(ticker)
@@ -131,6 +141,7 @@ class OverlayService : Service() {
         handler.removeCallbacksAndMessages(null)
         BotAccessibilityService.instance?.stopAttack()
         BotAccessibilityService.instance?.stopPotion()
+        BotAccessibilityService.instance?.stopSkills()
         BotAccessibilityService.instance?.stopLoot()
         BotState.joystickActive = false
         panel?.let { runCatching { wm.removeView(it) } }
@@ -142,7 +153,6 @@ class OverlayService : Service() {
 
     // ═══════════════════════════════════════════════════════════════════════════
     // PANNELLO FLOTTANTE
-    // FLAG_WATCH_OUTSIDE_TOUCH → riceve ACTION_OUTSIDE per i tocchi fuori pannello
     // ═══════════════════════════════════════════════════════════════════════════
     private fun buildPanel() {
         wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
@@ -165,9 +175,9 @@ class OverlayService : Service() {
 
         tvStatus = makeText("● INATTIVO", 13f, Color.LTGRAY)
 
-        // Contenuto
         val content = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
 
+        // ── Attacco ──────────────────────────────────────────────────────────
         btnSetAtt = makeButton("🎯 IMPOSTA ATT", Color.argb(220, 100, 40, 0))
         btnSetAtt!!.setOnClickListener { startPickAttack() }
 
@@ -181,6 +191,7 @@ class OverlayService : Service() {
             }
         }
 
+        // ── Pozione ──────────────────────────────────────────────────────────
         btnSetPoz = makeButton("🎯 IMPOSTA POZ", Color.argb(220, 130, 70, 0))
         btnSetPoz!!.setOnClickListener { startPickPotion() }
 
@@ -194,24 +205,39 @@ class OverlayService : Service() {
             }
         }
 
+        // ── Abilità ──────────────────────────────────────────────────────────
+        btnSetSkill = makeButton("🎯 IMPOSTA SKILL", Color.argb(220, 80, 0, 120))
+        btnSetSkill!!.setOnClickListener { startPickSkill() }
+
+        btnSkill = makeButton("✨ SKILL: OFF", Color.argb(220, 50, 50, 80))
+        btnSkill!!.setOnClickListener {
+            val bot = BotAccessibilityService.instance ?: run { showWarn("Abilita Accessibilità!"); return@setOnClickListener }
+            if (BotState.skillsRunning) bot.stopSkills()
+            else {
+                if (BotState.skillSlots.isEmpty()) { showWarn("Prima imposta SKILL!"); return@setOnClickListener }
+                bot.startSkills(skillInterval)
+            }
+        }
+
+        // ── Loot ─────────────────────────────────────────────────────────────
         btnLoot = makeButton("🎒 LOOT: OFF", Color.argb(220, 50, 50, 80))
         btnLoot!!.setOnClickListener {
             val bot = BotAccessibilityService.instance ?: run { showWarn("Abilita Accessibilità!"); return@setOnClickListener }
             if (BotState.lootRunning) bot.stopLoot() else bot.startLoot()
         }
 
-        // Imposta zona joystick: il bot registra la posizione center del joystick.
-        // Nessun overlay viene creato sopra il joystick.
-        // I tocchi vengono rilevati tramite ACTION_OUTSIDE sul pannello.
+        // ── Joystick ─────────────────────────────────────────────────────────
         btnSetJoy = makeButton("🕹️ IMPOSTA JOYSTICK", Color.argb(220, 60, 40, 10))
         btnSetJoy!!.setOnClickListener { startPickJoystick() }
 
         content.addView(space(6))
-        content.addView(btnSetAtt);  content.addView(space(4))
-        content.addView(btnAttack);  content.addView(space(8))
-        content.addView(btnSetPoz);  content.addView(space(4))
-        content.addView(btnPot);     content.addView(space(4))
-        content.addView(btnLoot);    content.addView(space(8))
+        content.addView(btnSetAtt);   content.addView(space(4))
+        content.addView(btnAttack);   content.addView(space(8))
+        content.addView(btnSetPoz);   content.addView(space(4))
+        content.addView(btnPot);      content.addView(space(8))
+        content.addView(btnSetSkill); content.addView(space(4))
+        content.addView(btnSkill);    content.addView(space(8))
+        content.addView(btnLoot);     content.addView(space(8))
         content.addView(btnSetJoy)
         contentLayout = content
 
@@ -222,14 +248,13 @@ class OverlayService : Service() {
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-            WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH   // ← chiave
+            WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
         ).apply { gravity = Gravity.TOP or Gravity.START; x = 16; y = 180 }
         panelLp = lp
 
-        // ACTION_OUTSIDE sul pannello → rilevamento joystick
         root.setOnTouchListener { _, e ->
             if (e.action == MotionEvent.ACTION_OUTSIDE) onOutsideTouch(e.rawX, e.rawY)
-            false  // non consuma: drag su child funziona normalmente
+            false
         }
 
         // Drag
@@ -287,16 +312,16 @@ class OverlayService : Service() {
         BotState.potionSlots.clear(); BotState.potionRunning = false
         BotAccessibilityService.instance?.stopPotion()
         slotsAddedDuringCapture = 0
-        showStatus("Tocca slot 1/3... (5s)", Color.YELLOW)
+        showStatus("Tocca slot 1/$MAX_POT_SLOTS... (5s)", Color.YELLOW)
         val cv = makeCaptureOverlay()
         cv.setOnTouchListener { _, e ->
             if (e.action == MotionEvent.ACTION_DOWN && captureMode == CaptureMode.POTION) {
                 slotsAddedDuringCapture++
                 BotState.potionSlots.add(e.rawX to e.rawY)
-                if (slotsAddedDuringCapture >= MAX_SLOTS) {
-                    finishCapture(null)
+                if (slotsAddedDuringCapture >= MAX_POT_SLOTS) {
+                    finishPotionCapture()
                 } else {
-                    showStatus("✓ Slot $slotsAddedDuringCapture → Tocca ${slotsAddedDuringCapture + 1}/3 o aspetta", Color.YELLOW)
+                    showStatus("✓ Slot $slotsAddedDuringCapture → Tocca ${slotsAddedDuringCapture + 1}/$MAX_POT_SLOTS o aspetta", Color.YELLOW)
                 }
             }
             true
@@ -306,9 +331,37 @@ class OverlayService : Service() {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // CATTURA SLOT ABILITÀ
+    // ═══════════════════════════════════════════════════════════════════════════
+    private fun startPickSkill() {
+        if (captureView != null) return
+        captureMode = CaptureMode.SKILL
+        BotState.skillSlots.clear(); BotState.skillsRunning = false
+        BotAccessibilityService.instance?.stopSkills()
+        slotsAddedDuringCapture = 0
+        showStatus("Tocca slot abilità 1/$MAX_SKILL_SLOTS... (8s)", Color.YELLOW)
+        val cv = makeCaptureOverlay()
+        cv.setOnTouchListener { _, e ->
+            if (e.action == MotionEvent.ACTION_DOWN && captureMode == CaptureMode.SKILL) {
+                slotsAddedDuringCapture++
+                BotState.skillSlots.add(e.rawX to e.rawY)
+                if (slotsAddedDuringCapture >= MAX_SKILL_SLOTS) {
+                    finishSkillCapture()
+                } else {
+                    showStatus("✓ Skill $slotsAddedDuringCapture → Tocca ${slotsAddedDuringCapture + 1}/$MAX_SKILL_SLOTS o aspetta", Color.YELLOW)
+                }
+            }
+            true
+        }
+        wm.addView(cv, captureOverlayParams()); captureView = cv
+        // Timeout più lungo per le abilità (fino a 5 slot)
+        val timeout = Runnable { if (captureView != null) finishSkillCapture() }
+        captureTimeoutRunnable = timeout
+        handler.postDelayed(timeout, 8000L)
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // CATTURA POSIZIONE JOYSTICK
-    // Registra solo le coordinate del centro: NON crea nessun overlay.
-    // Il rilevamento avviene passivamente tramite ACTION_OUTSIDE.
     // ═══════════════════════════════════════════════════════════════════════════
     private fun startPickJoystick() {
         if (captureView != null) return
@@ -334,17 +387,31 @@ class OverlayService : Service() {
         captureTimeoutRunnable = null
         removeCaptureView()
         captureMode = CaptureMode.NONE
+        if (msg != null) showStatus(msg, Color.GREEN)
+        if (panelCollapsed) handler.postDelayed({ if (panelCollapsed) tvStatus?.visibility = View.GONE }, 2500L)
+    }
 
-        if (msg != null) {
-            showStatus(msg, Color.GREEN)
-        } else {
-            val slots = BotState.potionSlots.size
-            if (slots == 0) { showStatus("Nessuno slot impostato", Color.LTGRAY); return }
-            val bot = BotAccessibilityService.instance
-            if (bot != null) { bot.startPotion(potInterval); showStatus("💊 POZ: $slots slot attivi!", Color.GREEN) }
-            else showStatus("$slots slot salvati. Abilita Accessibilità!", Color.YELLOW)
-        }
+    private fun finishPotionCapture() {
+        captureTimeoutRunnable?.let { handler.removeCallbacks(it) }
+        captureTimeoutRunnable = null
+        removeCaptureView()
+        captureMode = CaptureMode.NONE
+        val slots = BotState.potionSlots.size
+        if (slots == 0) { showStatus("Nessuno slot impostato", Color.LTGRAY); return }
+        val bot = BotAccessibilityService.instance
+        if (bot != null) { bot.startPotion(potInterval); showStatus("💊 POZ: $slots slot attivi!", Color.GREEN) }
+        else showStatus("$slots slot salvati. Abilita Accessibilità!", Color.YELLOW)
+        if (panelCollapsed) handler.postDelayed({ if (panelCollapsed) tvStatus?.visibility = View.GONE }, 2500L)
+    }
 
+    private fun finishSkillCapture() {
+        captureTimeoutRunnable?.let { handler.removeCallbacks(it) }
+        captureTimeoutRunnable = null
+        removeCaptureView()
+        captureMode = CaptureMode.NONE
+        val slots = BotState.skillSlots.size
+        if (slots == 0) { showStatus("Nessuno slot abilità impostato", Color.LTGRAY); return }
+        showStatus("✨ SKILL: $slots slot salvati!", Color.GREEN)
         if (panelCollapsed) handler.postDelayed({ if (panelCollapsed) tvStatus?.visibility = View.GONE }, 2500L)
     }
 

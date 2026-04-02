@@ -23,9 +23,10 @@ class BotAccessibilityService : AccessibilityService() {
     private val ATTACK_TAP_MS = 40L
     private val ATTACK_GAP_MS = 280L
     private val POTION_TAP_MS = 35L
+    private val SKILL_TAP_MS  = 40L
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // LOOP ATTACCO
+    // LOOP ATTACCO — tappa solo quando c'è un mostro (nome rosso) vicino
     // ═══════════════════════════════════════════════════════════════════════════
     private val attackCallback = object : GestureResultCallback() {
         override fun onCompleted(g: GestureDescription?) { scheduleNextAttack() }
@@ -41,6 +42,8 @@ class BotAccessibilityService : AccessibilityService() {
         override fun run() {
             if (!BotState.attackRunning) return
             if (BotState.joystickActive) { scheduleNextAttack(); return }
+            // Attacca solo se è stato rilevato un mostro con nome rosso
+            if (!BotState.mobNearby) { handler.postDelayed(this, 300L); return }
             val pos = BotState.attackPos ?: run { scheduleNextAttack(); return }
             try {
                 val ok = dispatchGesture(
@@ -54,7 +57,66 @@ class BotAccessibilityService : AccessibilityService() {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // LOOP POZIONE
+    // SCANNER MOSTRI — ogni 500ms cerca nomi rossi vicini al personaggio
+    // Colore nome mostro nemico: R>160, G<130, B<120
+    // ═══════════════════════════════════════════════════════════════════════════
+    private val mobScanner = object : Runnable {
+        override fun run() {
+            if (!BotState.attackRunning) return
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !BotState.joystickActive) {
+                doMobScan()
+            }
+            handler.postDelayed(this, 500L)
+        }
+    }
+
+    @RequiresApi(Build.VERSION_CODES.R)
+    private fun doMobScan() {
+        takeScreenshot(Display.DEFAULT_DISPLAY, ContextCompat.getMainExecutor(this),
+            object : TakeScreenshotCallback {
+                override fun onSuccess(s: ScreenshotResult) {
+                    val hw = Bitmap.wrapHardwareBuffer(s.hardwareBuffer, s.colorSpace)
+                    val bmp = hw?.copy(Bitmap.Config.ARGB_8888, false)
+                    hw?.recycle(); s.hardwareBuffer.close()
+                    bmp?.let { b -> BotState.mobNearby = findRedMobNearby(b); b.recycle() }
+                }
+                override fun onFailure(e: Int) { BotState.mobNearby = false }
+            })
+    }
+
+    private fun findRedMobNearby(bmp: Bitmap): Boolean {
+        val w = bmp.width; val h = bmp.height
+        // Zona di ricerca: 40% centrale dello schermo (dove appaiono i nomi mostri)
+        val x0 = (w * 0.15f).toInt(); val x1 = (w * 0.85f).toInt()
+        val y0 = (h * 0.20f).toInt(); val y1 = (h * 0.65f).toInt()
+        // Centro personaggio
+        val charX = w * 0.50f; val charY = h * 0.57f
+        val maxDist = w * 0.35f; val maxDistSq = maxDist * maxDist
+        val step = 8
+        var redPixels = 0
+        var cy = y0
+        while (cy < y1) {
+            var cx = x0
+            while (cx < x1) {
+                val dx = cx - charX; val dy = cy - charY
+                if (dx * dx + dy * dy <= maxDistSq) {
+                    val p = bmp.getPixel(cx, cy)
+                    val r = Color.red(p); val g = Color.green(p); val b = Color.blue(p)
+                    // Nome mostro nemico: rosso vivace
+                    if (r > 160 && g < 130 && b < 120 && r - g > 60) {
+                        redPixels++
+                        if (redPixels >= 4) return true
+                    }
+                }
+                cx += step
+            }
+            cy += step
+        }
+        return false
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // LOOP POZIONE — quando attacco è OFF usa SOLO la pozione, niente attacco
     // ═══════════════════════════════════════════════════════════════════════════
     private val potionLoop = object : Runnable {
         override fun run() {
@@ -66,23 +128,37 @@ class BotAccessibilityService : AccessibilityService() {
                     if (!BotState.potionRunning || gestureInProgress) return@postDelayed
                     if (BotState.joystickActive) return@postDelayed
                     if (BotState.attackRunning) {
+                        // Attacco attivo: multitouch pozione + attacco insieme
                         val aPos = BotState.attackPos
                         if (aPos != null) tapMultitouch(aPos.first, aPos.second, ATTACK_TAP_MS, px, py, POTION_TAP_MS)
                         else tapSingle(px, py, POTION_TAP_MS)
                     } else {
+                        // Solo pozione: nessun tap di attacco
                         tapSingle(px, py, POTION_TAP_MS)
-                        val aPos = BotState.attackPos
-                        if (aPos != null) {
-                            handler.postDelayed({
-                                if (BotState.potionRunning && !BotState.attackRunning && !BotState.joystickActive)
-                                    tapSingle(aPos.first, aPos.second, 60L)
-                            }, POTION_TAP_MS + 70L)
-                        }
                     }
                 }, delay)
                 delay += 320L
             }
             handler.postDelayed(this, BotState.potionIntervalMs.coerceAtLeast(500L) + delay)
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // LOOP ABILITÀ — tappa tutti gli slot abilità ogni skillIntervalMs
+    // ═══════════════════════════════════════════════════════════════════════════
+    private val skillLoop = object : Runnable {
+        override fun run() {
+            if (!BotState.skillsRunning) return
+            val slots = BotState.skillSlots
+            var delay = 0L
+            for ((sx, sy) in slots) {
+                handler.postDelayed({
+                    if (!BotState.skillsRunning || BotState.joystickActive) return@postDelayed
+                    tapSingle(sx, sy, SKILL_TAP_MS)
+                }, delay)
+                delay += 150L
+            }
+            handler.postDelayed(this, BotState.skillIntervalMs.coerceAtLeast(500L) + delay)
         }
     }
 
@@ -115,18 +191,18 @@ class BotAccessibilityService : AccessibilityService() {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // SCANNER SCREENSHOT — ogni 400ms
+    // SCANNER LOOT — ogni 400ms
     // ═══════════════════════════════════════════════════════════════════════════
-    private val scanner = object : Runnable {
+    private val lootScanner = object : Runnable {
         override fun run() {
             if (!BotState.lootRunning) return
-            if (!BotState.joystickActive && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) doScan()
+            if (!BotState.joystickActive && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) doLootScan()
             handler.postDelayed(this, 400L)
         }
     }
 
     @RequiresApi(Build.VERSION_CODES.R)
-    private fun doScan() {
+    private fun doLootScan() {
         takeScreenshot(Display.DEFAULT_DISPLAY, ContextCompat.getMainExecutor(this),
             object : TakeScreenshotCallback {
                 override fun onSuccess(s: ScreenshotResult) {
@@ -181,13 +257,7 @@ class BotAccessibilityService : AccessibilityService() {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // JOYSTICK — risveglio immediato dopo pausa
-    //
-    // La pausa joystick viene RILEVATA da OverlayService tramite
-    // FLAG_WATCH_OUTSIDE_TOUCH sul pannello (ACTION_OUTSIDE con coordinate).
-    // Quando l'utente smette di usare il joystick, OverlayService chiama
-    // resumeAfterJoystick() per far ripartire immediatamente tutti i loop.
-    // NON c'è più nessun overlay sul joystick → il gioco riceve i tocchi nativi.
+    // JOYSTICK
     // ═══════════════════════════════════════════════════════════════════════════
     fun resumeAfterJoystick() {
         BotState.joystickActive = false
@@ -197,9 +267,13 @@ class BotAccessibilityService : AccessibilityService() {
     private fun resumeAll() {
         if (BotState.attackRunning) {
             handler.removeCallbacks(attackLoop); handler.post(attackLoop)
+            handler.removeCallbacks(mobScanner); handler.post(mobScanner)
         }
         if (BotState.potionRunning) {
             handler.removeCallbacks(potionLoop); handler.post(potionLoop)
+        }
+        if (BotState.skillsRunning) {
+            handler.removeCallbacks(skillLoop); handler.post(skillLoop)
         }
         if (BotState.lootRunning) {
             handler.removeCallbacks(lootLoop); handler.post(lootLoop)
@@ -235,11 +309,17 @@ class BotAccessibilityService : AccessibilityService() {
     fun startAttack() {
         if (BotState.attackPos == null) return
         if (BotState.attackRunning) stopAttack()
-        BotState.attackRunning = true; handler.post(attackLoop)
+        BotState.attackRunning = true
+        BotState.mobNearby = false
+        handler.post(mobScanner)
+        handler.post(attackLoop)
     }
 
     fun stopAttack() {
-        BotState.attackRunning = false; handler.removeCallbacks(attackLoop)
+        BotState.attackRunning = false
+        BotState.mobNearby = false
+        handler.removeCallbacks(attackLoop)
+        handler.removeCallbacks(mobScanner)
     }
 
     fun startPotion(intervalMs: Long = BotState.potionIntervalMs) {
@@ -253,26 +333,37 @@ class BotAccessibilityService : AccessibilityService() {
         BotState.potionRunning = false; handler.removeCallbacks(potionLoop)
     }
 
+    fun startSkills(intervalMs: Long = BotState.skillIntervalMs) {
+        if (BotState.skillSlots.isEmpty()) return
+        if (BotState.skillsRunning) stopSkills()
+        BotState.skillIntervalMs = intervalMs.coerceAtLeast(500L)
+        BotState.skillsRunning = true; handler.post(skillLoop)
+    }
+
+    fun stopSkills() {
+        BotState.skillsRunning = false; handler.removeCallbacks(skillLoop)
+    }
+
     fun startLoot() {
         if (BotState.lootRunning) return
         lootTargets = emptyList(); BotState.lootItemsFound = 0; gestureInProgress = false
         BotState.lootRunning = true
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) handler.postDelayed(scanner, 200L)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) handler.postDelayed(lootScanner, 200L)
         handler.postDelayed(lootLoop, 600L)
     }
 
     fun stopLoot() {
         BotState.lootRunning = false; BotState.lootItemsFound = 0; gestureInProgress = false
-        handler.removeCallbacks(scanner); handler.removeCallbacks(lootLoop)
+        handler.removeCallbacks(lootScanner); handler.removeCallbacks(lootLoop)
         lootTargets = emptyList()
     }
 
     override fun onServiceConnected() { instance = this }
     override fun onAccessibilityEvent(e: AccessibilityEvent?) {}
-    override fun onInterrupt() { stopAttack(); stopPotion(); stopLoot() }
+    override fun onInterrupt() { stopAttack(); stopPotion(); stopSkills(); stopLoot() }
     override fun onDestroy() {
         super.onDestroy()
-        stopAttack(); stopPotion(); stopLoot()
+        stopAttack(); stopPotion(); stopSkills(); stopLoot()
         BotState.joystickActive = false
         if (instance === this) instance = null
     }
