@@ -91,6 +91,9 @@ class BotAccessibilityService : AccessibilityService() {
                         val count = countMobClusters(b)
                         BotState.detectedMobCount = count
                         BotState.mobNearby = count > 0
+                        // In pull mode aggiorna la direzione verso i mob
+                        if (BotState.pullMode && count > 0) updateMobDirection(b)
+                        else if (BotState.pullMode) { BotState.mobDirX = 0f; BotState.mobDirY = -1f }
                         b.recycle()
                     }
                 }
@@ -182,6 +185,42 @@ class BotAccessibilityService : AccessibilityService() {
         return clusters
     }
 
+    // ───────────────────────────────────────────────────────────────────────────
+    // updateMobDirection: calcola il vettore normalizzato dal centro dello
+    // schermo (personaggio) verso il centroide di tutti i pixel rossi (mob).
+    // Aggiorna BotState.mobDirX / mobDirY.
+    // Chiamata solo quando pullMode=true e count > 0.
+    // ───────────────────────────────────────────────────────────────────────────
+    private fun updateMobDirection(bmp: Bitmap) {
+        val w = bmp.width; val h = bmp.height
+        val x0 = (w * 0.12f).toInt(); val x1 = (w * 0.88f).toInt()
+        val y0 = (h * 0.08f).toInt(); val y1 = (h * 0.68f).toInt()
+        val step = 5   // campionamento 1 pixel ogni 5
+        var sumX = 0L; var sumY = 0L; var n = 0L
+        var sx = x0
+        while (sx < x1) {
+            var sy = y0
+            while (sy < y1) {
+                val p = bmp.getPixel(sx, sy)
+                val r = Color.red(p); val g = Color.green(p); val b = Color.blue(p)
+                if (r > 160 && g < 115 && b < 115 && r - g > 60) {
+                    sumX += sx; sumY += sy; n++
+                }
+                sy += step
+            }
+            sx += step
+        }
+        if (n == 0L) { BotState.mobDirX = 0f; BotState.mobDirY = -1f; return }
+        val centX = (sumX / n).toFloat()
+        val centY = (sumY / n).toFloat()
+        val charX  = w * 0.50f
+        val charY  = h * 0.55f
+        val dx = centX - charX; val dy = centY - charY
+        val len = kotlin.math.sqrt(dx * dx + dy * dy).coerceAtLeast(1f)
+        BotState.mobDirX = dx / len
+        BotState.mobDirY = dy / len
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // LOOP POZIONE — indipendente dall'attacco, usa multitouch se attacco attivo
     // ═══════════════════════════════════════════════════════════════════════════
@@ -194,10 +233,12 @@ class BotAccessibilityService : AccessibilityService() {
                 handler.postDelayed({
                     if (!BotState.potionRunning || gestureInProgress) return@postDelayed
                     if (BotState.joystickActive) return@postDelayed
-                    if (BotState.attackRunning) {
-                        val aPos = BotState.attackPos
-                        if (aPos != null) tapMultitouch(aPos.first, aPos.second, ATTACK_TAP_MS, px, py, POTION_TAP_MS)
-                        else tapSingle(px, py, POTION_TAP_MS)
+                    // Se attackPos è impostato (anche con attacco manuale dell'utente)
+                    // includi sempre il tap attacco nel gesto multitouch così
+                    // il dito reale dell'utente non viene cancellato dal sistema.
+                    val aPos = BotState.attackPos
+                    if (aPos != null) {
+                        tapMultitouch(aPos.first, aPos.second, ATTACK_TAP_MS, px, py, POTION_TAP_MS)
                     } else {
                         tapSingle(px, py, POTION_TAP_MS)
                     }
@@ -411,12 +452,22 @@ class BotAccessibilityService : AccessibilityService() {
             return
         }
         val pos = BotState.joystickPos ?: return
-        val r = resources.displayMetrics.widthPixels * 0.07f
+        // Raggio push: usa joystickRadius se impostato, altrimenti 7% larghezza schermo
+        val r = if (BotState.joystickRadius > 0f) BotState.joystickRadius * 0.65f
+                else resources.displayMetrics.widthPixels * 0.07f * 0.65f
+        // Direzione: verso i mob se pull mode attivo, altrimenti avanti (su)
+        val (dirX, dirY) = if (BotState.pullMode && BotState.detectedMobCount > 0) {
+            BotState.mobDirX to BotState.mobDirY
+        } else {
+            0f to -1f   // avanti
+        }
+        val endX = pos.first  + dirX * r
+        val endY = pos.second + dirY * r
         try {
             dispatchGesture(
                 GestureDescription.Builder()
                     .addStroke(GestureDescription.StrokeDescription(
-                        Path().apply { moveTo(pos.first, pos.second); lineTo(pos.first, pos.second - r) },
+                        Path().apply { moveTo(pos.first, pos.second); lineTo(endX, endY) },
                         0L, 400L))
                     .build(), walkCallback, handler)
         } catch (_: Exception) {
@@ -521,6 +572,69 @@ class BotAccessibilityService : AccessibilityService() {
     fun stopAll() {
         stopAttack(); stopPotion(); stopSkills(); stopLoot(); stopWalk()
         stopPullMode()
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // AUTO-DETECT JOYSTICK
+    //
+    // Scansiona il quadrante in basso a sinistra dello schermo (x: 2-30%,
+    // y: 68-97%) cercando la regione più scura (joystick = overlay semi-trasparente
+    // scuro sul background di gioco). Divide l'area in celle 50×50px, calcola
+    // la luminosità media di ogni cella, trova la cella minima.
+    // Centro della cella = posizione joystick.  Radius = screen_width * 0.09.
+    // Chiama onResult(center, radius) nel thread principale.
+    // ═══════════════════════════════════════════════════════════════════════════
+    fun autoDetectJoystick(onResult: (center: Pair<Float, Float>, radius: Float) -> Unit,
+                           onFailed: () -> Unit) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) { onFailed(); return }
+        takeScreenshot(Display.DEFAULT_DISPLAY, ContextCompat.getMainExecutor(this),
+            object : TakeScreenshotCallback {
+                @RequiresApi(Build.VERSION_CODES.R)
+                override fun onSuccess(s: ScreenshotResult) {
+                    val hw  = Bitmap.wrapHardwareBuffer(s.hardwareBuffer, s.colorSpace)
+                    val bmp = hw?.copy(Bitmap.Config.ARGB_8888, false)
+                    hw?.recycle(); s.hardwareBuffer.close()
+                    if (bmp == null) { onFailed(); return }
+                    val w = bmp.width; val h = bmp.height
+                    val x0 = (w * 0.02f).toInt(); val x1 = (w * 0.30f).toInt()
+                    val y0 = (h * 0.68f).toInt(); val y1 = (h * 0.97f).toInt()
+                    val cell = 50
+                    var minBright = Float.MAX_VALUE
+                    var bestCx = (x0 + x1) / 2f
+                    var bestCy = (y0 + y1) / 2f
+                    var cx = x0
+                    while (cx + cell <= x1) {
+                        var cy = y0
+                        while (cy + cell <= y1) {
+                            // Media luminosità della cella (step=5)
+                            var sum = 0L; var cnt = 0
+                            var sx = cx
+                            while (sx < cx + cell) {
+                                var sy = cy
+                                while (sy < cy + cell) {
+                                    val p = bmp.getPixel(sx.coerceAtMost(bmp.width - 1),
+                                                         sy.coerceAtMost(bmp.height - 1))
+                                    sum += Color.red(p) + Color.green(p) + Color.blue(p)
+                                    cnt++; sy += 5
+                                }
+                                sx += 5
+                            }
+                            val bright = if (cnt > 0) sum.toFloat() / cnt else Float.MAX_VALUE
+                            if (bright < minBright) {
+                                minBright = bright
+                                bestCx = (cx + cell / 2).toFloat()
+                                bestCy = (cy + cell / 2).toFloat()
+                            }
+                            cy += cell
+                        }
+                        cx += cell
+                    }
+                    bmp.recycle()
+                    val radius = w * 0.09f
+                    handler.post { onResult(bestCx to bestCy, radius) }
+                }
+                override fun onFailure(e: Int) { handler.post { onFailed() } }
+            })
     }
 
     override fun onServiceConnected() { instance = this }

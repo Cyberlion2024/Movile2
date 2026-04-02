@@ -432,16 +432,42 @@ class OverlayService : Service() {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // CATTURA POSIZIONE JOYSTICK
+    // CATTURA POSIZIONE JOYSTICK — prima prova auto-detect, poi tap manuale
+    //
+    // 1. Prova auto-detect via screenshot (scansione area basso-sinistra).
+    //    Se trovata, imposta joystickPos + joystickRadius automaticamente.
+    // 2. Se il service non è disponibile o la detection fallisce, mostra
+    //    l'overlay trasparente e chiede di toccare il centro manualmente.
     // ═══════════════════════════════════════════════════════════════════════════
     private fun startPickJoystick() {
         if (captureView != null) return
+        val bot = BotAccessibilityService.instance
+        if (bot != null) {
+            showStatus("🔍 Rilevamento joystick automatico...", Color.CYAN)
+            bot.autoDetectJoystick(
+                onResult = { center, radius ->
+                    BotState.joystickPos = center
+                    BotState.joystickRadius = radius
+                    finishCapture("🕹️ Joystick rilevato automaticamente!")
+                },
+                onFailed = {
+                    showStatus("Auto-detect fallito. Tocca il centro del joystick... (5s)", Color.YELLOW)
+                    startPickJoystickManual()
+                }
+            )
+        } else {
+            showStatus("Tocca il CENTRO del joystick... (5s)", Color.YELLOW)
+            startPickJoystickManual()
+        }
+    }
+
+    private fun startPickJoystickManual() {
         captureMode = CaptureMode.JOYSTICK
-        showStatus("Tocca il CENTRO del joystick... (5s)", Color.YELLOW)
         val cv = makeCaptureOverlay()
         cv.setOnTouchListener { _, e ->
             if (e.action == MotionEvent.ACTION_DOWN && captureMode == CaptureMode.JOYSTICK) {
                 BotState.joystickPos = e.rawX to e.rawY
+                BotState.joystickRadius = resources.displayMetrics.widthPixels * 0.09f
                 finishCapture("🕹️ Zona joystick impostata!")
             }
             true

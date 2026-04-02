@@ -33,10 +33,15 @@ object BotState {
     @Volatile var lootItemsFound: Int = 0
 
     // ── Camminata bot ─────────────────────────────────────────────────────────
-    // Il bot spinge il joystick in avanti continuamente.
-    // Si ferma solo quando l'utente preme STOP o STOP TUTTO.
     @Volatile var walkRunning: Boolean = false
     @Volatile var joystickPos: Pair<Float, Float>? = null
+    @Volatile var joystickRadius: Float = 130f   // raggio outer circle in px
+
+    // ── Direzione mob (aggiornata dal mob scanner) ────────────────────────────
+    // Vettore normalizzato dal personaggio verso il centroide dei mob rossi.
+    // (0, -1) = avanti (su) di default quando nessun mob è rilevato.
+    @Volatile var mobDirX: Float = 0f
+    @Volatile var mobDirY: Float = -1f
 
     // ── Raggruppamento mob (Pull mode) ────────────────────────────────────────
     // Quando pullMode=true le abilità si attivano solo se detectedMobCount
