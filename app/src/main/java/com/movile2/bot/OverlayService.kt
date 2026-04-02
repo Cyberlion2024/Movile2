@@ -60,10 +60,28 @@ class OverlayService : Service() {
     private val JOY_RESUME_DELAY_MS = 1500L
 
     private fun onOutsideTouch(rx: Float, ry: Float) {
+        // Se il bot sta guidando il joystick (walk mode) NON rileviamo joystick manuale:
+        // i gesti walk cadono DENTRO la zona joystick per definizione.
+        if (BotState.walkRunning) return
+
+        // Ignora ACTION_OUTSIDE generati dai gesti del bot stesso (dispatchGesture):
+        // filtriamo le coordinate vicine alle posizioni configurate del bot.
+        val density = resources.displayMetrics.density
+        val botRadius = 90f * density
+        BotState.attackPos?.let { (ax, ay) ->
+            if (abs(rx - ax) < botRadius && abs(ry - ay) < botRadius) return
+        }
+        BotState.potionSlots.forEach { (px, py) ->
+            if (abs(rx - px) < botRadius && abs(ry - py) < botRadius) return
+        }
+        BotState.skillSlots.forEach { (sx, sy) ->
+            if (abs(rx - sx) < botRadius && abs(ry - sy) < botRadius) return
+        }
+
+        // Rilevamento tocco umano nella zona joystick
         val center = BotState.joystickPos ?: return
-        val halfZone = (140f * resources.displayMetrics.density)
-        val dx = rx - center.first; val dy = ry - center.second
-        if (abs(dx) < halfZone && abs(dy) < halfZone) {
+        val halfZone = 140f * density
+        if (abs(rx - center.first) < halfZone && abs(ry - center.second) < halfZone) {
             BotState.joystickActive = true
             joystickResumeRunnable?.let { handler.removeCallbacks(it) }
             val r = Runnable {
@@ -209,11 +227,35 @@ class OverlayService : Service() {
 
         val content = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
 
-        // ── Attacco ──────────────────────────────────────────────────────────
-        btnSetAtt = makeButton("🎯 IMPOSTA ATT", Color.argb(220, 100, 40, 0))
+        // ── Crea bottoni ──────────────────────────────────────────────────────
+        // STOP (full width)
+        val btnStopAll = makeSmallButton("■ STOP TUTTO", Color.argb(230, 160, 20, 20))
+        btnStopAll.setOnClickListener {
+            BotAccessibilityService.instance?.stopAll()
+                ?: run { BotState.attackRunning = false; BotState.potionRunning = false
+                         BotState.skillsRunning = false; BotState.lootRunning = false
+                         BotState.walkRunning = false }
+        }
+
+        // Joystick + Walk
+        btnSetJoy = makeSmallButton("🕹️ IMPOSTA JOY", Color.argb(220, 60, 40, 10))
+        btnSetJoy!!.setOnClickListener { startPickJoystick() }
+
+        btnWalk = makeSmallButton("🚶 WALK: OFF", Color.argb(180, 40, 40, 40))
+        btnWalk!!.setOnClickListener {
+            val bot = BotAccessibilityService.instance ?: run { showWarn("Abilita Accessibilità!"); return@setOnClickListener }
+            if (BotState.walkRunning) bot.stopWalk()
+            else {
+                if (BotState.joystickPos == null) { showWarn("Prima imposta JOYSTICK!"); return@setOnClickListener }
+                bot.startWalk()
+            }
+        }
+
+        // Attacco
+        btnSetAtt = makeSmallButton("🎯 Imp. ATT", Color.argb(220, 100, 40, 0))
         btnSetAtt!!.setOnClickListener { startPickAttack() }
 
-        btnAttack = makeButton("⚔️ ATT: OFF", Color.argb(220, 50, 50, 80))
+        btnAttack = makeSmallButton("⚔️ ATT: OFF", Color.argb(220, 50, 50, 80))
         btnAttack!!.setOnClickListener {
             val bot = BotAccessibilityService.instance ?: run { showWarn("Abilita Accessibilità!"); return@setOnClickListener }
             if (BotState.attackRunning) bot.stopAttack()
@@ -223,39 +265,11 @@ class OverlayService : Service() {
             }
         }
 
-        // ── Pozione ──────────────────────────────────────────────────────────
-        btnSetPoz = makeButton("🎯 IMPOSTA POZ", Color.argb(220, 130, 70, 0))
-        btnSetPoz!!.setOnClickListener { startPickPotion() }
-
-        btnPot = makeButton("💊 POZ: OFF", Color.argb(220, 50, 50, 80))
-        btnPot!!.setOnClickListener {
-            val bot = BotAccessibilityService.instance ?: run { showWarn("Abilita Accessibilità!"); return@setOnClickListener }
-            if (BotState.potionRunning) bot.stopPotion()
-            else {
-                if (BotState.potionSlots.isEmpty()) { showWarn("Prima imposta POZ!"); return@setOnClickListener }
-                bot.startPotion(potInterval)
-            }
-        }
-
-        // ── Abilità ──────────────────────────────────────────────────────────
-        btnSetSkill = makeButton("🎯 IMPOSTA SKILL", Color.argb(220, 80, 0, 120))
+        // Abilità
+        btnSetSkill = makeSmallButton("🎯 Imp. SKILL", Color.argb(220, 80, 0, 120))
         btnSetSkill!!.setOnClickListener { startPickSkill() }
 
-        // ── Pull mode (raggruppamento mob prima di usare le skill) ────────────
-        // Cicla il target: tocca 🎯 N MOB per incrementare 1→2→3→4→5→1
-        btnPullCount = makeButton("🎯 ${BotState.pullTargetCount} MOB", Color.argb(200, 40, 40, 90))
-        btnPullCount!!.setOnClickListener {
-            BotState.pullTargetCount = (BotState.pullTargetCount % 5) + 1
-        }
-
-        btnPull = makeButton("🔵 PULL: OFF", Color.argb(220, 50, 50, 80))
-        btnPull!!.setOnClickListener {
-            val bot = BotAccessibilityService.instance ?: run { showWarn("Abilita Accessibilità!"); return@setOnClickListener }
-            if (BotState.pullMode) bot.stopPullMode()
-            else bot.startPullMode()
-        }
-
-        btnSkill = makeButton("✨ SKILL: OFF", Color.argb(220, 50, 50, 80))
+        btnSkill = makeSmallButton("✨ SKILL: OFF", Color.argb(220, 50, 50, 80))
         btnSkill!!.setOnClickListener {
             val bot = BotAccessibilityService.instance ?: run { showWarn("Abilita Accessibilità!"); return@setOnClickListener }
             if (BotState.skillsRunning) bot.stopSkills()
@@ -265,51 +279,58 @@ class OverlayService : Service() {
             }
         }
 
-        // ── Loot ─────────────────────────────────────────────────────────────
-        btnLoot = makeButton("🎒 LOOT: OFF", Color.argb(220, 50, 50, 80))
+        // Pull
+        btnPullCount = makeSmallButton("🎯 ${BotState.pullTargetCount} MOB", Color.argb(200, 40, 40, 90))
+        btnPullCount!!.setOnClickListener {
+            BotState.pullTargetCount = (BotState.pullTargetCount % 5) + 1
+        }
+
+        btnPull = makeSmallButton("🔵 PULL: OFF", Color.argb(220, 50, 50, 80))
+        btnPull!!.setOnClickListener {
+            val bot = BotAccessibilityService.instance ?: run { showWarn("Abilita Accessibilità!"); return@setOnClickListener }
+            if (BotState.pullMode) bot.stopPullMode() else bot.startPullMode()
+        }
+
+        // Pozione
+        btnSetPoz = makeSmallButton("🎯 Imp. POZ", Color.argb(220, 130, 70, 0))
+        btnSetPoz!!.setOnClickListener { startPickPotion() }
+
+        btnPot = makeSmallButton("💊 POZ: OFF", Color.argb(220, 50, 50, 80))
+        btnPot!!.setOnClickListener {
+            val bot = BotAccessibilityService.instance ?: run { showWarn("Abilita Accessibilità!"); return@setOnClickListener }
+            if (BotState.potionRunning) bot.stopPotion()
+            else {
+                if (BotState.potionSlots.isEmpty()) { showWarn("Prima imposta POZ!"); return@setOnClickListener }
+                bot.startPotion(potInterval)
+            }
+        }
+
+        // Loot (full width)
+        btnLoot = makeSmallButton("🎒 LOOT: OFF", Color.argb(220, 50, 50, 80))
         btnLoot!!.setOnClickListener {
             val bot = BotAccessibilityService.instance ?: run { showWarn("Abilita Accessibilità!"); return@setOnClickListener }
             if (BotState.lootRunning) bot.stopLoot() else bot.startLoot()
         }
 
-        // ── Joystick ─────────────────────────────────────────────────────────
-        btnSetJoy = makeButton("🕹️ IMPOSTA JOYSTICK", Color.argb(220, 60, 40, 10))
-        btnSetJoy!!.setOnClickListener { startPickJoystick() }
-
-        // ── STOP TUTTO ────────────────────────────────────────────────────────
-        val btnStopAll = makeButton("■ STOP TUTTO", Color.argb(230, 160, 20, 20))
-        btnStopAll.setOnClickListener {
-            BotAccessibilityService.instance?.stopAll()
-                ?: run { BotState.attackRunning = false; BotState.potionRunning = false
-                         BotState.skillsRunning = false; BotState.lootRunning = false
-                         BotState.walkRunning = false }
-        }
-
-        // ── WALK ─────────────────────────────────────────────────────────────
-        btnWalk = makeButton("🚶 WALK: OFF", Color.argb(180, 40, 40, 40))
-        btnWalk!!.setOnClickListener {
-            val bot = BotAccessibilityService.instance ?: run { showWarn("Abilita Accessibilità!"); return@setOnClickListener }
-            if (BotState.walkRunning) {
-                bot.stopWalk()
-            } else {
-                if (BotState.joystickPos == null) { showWarn("Prima imposta JOYSTICK!"); return@setOnClickListener }
-                bot.startWalk()
+        // ── Layout a 2 colonne ────────────────────────────────────────────────
+        // Ogni coppia di bottoni per riga: peso 1+1 = 50%/50%
+        fun twoCol(left: TextView, right: TextView): LinearLayout {
+            left.layoutParams  = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            right.layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            return LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                addView(left); addView(hSpace(4)); addView(right)
             }
         }
 
-        content.addView(space(6))
-        content.addView(btnStopAll);    content.addView(space(10))
-        content.addView(btnSetJoy);     content.addView(space(4))
-        content.addView(btnWalk);       content.addView(space(10))
-        content.addView(btnSetPoz);     content.addView(space(4))
-        content.addView(btnPot);        content.addView(space(10))
-        content.addView(btnLoot);       content.addView(space(10))
-        content.addView(btnSetAtt);     content.addView(space(4))
-        content.addView(btnAttack);     content.addView(space(8))
-        content.addView(btnSetSkill);   content.addView(space(4))
-        content.addView(btnPullCount);  content.addView(space(4))
-        content.addView(btnPull);       content.addView(space(4))
-        content.addView(btnSkill)
+        content.addView(space(4))
+        content.addView(btnStopAll);                   content.addView(space(6))
+        content.addView(twoCol(btnSetJoy!!, btnWalk!!));  content.addView(space(5))
+        content.addView(twoCol(btnSetAtt!!, btnAttack!!)); content.addView(space(5))
+        content.addView(twoCol(btnSetSkill!!, btnSkill!!)); content.addView(space(5))
+        content.addView(twoCol(btnPullCount!!, btnPull!!)); content.addView(space(5))
+        content.addView(twoCol(btnSetPoz!!, btnPot!!)); content.addView(space(5))
+        content.addView(btnLoot)
         contentLayout = content
 
         root.addView(topBar); root.addView(tvStatus); root.addView(content)
@@ -548,6 +569,23 @@ class OverlayService : Service() {
     private fun makeButton(txt: String, bg: Int) = TextView(this).apply {
         text = txt; textSize = 14f; setTextColor(Color.WHITE)
         setBackgroundColor(bg); setPadding(18, 10, 18, 10)
+    }
+
+    // Bottone compatto per layout a 2 colonne
+    private fun makeSmallButton(txt: String, bg: Int) = TextView(this).apply {
+        text = txt; textSize = 12f; setTextColor(Color.WHITE)
+        setBackgroundColor(bg); setPadding(10, 8, 10, 8)
+        gravity = android.view.Gravity.CENTER
+        layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT)
+    }
+
+    // Separatore orizzontale fisso (tra le due colonne)
+    private fun hSpace(dp: Int) = View(this).apply {
+        layoutParams = LinearLayout.LayoutParams(
+            (dp * resources.displayMetrics.density).toInt(),
+            LinearLayout.LayoutParams.MATCH_PARENT)
     }
 
     private fun space(dp: Int) = View(this).apply {
