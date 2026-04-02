@@ -20,13 +20,18 @@ class BotAccessibilityService : AccessibilityService() {
     @Volatile private var lootTargets: List<Pair<Float, Float>> = emptyList()
     private var gestureInProgress = false
 
-    private val ATTACK_TAP_MS = 40L
-    private val ATTACK_GAP_MS = 280L
-    private val POTION_TAP_MS = 35L
-    private val SKILL_TAP_MS  = 40L
+    private val ATTACK_TAP_MS       = 40L
+    private val ATTACK_GAP_MS       = 280L
+    private val POTION_TAP_MS       = 35L
+    private val SKILL_TAP_MS        = 40L
+    // Durante ogni pozione teniamo premuto il tasto attacco per questa durata
+    // così il dito reale dell'utente non viene mai "rilasciato" (copre il gap)
+    private val POTION_ATK_HOLD_MS  = 1500L
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // LOOP ATTACCO — tappa solo quando c'è un mostro (nome rosso) vicino
+    // LOOP ATTACCO — tappa continuamente; nessun check mobNearby.
+    // Il bot attacca sempre quando è ON: l'utente sceglie lui quando abilitare.
+    // Ciclo: tap 40ms → callback → gap 280ms → tap 40ms → ...
     // ═══════════════════════════════════════════════════════════════════════════
     private val attackCallback = object : GestureResultCallback() {
         override fun onCompleted(g: GestureDescription?) { scheduleNextAttack() }
@@ -42,8 +47,6 @@ class BotAccessibilityService : AccessibilityService() {
         override fun run() {
             if (!BotState.attackRunning) return
             if (BotState.joystickActive) { scheduleNextAttack(); return }
-            // Attacca solo se è stato rilevato almeno 1 mob con nome rosso
-            if (!BotState.mobNearby) { handler.postDelayed(this, 300L); return }
             val pos = BotState.attackPos ?: run { scheduleNextAttack(); return }
             try {
                 val ok = dispatchGesture(
@@ -233,12 +236,15 @@ class BotAccessibilityService : AccessibilityService() {
                 handler.postDelayed({
                     if (!BotState.potionRunning || gestureInProgress) return@postDelayed
                     if (BotState.joystickActive) return@postDelayed
-                    // Se attackPos è impostato (anche con attacco manuale dell'utente)
-                    // includi sempre il tap attacco nel gesto multitouch così
-                    // il dito reale dell'utente non viene cancellato dal sistema.
+                    // Quando la pozione scatta, il gesto accessibility cancella
+                    // il dito reale dell'utente. Per compensare, teniamo premuto
+                    // il tasto attacco per POTION_ATK_HOLD_MS (1500ms) nella stessa
+                    // gesture così il gioco vede attacco sempre premuto.
+                    // Funziona sia con bot-attack ON che con attacco manuale.
                     val aPos = BotState.attackPos
                     if (aPos != null) {
-                        tapMultitouch(aPos.first, aPos.second, ATTACK_TAP_MS, px, py, POTION_TAP_MS)
+                        tapMultitouch(aPos.first, aPos.second, POTION_ATK_HOLD_MS,
+                                      px, py, POTION_TAP_MS)
                     } else {
                         tapSingle(px, py, POTION_TAP_MS)
                     }
