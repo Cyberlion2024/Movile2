@@ -80,6 +80,18 @@ APK scaricabile da **Actions › Artifacts**
 
 ---
 
+## Changelog
+
+### v11 (attuale)
+- **Fix Yang**: rilevamento testo bianco brillante (R>230, G>230, B>230, saturazione<25) invece di pixel giallo-oro. Elimina falsi positivi da sabbia/UI.
+- **Fix oggetti personaggio**: raccoglie solo etichette verdi (G>180, R<110, B<110, G-R>80). Nomi "bashy" e "Anyasama" hardcoded + configurabili da app.
+- **Fix attacco con pozze**: dopo ogni tap pozione, l'attackLoop riparte dopo 50ms eliminando il gap causato dall'interruzione del gesto accessibility.
+- **Loot + attacco coesistono**: `startLoot()` non chiama più `stopAttack()`. Le due funzioni operano in parallelo.
+- **Campo nomi personaggio in MainActivity**: campo `etCharNames` per impostare i nick (default `bashy,Anyasama`), salvati in SharedPreferences.
+- **BotState.characterNames**: lista CopyOnWriteArrayList con i nomi in minuscolo per confronto case-insensitive.
+
+---
+
 ## Note gioco target (Mobile2 Global 2.23)
 - Engine: **Unreal Engine 4** — UI renderizzata su SurfaceView OpenGL/Vulkan
 - `AccessibilityService.takeScreenshot()` è l'unico modo per "vedere" il gioco

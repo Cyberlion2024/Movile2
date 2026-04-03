@@ -89,6 +89,35 @@
                 android:textAlignment="center" />
         </LinearLayout>
 
+        <!-- Nomi personaggio per loot -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="🎒 Nomi personaggio (separati da virgola)"
+            android:textColor="#aaccff"
+            android:textSize="13sp"
+            android:layout_marginBottom="6dp" />
+
+        <EditText
+            android:id="@+id/etCharNames"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="es: bashy,Anyasama"
+            android:inputType="text"
+            android:textColor="#ffffff"
+            android:textColorHint="#666"
+            android:background="#1e1e3a"
+            android:padding="10dp"
+            android:layout_marginBottom="6dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Il bot raccoglie solo Yang e oggetti con etichetta corrispondente al tuo personaggio."
+            android:textColor="#556677"
+            android:textSize="12sp"
+            android:layout_marginBottom="18dp" />
+
         <!-- Separatore abilità -->
         <TextView
             android:layout_width="match_parent"

@@ -27,10 +27,16 @@ object BotState {
     )
 
     // ── Raccolta terra ────────────────────────────────────────────────────────
-    // Quando attivo: raccoglie yang (oro) e oggetti con nome verde.
-    // NON attacca mai — stoppa l'attacco al momento dell'attivazione.
+    // Raccoglie Yang e solo oggetti con il nome del personaggio dell'utente.
+    // NON ferma l'attacco — attacco e loot coesistono.
     @Volatile var lootRunning: Boolean = false
     @Volatile var lootItemsFound: Int = 0
+
+    // Nomi personaggio dell'utente (in minuscolo per confronto case-insensitive).
+    // Il bot raccoglierà solo Yang + oggetti con etichetta corrispondente a uno di questi nomi.
+    val characterNames: CopyOnWriteArrayList<String> = CopyOnWriteArrayList(
+        listOf("bashy", "anyasama")
+    )
 
     // ── Camminata bot ─────────────────────────────────────────────────────────
     @Volatile var walkRunning: Boolean = false

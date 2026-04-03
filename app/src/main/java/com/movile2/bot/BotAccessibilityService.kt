@@ -20,17 +20,16 @@ class BotAccessibilityService : AccessibilityService() {
     @Volatile private var lootTargets: List<Pair<Float, Float>> = emptyList()
     private var gestureInProgress = false
 
-    private val ATTACK_TAP_MS       = 40L
-    private val ATTACK_GAP_MS       = 280L
-    private val POTION_TAP_MS       = 35L
-    private val SKILL_TAP_MS        = 40L
-    // Durante ogni pozione teniamo premuto il tasto attacco per questa durata
-    // così il dito reale dell'utente non viene mai "rilasciato" (copre il gap)
-    private val POTION_ATK_HOLD_MS  = 1500L
+    private val ATTACK_TAP_MS      = 40L
+    private val ATTACK_GAP_MS      = 280L
+    private val POTION_TAP_MS      = 35L
+    private val SKILL_TAP_MS       = 40L
+    // Dopo ogni pozione, ripristina immediatamente il loop di attacco
+    // per colmare il gap causato dal gesto accessibility che interrompe il tap corrente.
+    private val ATTACK_RESTART_AFTER_POTION_MS = 50L
 
     // ═══════════════════════════════════════════════════════════════════════════
     // LOOP ATTACCO — tappa continuamente; nessun check mobNearby.
-    // Il bot attacca sempre quando è ON: l'utente sceglie lui quando abilitare.
     // Ciclo: tap 40ms → callback → gap 280ms → tap 40ms → ...
     // ═══════════════════════════════════════════════════════════════════════════
     private val attackCallback = object : GestureResultCallback() {
@@ -94,7 +93,6 @@ class BotAccessibilityService : AccessibilityService() {
                         val count = countMobClusters(b)
                         BotState.detectedMobCount = count
                         BotState.mobNearby = count > 0
-                        // In pull mode aggiorna la direzione verso i mob
                         if (BotState.pullMode && count > 0) updateMobDirection(b)
                         else if (BotState.pullMode) { BotState.mobDirX = 0f; BotState.mobDirY = -1f }
                         b.recycle()
@@ -114,26 +112,18 @@ class BotAccessibilityService : AccessibilityService() {
     // Zona di ricerca: 15%..85% x, 10%..65% y (area nomi mob in UE4)
     // Colore nome nemico (UmobNamer.nameColor con medusman=true):
     //   R > 160, G < 115, B < 115, R-G > 60
-    // Esclusi colori simili ma non-mob:
-    //   bianco (R≈G≈B alto) → proprio personaggio
-    //   verde  (G dominante) → membro gruppo
-    //
-    // Griglia 40×40px: ogni cella "calda" ha ≥3 pixel rossi nel 4×4 campionamento.
-    // BFS sulle celle calde conta i componenti connessi → numero mob distinti.
-    // Celle isolate (singola cella senza vicini caldi) scartate come rumore.
     // ───────────────────────────────────────────────────────────────────────────
     private fun countMobClusters(bmp: Bitmap): Int {
         val w = bmp.width; val h = bmp.height
         val x0 = (w * 0.15f).toInt(); val x1 = (w * 0.85f).toInt()
         val y0 = (h * 0.10f).toInt(); val y1 = (h * 0.65f).toInt()
-        val cellPx = 40   // dimensione cella in pixel
-        val sampleStep = 4 // step campionamento dentro la cella
+        val cellPx = 40
+        val sampleStep = 4
 
         val cols = (x1 - x0) / cellPx
         val rows = (y1 - y0) / cellPx
         if (cols <= 0 || rows <= 0) return 0
 
-        // Cella "calda" = almeno 3 pixel rossi nel campione 4-pixel-step
         val hot = Array(rows) { BooleanArray(cols) }
         for (row in 0 until rows) {
             for (col in 0 until cols) {
@@ -146,7 +136,6 @@ class BotAccessibilityService : AccessibilityService() {
                     while (sy < cy0 + cellPx && sy < y1) {
                         val p = bmp.getPixel(sx, sy)
                         val r = Color.red(p); val g = Color.green(p); val b = Color.blue(p)
-                        // Rosso vivace: nome mob nemico (medusman=true in UmobNamer)
                         if (r > 160 && g < 115 && b < 115 && r - g > 60) hits++
                         sy += sampleStep
                     }
@@ -156,7 +145,6 @@ class BotAccessibilityService : AccessibilityService() {
             }
         }
 
-        // BFS per contare cluster connessi (4-connectivity)
         val visited = Array(rows) { BooleanArray(cols) }
         var clusters = 0
         val dr = intArrayOf(-1, 1, 0, 0)
@@ -164,7 +152,6 @@ class BotAccessibilityService : AccessibilityService() {
         for (startRow in 0 until rows) {
             for (startCol in 0 until cols) {
                 if (!hot[startRow][startCol] || visited[startRow][startCol]) continue
-                // BFS
                 val queue = ArrayDeque<Pair<Int, Int>>()
                 queue.add(startRow to startCol)
                 visited[startRow][startCol] = true
@@ -181,7 +168,6 @@ class BotAccessibilityService : AccessibilityService() {
                         }
                     }
                 }
-                // Scarta cluster di 1 cella sola (rumore, pixel rosso casuale)
                 if (clusterSize >= 2) clusters++
             }
         }
@@ -190,15 +176,13 @@ class BotAccessibilityService : AccessibilityService() {
 
     // ───────────────────────────────────────────────────────────────────────────
     // updateMobDirection: calcola il vettore normalizzato dal centro dello
-    // schermo (personaggio) verso il centroide di tutti i pixel rossi (mob).
-    // Aggiorna BotState.mobDirX / mobDirY.
-    // Chiamata solo quando pullMode=true e count > 0.
+    // schermo verso il centroide di tutti i pixel rossi (mob).
     // ───────────────────────────────────────────────────────────────────────────
     private fun updateMobDirection(bmp: Bitmap) {
         val w = bmp.width; val h = bmp.height
         val x0 = (w * 0.12f).toInt(); val x1 = (w * 0.88f).toInt()
         val y0 = (h * 0.08f).toInt(); val y1 = (h * 0.68f).toInt()
-        val step = 5   // campionamento 1 pixel ogni 5
+        val step = 5
         var sumX = 0L; var sumY = 0L; var n = 0L
         var sx = x0
         while (sx < x1) {
@@ -225,7 +209,12 @@ class BotAccessibilityService : AccessibilityService() {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // LOOP POZIONE — indipendente dall'attacco, usa multitouch se attacco attivo
+    // LOOP POZIONE — indipendente dall'attacco.
+    //
+    // FIX: dopo ogni tap pozione, se l'attacco è attivo, lo riavviamo subito
+    // con un breve delay (50ms) per compensare la cancellazione del gesto
+    // corrente da parte dell'accessibility framework. Questo elimina il "buco"
+    // nell'attacco durante l'uso delle pozze.
     // ═══════════════════════════════════════════════════════════════════════════
     private val potionLoop = object : Runnable {
         override fun run() {
@@ -234,22 +223,16 @@ class BotAccessibilityService : AccessibilityService() {
             var delay = 0L
             for ((px, py) in slots) {
                 handler.postDelayed({
-                    if (!BotState.potionRunning || gestureInProgress) return@postDelayed
-                    if (BotState.joystickActive) return@postDelayed
-                    // Quando la pozione scatta, il gesto accessibility cancella
-                    // il dito reale dell'utente. Per compensare, teniamo premuto
-                    // il tasto attacco per POTION_ATK_HOLD_MS (1500ms) nella stessa
-                    // gesture così il gioco vede attacco sempre premuto.
-                    // Funziona sia con bot-attack ON che con attacco manuale.
-                    val aPos = BotState.attackPos
-                    if (aPos != null) {
-                        tapMultitouch(aPos.first, aPos.second, POTION_ATK_HOLD_MS,
-                                      px, py, POTION_TAP_MS)
-                    } else {
-                        tapSingle(px, py, POTION_TAP_MS)
+                    if (!BotState.potionRunning || BotState.joystickActive) return@postDelayed
+                    tapSingle(px, py, POTION_TAP_MS)
+                    // FIX: dopo la pozione, riavvia subito l'attacco se è attivo
+                    // per eliminare il gap causato dall'interruzione del gesto precedente.
+                    if (BotState.attackRunning) {
+                        handler.removeCallbacks(attackLoop)
+                        handler.postDelayed(attackLoop, ATTACK_RESTART_AFTER_POTION_MS)
                     }
                 }, delay)
-                delay += 320L
+                delay += 350L
             }
             handler.postDelayed(this, BotState.potionIntervalMs.coerceAtLeast(500L) + delay)
         }
@@ -260,8 +243,6 @@ class BotAccessibilityService : AccessibilityService() {
     //
     // In PULL MODE: ogni abilità viene premuta solo se ci sono abbastanza mob
     // raggruppati (detectedMobCount >= pullTargetCount).
-    // Se non ci sono abbastanza mob, il timer salta e riprova al prossimo ciclo.
-    // In modalità normale: comportamento invariato, si attiva a ogni ciclo.
     // ═══════════════════════════════════════════════════════════════════════════
     private val skillLoops: Array<Runnable> = Array(5) { idx ->
         object : Runnable {
@@ -288,20 +269,15 @@ class BotAccessibilityService : AccessibilityService() {
     // ═══════════════════════════════════════════════════════════════════════════
     // LOOP RACCOLTA
     // ═══════════════════════════════════════════════════════════════════════════
-    // scanCount: conta quante scansioni sono state completate dall'attivazione del loot.
-    // Il lootLoop non tappa finché non ne sono avvenute almeno 2 (warmup 800ms).
-    // Evita di tappare su dati stale/vuoti al primo avvio.
     @Volatile private var scanCount = 0
 
     private val lootLoop = object : Runnable {
         override fun run() {
             if (!BotState.lootRunning) return
             if (BotState.joystickActive) { handler.postDelayed(this, 400L); return }
-            // Warmup: aspetta almeno 2 scan prima di tappare
             if (scanCount < 2) { handler.postDelayed(this, 300L); return }
             val items = lootTargets
             BotState.lootItemsFound = items.size
-            // Prende solo i 4 più vicini al personaggio (già ordinati per distanza)
             val toTap = items.take(4)
             if (toTap.isEmpty()) { handler.postDelayed(this, 500L); return }
             tapItemsSequentially(toTap, 0) {
@@ -316,7 +292,6 @@ class BotAccessibilityService : AccessibilityService() {
         gestureInProgress = true
         val dispatched = tapSingle(x, y, 55L)
         gestureInProgress = false
-        // 220ms tra un tap e l'altro: abbastanza lento da non "impazzire"
         handler.postDelayed({ tapItemsSequentially(items, index + 1, onAllDone) }, if (dispatched) 220L else 260L)
     }
 
@@ -346,33 +321,36 @@ class BotAccessibilityService : AccessibilityService() {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // RILEVAMENTO OGGETTI A TERRA — criteri stretti per evitare falsi positivi
+    // RILEVAMENTO OGGETTI A TERRA — v11
     //
-    // Zona di ricerca: 32-68% x, 48-78% y (area sotto il personaggio,
-    // dove appaiono i drop. Esclude UI in alto, joystick in basso-sx,
-    // tasti skill/attacco a destra).
+    // Zona di ricerca: 25-75% x, 45-82% y (area drop intorno al personaggio).
     //
-    // Yang dorato: R>235, G>190, B<40, R-G>30 → giallo saturo intenso
-    //   Esclude: sabbia (B troppo alto), erba (G non abbastanza alto rispetto a R),
-    //            skin personaggio (B non abbastanza basso)
+    // YANG:
+    //   Il testo "Yang" a terra in Mobile2 appare come testo BIANCO BRILLANTE
+    //   su un fondo scuro (la moneta d'oro viene mostrata con l'etichetta bianca).
+    //   Colore: R>230, G>230, B>230 (bianco quasi puro, luminosità >230 su tutti i canali).
+    //   Escluso: pixel con colore di fondo (scuro) o colori saturi (R-G > 40).
+    //   FIX: il vecchio approccio pixel giallo-oro catturava falsi positivi (sabbia,
+    //   UI dorata, effetti). Il testo "Yang" è BIANCO come tutti i testi di moneta in Metin2.
     //
-    // Nome oggetto verde: G>200, R<100, B<120, G-R>120 → verde puro
-    //   Esclude: alberi/erba (troppo scuri, G<200), effetti particellari
+    // OGGETTI CON NOME PERSONAGGIO (bashy / Anyasama):
+    //   In Mobile2 (clone Metin2), gli oggetti raccoglibili DAL TUO personaggio
+    //   mostrano un'etichetta VERDE CHIARO (G>180, R<110, B<110, G-R>80).
+    //   Gli oggetti di ALTRI giocatori (non tuoi) hanno l'etichetta grigia o invisibile.
+    //   Il bot scannerizza due colori: verde per gli item tuoi, bianco per i Yang.
     //
-    // Cella 18px, campionamento step 3, minimo 6 hits su ~36 campioni.
-    // Distanza massima dal personaggio: 20% della larghezza schermo.
-    // Max 4 oggetti per ciclo, ordinati dal più vicino.
+    // Cella 20px, campionamento step 4, minimo 5 hits per evitare rumore singolo.
+    // Distanza massima dal personaggio: 22% della larghezza schermo.
+    // Max 4 oggetti per ciclo, ordinati dal più vicino al personaggio.
     // ═══════════════════════════════════════════════════════════════════════════
     private fun findLootItems(bmp: Bitmap): List<Pair<Float, Float>> {
         val w = bmp.width; val h = bmp.height
-        // Zona ristretta: esclude bordi UI, joystick, tasti destra
-        val x0 = (w * 0.32f).toInt(); val x1 = (w * 0.68f).toInt()
-        val y0 = (h * 0.48f).toInt(); val y1 = (h * 0.78f).toInt()
-        val cell = 18
-        val step = 3
-        val charX = w * 0.50f; val charY = h * 0.58f
-        // Raggio 20% larghezza → solo ciò che è vicino al personaggio
-        val maxDist = w * 0.20f; val maxDistSq = maxDist * maxDist
+        val x0 = (w * 0.25f).toInt(); val x1 = (w * 0.75f).toInt()
+        val y0 = (h * 0.45f).toInt(); val y1 = (h * 0.82f).toInt()
+        val cell = 20
+        val step = 4
+        val charX = w * 0.50f; val charY = h * 0.60f
+        val maxDist = w * 0.22f; val maxDistSq = maxDist * maxDist
         val found = mutableListOf<Pair<Float, Float>>()
 
         var cy = y0
@@ -383,32 +361,45 @@ class BotAccessibilityService : AccessibilityService() {
                 val itemY = (cy + cell / 2).toFloat()
                 val ddx = itemX - charX; val ddy = itemY - charY
                 if (ddx * ddx + ddy * ddy > maxDistSq) { cx += cell; continue }
-                var hitsGold = 0; var hitsGreen = 0
+
+                var hitsYang  = 0   // testo bianco brillante = Yang
+                var hitsItem  = 0   // testo verde chiaro = oggetto tuo personaggio
+
                 var dy2 = 0
                 while (dy2 < cell) {
                     var dx2 = 0
                     while (dx2 < cell) {
                         val p = bmp.getPixel(cx + dx2, cy + dy2)
                         val r = Color.red(p); val g = Color.green(p); val b = Color.blue(p)
-                        // Yang dorato: giallo intenso e saturo
-                        if (r > 235 && g > 190 && b < 40 && r - g > 30) hitsGold++
-                        // Nome oggetto verde puro (testo a terra)
-                        else if (g > 200 && r < 100 && b < 120 && g - r > 120) hitsGreen++
+
+                        // Yang — testo bianco brillante (tutti i canali alti, non saturo)
+                        // In Metin2/Mobile2 il testo "Yang" e tutte le monete sono bianchi.
+                        // Escludiamo pixel con forte saturazione per evitare UI colorata.
+                        val minChannel = minOf(r, g, b)
+                        val maxChannel = maxOf(r, g, b)
+                        val saturation = maxChannel - minChannel
+                        if (r > 230 && g > 230 && b > 230 && saturation < 25) hitsYang++
+
+                        // Oggetto tuo personaggio — etichetta verde chiaro
+                        // G dominante, R e B bassi, verde abbastanza saturo.
+                        // Soglie strette per evitare vegetazione sullo sfondo.
+                        else if (g > 180 && r < 110 && b < 110 && g - r > 80 && g - b > 80) hitsItem++
+
                         dx2 += step
                     }
                     dy2 += step
                 }
-                // Soglia 6 hit: filtra rumori singoli ma cattura cluster di testo
-                if (hitsGold >= 6 || hitsGreen >= 6) {
+
+                if (hitsYang >= 5 || hitsItem >= 5) {
                     found.add(itemX to itemY)
-                    if (found.size >= 8) break   // cap intermedio per performance
+                    if (found.size >= 8) break
                 }
                 cx += cell
             }
             if (found.size >= 8) break
             cy += cell
         }
-        // Ordina per distanza dal personaggio, prendi i più vicini
+
         return found.sortedBy { (fx, fy) ->
             val ddx = fx - charX; val ddy = fy - charY; ddx * ddx + ddy * ddy
         }
@@ -443,7 +434,6 @@ class BotAccessibilityService : AccessibilityService() {
         if (BotState.walkRunning) {
             dispatchWalk()
         }
-        // Se pull mode attivo ma attacco non attivo: tiene vivo il mob scanner
         if (BotState.pullMode && !BotState.attackRunning) {
             handler.removeCallbacks(mobScanner); handler.post(mobScanner)
         }
@@ -462,23 +452,8 @@ class BotAccessibilityService : AccessibilityService() {
         } catch (_: Exception) { false }
     }
 
-    private fun tapMultitouch(x1: Float, y1: Float, dur1Ms: Long, x2: Float, y2: Float, dur2Ms: Long): Boolean {
-        return try {
-            dispatchGesture(
-                GestureDescription.Builder()
-                    .addStroke(GestureDescription.StrokeDescription(Path().apply { moveTo(x1, y1) }, 0L, dur1Ms))
-                    .addStroke(GestureDescription.StrokeDescription(Path().apply { moveTo(x2, y2) }, 0L, dur2Ms))
-                    .build(), null, null)
-        } catch (_: Exception) { false }
-    }
-
     // ═══════════════════════════════════════════════════════════════════════════
     // CAMMINATA — il bot spinge il joystick in avanti continuamente
-    //
-    // Invia gesture da centro joystick → punto in avanti (y - raggio).
-    // Ogni gesture dura 400ms; al completamento ne parte un'altra subito.
-    // Si ferma solo quando walkRunning diventa false.
-    // Riprende automaticamente dopo la pausa joystick manuale.
     // ═══════════════════════════════════════════════════════════════════════════
     private val walkCallback = object : GestureResultCallback() {
         override fun onCompleted(g: GestureDescription?) { dispatchWalk() }
@@ -491,14 +466,12 @@ class BotAccessibilityService : AccessibilityService() {
             return
         }
         val pos = BotState.joystickPos ?: return
-        // Raggio push: usa joystickRadius se impostato, altrimenti 7% larghezza schermo
         val r = if (BotState.joystickRadius > 0f) BotState.joystickRadius * 0.65f
                 else resources.displayMetrics.widthPixels * 0.07f * 0.65f
-        // Direzione: verso i mob se pull mode attivo, altrimenti avanti (su)
         val (dirX, dirY) = if (BotState.pullMode && BotState.detectedMobCount > 0) {
             BotState.mobDirX to BotState.mobDirY
         } else {
-            0f to -1f   // avanti
+            0f to -1f
         }
         val endX = pos.first  + dirX * r
         val endY = pos.second + dirY * r
@@ -530,7 +503,6 @@ class BotAccessibilityService : AccessibilityService() {
         BotState.attackRunning = false
         BotState.mobNearby = false
         handler.removeCallbacks(attackLoop)
-        // Ferma il mobScanner solo se pull mode non è attivo
         if (!BotState.pullMode) {
             handler.removeCallbacks(mobScanner)
             BotState.detectedMobCount = 0
@@ -563,8 +535,11 @@ class BotAccessibilityService : AccessibilityService() {
         skillLoops.forEach { handler.removeCallbacks(it) }
     }
 
+    // FIX v11: startLoot NON ferma più l'attacco.
+    // Attacco e loot coesistono — il bot attacca E raccoglie contemporaneamente.
+    // Questo era il bug principale: prima startLoot() chiamava stopAttack()
+    // causando l'interruzione dell'attacco ogni volta che il loot si attivava.
     fun startLoot() {
-        stopAttack()
         if (BotState.lootRunning) return
         lootTargets = emptyList(); BotState.lootItemsFound = 0; gestureInProgress = false
         scanCount = 0
@@ -589,12 +564,9 @@ class BotAccessibilityService : AccessibilityService() {
         BotState.walkRunning = false
     }
 
-    // Attiva pull mode: avvia il mob scanner se non è già attivo,
-    // e mantiene il contatore di cluster aggiornato per le skill.
     fun startPullMode() {
         BotState.pullMode = true
         if (!BotState.attackRunning) {
-            // Scanner deve girare anche senza attacco per il conteggio pull
             handler.removeCallbacks(mobScanner)
             handler.post(mobScanner)
         }
@@ -603,7 +575,6 @@ class BotAccessibilityService : AccessibilityService() {
     fun stopPullMode() {
         BotState.pullMode = false
         BotState.detectedMobCount = 0
-        // Spegni scanner se anche attacco è off
         if (!BotState.attackRunning) {
             handler.removeCallbacks(mobScanner)
         }
@@ -616,13 +587,6 @@ class BotAccessibilityService : AccessibilityService() {
 
     // ═══════════════════════════════════════════════════════════════════════════
     // AUTO-DETECT JOYSTICK
-    //
-    // Scansiona il quadrante in basso a sinistra dello schermo (x: 2-30%,
-    // y: 68-97%) cercando la regione più scura (joystick = overlay semi-trasparente
-    // scuro sul background di gioco). Divide l'area in celle 50×50px, calcola
-    // la luminosità media di ogni cella, trova la cella minima.
-    // Centro della cella = posizione joystick.  Radius = screen_width * 0.09.
-    // Chiama onResult(center, radius) nel thread principale.
     // ═══════════════════════════════════════════════════════════════════════════
     fun autoDetectJoystick(onResult: (center: Pair<Float, Float>, radius: Float) -> Unit,
                            onFailed: () -> Unit) {
@@ -646,7 +610,6 @@ class BotAccessibilityService : AccessibilityService() {
                     while (cx + cell <= x1) {
                         var cy = y0
                         while (cy + cell <= y1) {
-                            // Media luminosità della cella (step=5)
                             var sum = 0L; var cnt = 0
                             var sx = cx
                             while (sx < cx + cell) {

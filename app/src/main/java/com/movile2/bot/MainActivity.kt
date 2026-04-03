@@ -18,6 +18,7 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
 
         val etInterval       = findViewById<EditText>(R.id.etInterval)
+        val etCharNames      = findViewById<EditText>(R.id.etCharNames)
         val etSkill1         = findViewById<EditText>(R.id.etSkill1)
         val etSkill2         = findViewById<EditText>(R.id.etSkill2)
         val etSkill3         = findViewById<EditText>(R.id.etSkill3)
@@ -31,10 +32,15 @@ class MainActivity : AppCompatActivity() {
 
         val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
 
-        // Carica valori salvati
+        // Carica intervallo pozione salvato
         val savedPot = prefs.getLong("pot_interval_ms", 3000L)
         etInterval.setText((savedPot / 1000).toString())
         BotState.potionIntervalMs = savedPot
+
+        // Carica nomi personaggio salvati (default: bashy,Anyasama)
+        val savedNames = prefs.getString("char_names", "bashy,Anyasama") ?: "bashy,Anyasama"
+        etCharNames.setText(savedNames)
+        applyCharNames(savedNames)
 
         val skillEts = listOf(etSkill1, etSkill2, etSkill3, etSkill4, etSkill5)
         skillEts.forEachIndexed { idx, et ->
@@ -63,6 +69,11 @@ class MainActivity : AppCompatActivity() {
             val editor = prefs.edit().putLong("pot_interval_ms", potMs)
             BotState.potionIntervalMs = potMs
 
+            // Salva nomi personaggio
+            val namesRaw = etCharNames.text.toString().trim()
+            editor.putString("char_names", namesRaw)
+            applyCharNames(namesRaw)
+
             val summary = StringBuilder("Salvato: pozze ${potSeconds}s")
             skillEts.forEachIndexed { idx, et ->
                 val secs = et.text.toString().toLongOrNull()?.coerceAtLeast(1L) ?: 5L
@@ -88,6 +99,20 @@ class MainActivity : AppCompatActivity() {
         btnStop.setOnClickListener {
             stopService(Intent(this, OverlayService::class.java))
             Toast.makeText(this, "Pannello fermato", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    // Parsa la stringa "bashy,Anyasama" e aggiorna BotState.characterNames
+    private fun applyCharNames(raw: String) {
+        val parsed = raw.split(",")
+            .map { it.trim().lowercase() }
+            .filter { it.isNotEmpty() }
+        BotState.characterNames.clear()
+        if (parsed.isEmpty()) {
+            BotState.characterNames.add("bashy")
+            BotState.characterNames.add("anyasama")
+        } else {
+            BotState.characterNames.addAll(parsed)
         }
     }
 }

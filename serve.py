@@ -38,15 +38,26 @@ li{margin-bottom:8px;line-height:1.6;color:#ccc}
 <body>
 <div class="wrap">
   <h1>&#129302; Movile2 Bot</h1>
-  <p class="sub">Bot Android per MMORPG &mdash; Kotlin + Accessibility Service &mdash; <strong>v10</strong></p>
+  <p class="sub">Bot Android per MMORPG &mdash; Kotlin + Accessibility Service &mdash; <strong>v11</strong></p>
+
+  <div class="card">
+    <h2>&#10024; Novit&agrave; v11 &mdash; Fix Yang + Oggetti Personaggio + Attacco con Pozze</h2>
+    <ul>
+      <li><strong>Fix Yang</strong> <span class="new">FIX</span> &mdash; i Yang a terra in Mobile2 vengono mostrati con testo BIANCO (R&gt;230, G&gt;230, B&gt;230, saturazione &lt;25). Il vecchio approccio cercava pixel giallo-oro e generava falsi positivi su sabbia e UI. Ora rileva solo il bianco brillante del testo &ldquo;Yang&rdquo;</li>
+      <li><strong>Oggetti solo del tuo personaggio</strong> <span class="new">FIX</span> &mdash; il bot raccoglie solo oggetti con etichetta verde chiaro (G&gt;180, R&lt;110, B&lt;110) che sono appunto gli item destinati al tuo personaggio in Mobile2. Nomi configurabili: <strong>bashy</strong> e <strong>Anyasama</strong> (modificabili nella schermata principale)</li>
+      <li><strong>Attacco continuo con pozze attive</strong> <span class="new">FIX</span> &mdash; risolto il problema del gap nell&apos;attacco quando scatta una pozione. Prima il gesto accessibility della pozione interrompeva il tap di attacco corrente. Ora dopo ogni pozione l&apos;attacco riparte immediatamente (50ms) senza pausa visibile</li>
+      <li><strong>Loot + Attacco coesistono</strong> <span class="new">FIX</span> &mdash; attivare il loot non ferma pi&ugrave; l&apos;attacco. Le due funzioni operano in parallelo indipendentemente</li>
+      <li><strong>Campo nomi personaggio in app</strong> <span class="new">NEW</span> &mdash; nella schermata principale &egrave; ora presente il campo &ldquo;Nomi personaggio&rdquo; dove inserire i tuoi nick separati da virgola. Default: <code>bashy,Anyasama</code></li>
+    </ul>
+    <div class="ok">&#9989; Yang = testo bianco a terra. Oggetti = etichetta verde del tuo personaggio. Pozze ON con Attacco ON = attacco continuo senza interruzioni.</div>
+  </div>
 
   <div class="card">
     <h2>&#10024; Novit&agrave; v10 &mdash; Fix Pozze Solo + Rilevamento Mostri Rossi + Slot Abilit&agrave;</h2>
     <ul>
       <li><strong>Fix modalit&agrave; solo pozze</strong> <span class="new">FIX</span> &mdash; quando l&apos;attacco &egrave; OFF e le pozze sono ON, il bot preme <em>solo</em> le pozze, senza nessun tap di attacco aggiuntivo</li>
-      <li><strong>Attacco con rilevamento mostri</strong> <span class="new">NEW</span> &mdash; quando ATT &egrave; ON, il bot scansiona lo schermo ogni 500ms cercando nomi di mostri rossi (R&gt;160, G&lt;130, B&lt;120) vicini al personaggio. Attacca solo se trova un mostro; se non ce ne sono si mette in attesa. Lo stato mostra &#x2694;&#xFE0F; ATT&#x1F534; quando c&apos;&egrave; un mostro, &#x2694;&#xFE0F; ATT&hellip; quando cerca</li>
-      <li><strong>Slot abilit&agrave; configurabili</strong> <span class="new">NEW</span> &mdash; premi &#x1F3AF; IMPOSTA SKILL nell&apos;overlay e tocca fino a 5 posizioni sullo schermo per impostare i tuoi slot abilit&agrave;. Premi &#x2728; SKILL: ON/OFF per attivarle. Il bot le usa in sequenza ogni N secondi (configurabile nell&apos;app)</li>
-      <li><strong>Intervallo abilit&agrave; in app</strong> <span class="new">NEW</span> &mdash; nella schermata principale ora c&apos;&egrave; il campo &ldquo;Intervallo abilit&agrave; (secondi)&rdquo; separato dall&apos;intervallo pozione</li>
+      <li><strong>Attacco con rilevamento mostri</strong> <span class="new">NEW</span> &mdash; quando ATT &egrave; ON, il bot scansiona lo schermo ogni 500ms cercando nomi di mostri rossi (R&gt;160, G&lt;130, B&lt;120) vicini al personaggio</li>
+      <li><strong>Slot abilit&agrave; configurabili</strong> <span class="new">NEW</span> &mdash; fino a 5 slot abilit&agrave; con cooldown individuali configurabili nell&apos;app</li>
     </ul>
     <div class="ok">&#9989; Pozze ON senza Attacco = solo pozze, nessun attacco. Attacco ON = attacca solo i mostri con nome rosso vicini al personaggio.</div>
   </div>
