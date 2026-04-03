@@ -38,26 +38,34 @@ li{margin-bottom:8px;line-height:1.6;color:#ccc}
 <body>
 <div class="wrap">
   <h1>&#129302; Movile2 Bot</h1>
-  <p class="sub">Bot Android per MMORPG &mdash; Kotlin + Accessibility Service &mdash; <strong>v12</strong></p>
+  <p class="sub">Bot Android per MMORPG &mdash; Kotlin + Accessibility Service &mdash; <strong>v13</strong></p>
 
   <div class="card">
-    <h2>&#10024; Novit&agrave; v12 &mdash; Fix Joystick Permanente + Yang Giallo + Logging</h2>
+    <h2>&#10024; Novit&agrave; v13 &mdash; Rilevamento Yang via OCR (ML Kit)</h2>
     <ul>
-      <li><strong>FIX CRITICO: Joystick blocca tutto</strong> <span class="new">BUG CRITICO RISOLTO</span> &mdash; Bug Kotlin: <code>return</code> dentro <code>.let{}</code> e <code>.forEach{}</code> &egrave; un <em>local return</em> — esce solo dal lambda, non dalla funzione. Risultato: ogni tap del bot (attacco, pozione, skill) resettava il timer joystick e manteneva <code>joystickActive=true</code> per sempre, bloccando attacco, loot e pozze. Ora usa <code>.any{}</code> con controlli espliciti per uscire correttamente dalla funzione.</li>
-      <li><strong>FIX Yang: testo giallo-oro</strong> <span class="new">FIX</span> &mdash; dall&apos;analisi dello screenshot reale: il testo &ldquo;Yang&rdquo; &egrave; GIALLO ORO CALDO (R&asymp;215-240, G&asymp;170-195, B&asymp;35-70). v11 sbagliava usando rilevamento bianco. Nuovi criteri: R&gt;175, G&gt;120, B&lt;110, R-G&gt;25, R-B&gt;90</li>
-      <li><strong>FIX item personaggio: testo ciano</strong> <span class="new">FIX</span> &mdash; il tag &ldquo;bashy&rdquo;/&ldquo;Anyasama&rdquo; vicino agli item appare in CIANO/TEAL (R&asymp;70-130, G&asymp;180-220, B&asymp;190-230). Criteri: B&gt;160, G&gt;155, R&lt;140, B-R&gt;50</li>
-      <li><strong>Logging completo via logcat</strong> <span class="new">NEW</span> &mdash; tag <code>BotAtk</code>, <code>BotMob</code>, <code>BotLoot</code>, <code>BotJoy</code>: ogni azione del bot &egrave; ora tracciata in logcat per debug preciso</li>
-      <li><strong>Zona loot estesa</strong> <span class="new">NEW</span> &mdash; da 25-75% a 20-80% x, da 45-82% a 40-85% y. Distanza max da 22% a 28% larghezza. Cattura drop anche pi&ugrave; lontani dal personaggio</li>
+      <li><strong>OCR con Google ML Kit</strong> <span class="new">NEW</span> &mdash; sostituisce completamente il pixel-scan colore. ML Kit processa lo screenshot e restituisce ogni parola con la sua posizione esatta. Il bot cerca la parola <code>yang</code> (in qualsiasi formato maiuscolo/minuscolo) e i nomi del personaggio (<code>bashy</code>, <code>Anyasama</code>) tra i testi rilevati. Zero calibrazione colore necessaria.</li>
+      <li><strong>Nessuna dipendenza dal colore</strong> <span class="new">FIX</span> &mdash; prima v10 cercava giallo-oro, v11 cercava bianco, v12 aveva entrambi. Ora non importa come appare il testo: basta che dica &ldquo;Yang&rdquo;.</li>
+      <li><strong>Posizione precisa</strong> &mdash; ML Kit restituisce la bounding box della parola riconosciuta. Il bot tappa il centro esatto dell&apos;etichetta, non un punto approssimato da un grid-scan.</li>
+      <li><strong>Dipendenza aggiunta</strong> &mdash; <code>com.google.mlkit:text-recognition:16.0.0</code> in <code>app/build.gradle.kts</code>. On-device, nessuna connessione internet richiesta.</li>
+      <li><strong>Logging OCR</strong> &mdash; <code>adb logcat -s BotLoot</code> mostra ogni parola trovata, tipo (Yang/Item), posizione a schermo e totale blocchi analizzati per ciclo.</li>
     </ul>
-    <div class="ok">&#9989; Joystick: ora blocca SOLO i tocchi umani reali, non i gesti del bot. Yang e item rilevati dai colori reali dello screenshot. Usa <code>adb logcat -s BotAtk BotMob BotLoot BotJoy</code> per debug in tempo reale.</div>
+    <div class="ok">&#9989; OCR on-device: funziona offline, nessuna calibrazione, trova &ldquo;Yang&rdquo; a prescindere da colore, font o sfondo. Tag logcat: <code>BotAtk BotMob BotLoot BotJoy</code></div>
   </div>
 
   <div class="card">
-    <h2>&#10024; Novit&agrave; v11 &mdash; Fix Yang + Oggetti Personaggio + Attacco con Pozze</h2>
+    <h2>&#10024; Novit&agrave; v12 &mdash; Fix Joystick Permanente + Logging</h2>
     <ul>
-      <li><strong>Fix pozze con attacco</strong> &mdash; dopo ogni pozione l&apos;attacco riparte in 50ms</li>
-      <li><strong>Loot + Attacco coesistono</strong> &mdash; attivare il loot non ferma pi&ugrave; l&apos;attacco</li>
-      <li><strong>Campo nomi personaggio in app</strong> &mdash; bashy, Anyasama configurabili</li>
+      <li><strong>FIX CRITICO Joystick</strong> &mdash; <code>return</code> nei lambda Kotlin era un local return. Fix: <code>.any{}</code> con early exit corretto dalla funzione.</li>
+      <li><strong>Logging completo</strong> &mdash; tag <code>BotAtk</code>, <code>BotMob</code>, <code>BotLoot</code>, <code>BotJoy</code></li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2>&#10024; Novit&agrave; v11 &mdash; Fix Pozze + Loot Parallelo</h2>
+    <ul>
+      <li><strong>Attacco + Loot coesistono</strong> &mdash; <code>startLoot()</code> non ferma pi&ugrave; l&apos;attacco</li>
+      <li><strong>Pozze senza gap</strong> &mdash; attacco riparte 50ms dopo ogni pozione</li>
+      <li><strong>Nomi personaggio configurabili</strong> &mdash; bashy, Anyasama</li>
     </ul>
   </div>
 

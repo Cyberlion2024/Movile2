@@ -13,10 +13,18 @@ import android.view.Display
 import android.view.accessibility.AccessibilityEvent
 import androidx.annotation.RequiresApi
 import androidx.core.content.ContextCompat
+import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.text.Text
+import com.google.mlkit.vision.text.TextRecognition
+import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 
 class BotAccessibilityService : AccessibilityService() {
 
     private val handler = Handler(Looper.getMainLooper())
+
+    // ML Kit Text Recognizer — riconosce testo sullo schermo per trovare "Yang"
+    // e i tag dei personaggi vicino agli item. Singleton per l'intera sessione.
+    private val textRecognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
 
     @Volatile private var lootTargets: List<Pair<Float, Float>> = emptyList()
     private var gestureInProgress = false
@@ -329,109 +337,95 @@ class BotAccessibilityService : AccessibilityService() {
                     val hw = Bitmap.wrapHardwareBuffer(s.hardwareBuffer, s.colorSpace)
                     val bmp = hw?.copy(Bitmap.Config.ARGB_8888, false)
                     hw?.recycle(); s.hardwareBuffer.close()
-                    bmp?.let { b -> lootTargets = findLootItems(b); b.recycle(); scanCount++ }
+                    if (bmp == null) return
+
+                    // ML Kit OCR asincrono: processa il bitmap e cerca il testo
+                    val image = InputImage.fromBitmap(bmp, 0)
+                    textRecognizer.process(image)
+                        .addOnSuccessListener { visionText ->
+                            lootTargets = findLootItemsFromText(visionText, bmp.width, bmp.height)
+                            bmp.recycle()
+                            scanCount++
+                        }
+                        .addOnFailureListener { e ->
+                            Log.w("BotLoot", "ML Kit fallito: ${e.message}")
+                            bmp.recycle()
+                        }
                 }
-                override fun onFailure(e: Int) {}
+                override fun onFailure(e: Int) {
+                    Log.w("BotLoot", "Screenshot fallito: $e")
+                }
             })
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // RILEVAMENTO OGGETTI A TERRA — v12
+    // RILEVAMENTO OGGETTI A TERRA — v13: ML Kit Text Recognition
     //
-    // ANALISI SCREENSHOT REALE (18:41 03/04/2026):
+    // ML Kit riconosce il testo sullo screenshot e restituisce ogni blocco
+    // con la sua bounding box. Cerchiamo:
+    //   • "yang" (qualsiasi case) → moneta Yang
+    //   • nomi personaggio configurati (bashy, Anyasama) → item del nostro char
     //
-    // YANG — testo "Yang" appare in GIALLO ORO CALDO con ombra scura:
-    //   Pixel core:  R≈215-240, G≈170-195, B≈35-70
-    //   Criteri:     R > 175, G > 120, B < 110, R > G+25, R > B+90
-    //   Esclude sabbia (B troppo alto), erba (G > R), UI bianca (B alto)
+    // Vantaggi rispetto al pixel-scan:
+    //   • Funziona a qualsiasi colore, luminosità o sfondo
+    //   • Nessuna calibrazione — testo = testo
+    //   • Posizione precisa: center della bounding box della parola
     //
-    // ITEM PERSONAGGIO — il tag "bashy"/"Anyasama" appare in CIANO/TEAL:
-    //   Pixel core:  R≈70-130, G≈180-220, B≈190-230
-    //   Criteri:     B > 160, G > 155, R < 140, B > R+50
-    //   Esclude: verde erba (B basso), rosso mob (R alto), bianco UI (R alto)
-    //
-    // ITEM BIANCO — nome item "Spada Lunga+0" appare BIANCO:
-    //   Criteri:     R > 220, G > 220, B > 220, max-min < 30 (non saturo)
-    //   Raccoglie qualsiasi item bianco vicino (potrebbero essere tuoi)
-    //
-    // Zona: 20-80% x, 40-85% y (più ampia per catturare drop lontani).
-    // Cella 18px, step 3 (più denso = più hits per cella).
-    // Minimo 4 hits su ~36 campioni per confermare un'etichetta.
-    // Distanza max 28% larghezza (copre tutto il cerchio di drop vicini).
+    // Filtri applicati dopo il riconoscimento:
+    //   • Zona verticale: 35-88% altezza (esclude HUD in alto, barra in basso)
+    //   • Distanza dal personaggio: max 30% larghezza schermo
+    //   • Max 8 target per ciclo (ordinati dal più vicino)
     // ═══════════════════════════════════════════════════════════════════════════
-    private fun findLootItems(bmp: Bitmap): List<Pair<Float, Float>> {
-        val w = bmp.width; val h = bmp.height
-        val x0 = (w * 0.20f).toInt(); val x1 = (w * 0.80f).toInt()
-        val y0 = (h * 0.40f).toInt(); val y1 = (h * 0.85f).toInt()
-        val cell = 18
-        val step = 3
-        val charX = w * 0.50f; val charY = h * 0.60f
-        val maxDist = w * 0.28f; val maxDistSq = maxDist * maxDist
+    private fun findLootItemsFromText(visionText: Text, w: Int, h: Int): List<Pair<Float, Float>> {
+        val charX = w * 0.50f
+        val charY = h * 0.60f
+        val maxDist = w * 0.30f
+        val maxDistSq = maxDist * maxDist
+        val yMin = h * 0.35f
+        val yMax = h * 0.88f
+
+        val names = BotState.characterNames.map { it.lowercase() }
         val found = mutableListOf<Pair<Float, Float>>()
 
-        var totalYangHits = 0; var totalItemHits = 0; var totalWhiteHits = 0
+        for (block in visionText.textBlocks) {
+            for (line in block.lines) {
+                val box = line.boundingBox ?: continue
+                val cx = box.exactCenterX()
+                val cy = box.exactCenterY()
 
-        var cy = y0
-        while (cy + cell <= y1) {
-            var cx = x0
-            while (cx + cell <= x1) {
-                val itemX = (cx + cell / 2).toFloat()
-                val itemY = (cy + cell / 2).toFloat()
-                val ddx = itemX - charX; val ddy = itemY - charY
-                if (ddx * ddx + ddy * ddy > maxDistSq) { cx += cell; continue }
+                // Filtra per zona verticale (esclude HUD)
+                if (cy < yMin || cy > yMax) continue
 
-                var hitsYang  = 0   // giallo-oro = Yang
-                var hitsItem  = 0   // ciano = item tuo personaggio
-                var hitsWhite = 0   // bianco = nome item (potrebbe essere tuo)
+                // Filtra per distanza dal personaggio
+                val ddx = cx - charX; val ddy = cy - charY
+                if (ddx * ddx + ddy * ddy > maxDistSq) continue
 
-                var dy2 = 0
-                while (dy2 < cell) {
-                    var dx2 = 0
-                    while (dx2 < cell) {
-                        val p = bmp.getPixel(cx + dx2, cy + dy2)
-                        val r = Color.red(p); val g = Color.green(p); val b = Color.blue(p)
+                val text = line.text.lowercase().trim()
 
-                        // Yang: giallo-oro caldo — R>G, R>>B, G non troppo basso
-                        if (r > 175 && g > 120 && b < 110 && r - g > 25 && r - b > 90) {
-                            hitsYang++; totalYangHits++
-                        }
-                        // Item personaggio: ciano/teal — B e G alti, R basso
-                        else if (b > 160 && g > 155 && r < 140 && b - r > 50) {
-                            hitsItem++; totalItemHits++
-                        }
-                        // Item bianco: testo nome item — tutti canali alti, non saturo
-                        else if (r > 220 && g > 220 && b > 220 && (maxOf(r, g, b) - minOf(r, g, b)) < 30) {
-                            hitsWhite++; totalWhiteHits++
-                        }
-                        dx2 += step
-                    }
-                    dy2 += step
-                }
+                val isYang   = text.contains("yang")
+                val isMyItem = names.any { name -> text.contains(name) }
 
-                if (hitsYang >= 4 || hitsItem >= 4 || hitsWhite >= 4) {
-                    val tipo = when {
-                        hitsYang >= 4  -> "Yang"
-                        hitsItem >= 4  -> "Item-cyan"
-                        else           -> "Item-white"
-                    }
-                    Log.d("BotLoot", "Trovato $tipo a ($itemX,$itemY) yang=$hitsYang cyan=$hitsItem white=$hitsWhite")
-                    found.add(itemX to itemY)
+                if (isYang || isMyItem) {
+                    val tipo = if (isYang) "Yang" else "Item[${line.text.trim()}]"
+                    Log.d("BotLoot", "✔ $tipo @ (${"%.0f".format(cx)},${
+                        "%.0f".format(cy)}) → '${line.text.trim()}'")
+                    found.add(cx to cy)
                     if (found.size >= 8) break
                 }
-                cx += cell
             }
             if (found.size >= 8) break
-            cy += cell
         }
 
+        val totalBlocks = visionText.textBlocks.size
+        val totalLines  = visionText.textBlocks.sumOf { it.lines.size }
         if (found.isEmpty()) {
-            Log.d("BotLoot", "Nessun item. Hits totali: yang=$totalYangHits cyan=$totalItemHits white=$totalWhiteHits")
+            Log.d("BotLoot", "Nessun item — OCR: $totalBlocks blocchi, $totalLines righe")
         } else {
-            Log.d("BotLoot", "Trovati ${found.size} item da raccogliere")
+            Log.d("BotLoot", "Trovati ${found.size} item — OCR: $totalBlocks blocchi")
         }
 
         return found.sortedBy { (fx, fy) ->
-            val ddx = fx - charX; val ddy = fy - charY; ddx * ddx + ddy * ddy
+            val dx = fx - charX; val dy = fy - charY; dx * dx + dy * dy
         }
     }
 
@@ -676,6 +670,7 @@ class BotAccessibilityService : AccessibilityService() {
     override fun onDestroy() {
         super.onDestroy()
         stopAll()
+        textRecognizer.close()
         BotState.joystickActive = false
         if (instance === this) instance = null
     }

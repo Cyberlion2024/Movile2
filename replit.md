@@ -82,13 +82,15 @@ APK scaricabile da **Actions › Artifacts**
 
 ## Changelog
 
-### v12 (attuale)
-- **BUG CRITICO RISOLTO — joystickActive=true permanente**: in Kotlin, `return` dentro `.let{}` e `.forEach{}` è un *local return* (esce solo dal lambda, non dalla funzione). In `onOutsideTouch()` ogni tap del bot (attacco, pozione, skill) resettava il timer joystick causando `joystickActive=true` per sempre e bloccando tutto. Fix: rimpiazzato con `any{}` e controlli booleani espliciti che restituiscono correttamente dalla funzione.
-- **Fix Yang colore**: dall'analisi dello screenshot reale il testo "Yang" è GIALLO-ORO (R≈215-240, G≈170-195, B≈35-70), NON bianco come erroneamente impostato in v11. Nuovi criteri: R>175, G>120, B<110, R-G>25, R-B>90.
-- **Fix item personaggio colore**: il tag "bashy"/"Anyasama" vicino agli item appare CIANO/TEAL (R≈70-130, G≈180-220, B≈190-230). Criteri: B>160, G>155, R<140, B-R>50.
-- **Item bianco aggiunto**: rileva anche nomi item bianchi (R>220, G>220, B>220, non saturi) che possono essere item del personaggio.
-- **Zona loot estesa**: 20-80% x, 40-85% y (era 25-75%, 45-82%). Distanza max dal personaggio 28% (era 22%). Cella 18px, step 3 (era 20px, step 4).
-- **Logging completo aggiunto**: `Log.d()` con tag `BotAtk`, `BotMob`, `BotLoot`, `BotJoy` in tutti i punti critici del bot. Debug via `adb logcat -s BotAtk BotMob BotLoot BotJoy`.
+### v13 (attuale)
+- **OCR con Google ML Kit**: sostituisce completamente il pixel-scan colore. `findLootItemsFromText()` processa il `Text` di ML Kit e cerca righe che contengono "yang" (case-insensitive) o i nomi del personaggio configurati. Zero calibrazione colore.
+- **Dipendenza ML Kit aggiunta**: `com.google.mlkit:text-recognition:16.0.0` in `app/build.gradle.kts`. On-device, funziona offline.
+- **Architettura loot async**: `doLootScan()` ora catena `TakeScreenshotCallback` → `textRecognizer.process(image)` → `addOnSuccessListener` → `findLootItemsFromText()`.
+- **textRecognizer.close()** in `onDestroy()` per evitare memory leak.
+
+### v12
+- **BUG CRITICO RISOLTO — joystickActive=true permanente**: `return` dentro `.let{}`/`.forEach{}` = local return in Kotlin. Fix: `.any{}` + controlli espliciti.
+- **Logging completo**: tag `BotAtk`, `BotMob`, `BotLoot`, `BotJoy` in logcat.
 
 ### v11
 - **Fix attacco con pozze**: dopo ogni tap pozione, l'attackLoop riparte dopo 50ms.
