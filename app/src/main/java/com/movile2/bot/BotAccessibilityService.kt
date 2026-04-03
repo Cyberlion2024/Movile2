@@ -55,11 +55,11 @@ class BotAccessibilityService : AccessibilityService() {
         override fun run() {
             if (!BotState.attackRunning) return
             if (BotState.joystickActive) {
-                Log.d("BotAtk", "Attacco in pausa: joystickActive=true")
+                BotLogger.d("BotAtk", "Pausa: joystickActive=true")
                 scheduleNextAttack(); return
             }
             val pos = BotState.attackPos ?: run {
-                Log.w("BotAtk", "attackPos non impostato!")
+                BotLogger.w("BotAtk", "attackPos non impostato!")
                 scheduleNextAttack(); return
             }
             try {
@@ -69,11 +69,11 @@ class BotAccessibilityService : AccessibilityService() {
                             Path().apply { moveTo(pos.first, pos.second) }, 0L, ATTACK_TAP_MS))
                         .build(), attackCallback, handler)
                 if (!ok) {
-                    Log.w("BotAtk", "dispatchGesture=false (gesture in corso)")
+                    BotLogger.w("BotAtk", "dispatchGesture=false (gesture in corso)")
                     scheduleNextAttack()
                 }
             } catch (e: Exception) {
-                Log.e("BotAtk", "Errore gesto attacco: ${e.message}")
+                BotLogger.e("BotAtk", "Errore gesto: ${e.message}")
                 scheduleNextAttack()
             }
         }
@@ -114,14 +114,14 @@ class BotAccessibilityService : AccessibilityService() {
                         val count = countMobClusters(b)
                         BotState.detectedMobCount = count
                         BotState.mobNearby = count > 0
-                        Log.d("BotMob", "Mob rilevati: $count (pullMode=${BotState.pullMode})")
+                        BotLogger.d("BotMob", "Mob: $count (pull=${BotState.pullMode})")
                         if (BotState.pullMode && count > 0) updateMobDirection(b)
                         else if (BotState.pullMode) { BotState.mobDirX = 0f; BotState.mobDirY = -1f }
                         b.recycle()
                     }
                 }
                 override fun onFailure(e: Int) {
-                    Log.w("BotMob", "Screenshot fallito: $e")
+                    BotLogger.w("BotMob", "Screenshot fallito: $e")
                     BotState.mobNearby = false
                     BotState.detectedMobCount = 0
                 }
@@ -297,20 +297,28 @@ class BotAccessibilityService : AccessibilityService() {
     private val lootLoop = object : Runnable {
         override fun run() {
             if (!BotState.lootRunning) return
-            if (BotState.joystickActive) { handler.postDelayed(this, 400L); return }
+            // Blocca loot se joystick attivo OPPURE se l'utente ha toccato il joystick
+            // negli ultimi LOOT_JOY_PAUSE_MS ms (copre la camminata continua dove
+            // ACTION_OUTSIDE arriva solo al primo DOWN, non durante il drag).
+            if (joystickRecentlyUsed()) { handler.postDelayed(this, 400L); return }
             if (scanCount < 2) { handler.postDelayed(this, 300L); return }
             val items = lootTargets
             BotState.lootItemsFound = items.size
             val toTap = items.take(4)
             if (toTap.isEmpty()) { handler.postDelayed(this, 500L); return }
+            BotLogger.d("BotLoot", "Tappo ${toTap.size} item")
             tapItemsSequentially(toTap, 0) {
                 if (BotState.lootRunning) handler.postDelayed(this, 600L)
             }
         }
     }
 
+    private fun joystickRecentlyUsed(): Boolean =
+        BotState.joystickActive ||
+        System.currentTimeMillis() - BotState.lastManualJoystickMs < BotState.LOOT_JOY_PAUSE_MS
+
     private fun tapItemsSequentially(items: List<Pair<Float, Float>>, index: Int, onAllDone: () -> Unit) {
-        if (!BotState.lootRunning || BotState.joystickActive || index >= items.size) { onAllDone(); return }
+        if (!BotState.lootRunning || joystickRecentlyUsed() || index >= items.size) { onAllDone(); return }
         val (x, y) = items[index]
         gestureInProgress = true
         val dispatched = tapSingle(x, y, 55L)
@@ -664,7 +672,11 @@ class BotAccessibilityService : AccessibilityService() {
             })
     }
 
-    override fun onServiceConnected() { instance = this }
+    override fun onServiceConnected() {
+        instance = this
+        BotLogger.init(this)
+        BotLogger.d("Bot", "AccessibilityService connesso — log su file attivo")
+    }
     override fun onAccessibilityEvent(e: AccessibilityEvent?) {}
     override fun onInterrupt() { stopAll() }
     override fun onDestroy() {

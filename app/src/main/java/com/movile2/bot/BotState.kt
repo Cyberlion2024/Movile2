@@ -61,4 +61,10 @@ object BotState {
     // Quando true: l'utente sta usando il joystick manualmente.
     // Il bot mette in pausa tutte le azioni e riprende dopo JOY_RESUME_DELAY_MS.
     @Volatile var joystickActive: Boolean = false
+
+    // Timestamp (System.currentTimeMillis()) dell'ultimo tocco MANUALE al joystick.
+    // Il loot tap si blocca per LOOT_JOY_PAUSE_MS dopo l'ultimo tocco joystick,
+    // anche dopo che joystickActive è già tornato false (copertura camminata continua).
+    @Volatile var lastManualJoystickMs: Long = 0L
+    const val LOOT_JOY_PAUSE_MS = 3000L   // ms senza tocchi joystick prima di tappare
 }

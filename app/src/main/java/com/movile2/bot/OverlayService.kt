@@ -94,6 +94,9 @@ class OverlayService : Service() {
         if (abs(rx - center.first) < halfZone && abs(ry - center.second) < halfZone) {
             Log.d("BotJoy", "JOYSTICK MANUALE rilevato a ($rx,$ry) — pausa 1.5s")
             BotState.joystickActive = true
+            // Aggiorna il timestamp: il loot aspetta LOOT_JOY_PAUSE_MS dopo l'ultimo tocco
+            // anche quando joystickActive torna false (copertura camminata continua).
+            BotState.lastManualJoystickMs = System.currentTimeMillis()
             joystickResumeRunnable?.let { handler.removeCallbacks(it) }
             val r = Runnable {
                 Log.d("BotJoy", "Ripresa dopo joystick manuale")
