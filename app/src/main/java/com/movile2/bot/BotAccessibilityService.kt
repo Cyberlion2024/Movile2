@@ -288,15 +288,24 @@ class BotAccessibilityService : AccessibilityService() {
     // ═══════════════════════════════════════════════════════════════════════════
     // LOOP RACCOLTA
     // ═══════════════════════════════════════════════════════════════════════════
+    // scanCount: conta quante scansioni sono state completate dall'attivazione del loot.
+    // Il lootLoop non tappa finché non ne sono avvenute almeno 2 (warmup 800ms).
+    // Evita di tappare su dati stale/vuoti al primo avvio.
+    @Volatile private var scanCount = 0
+
     private val lootLoop = object : Runnable {
         override fun run() {
             if (!BotState.lootRunning) return
-            if (BotState.joystickActive) { handler.postDelayed(this, 300L); return }
+            if (BotState.joystickActive) { handler.postDelayed(this, 400L); return }
+            // Warmup: aspetta almeno 2 scan prima di tappare
+            if (scanCount < 2) { handler.postDelayed(this, 300L); return }
             val items = lootTargets
             BotState.lootItemsFound = items.size
-            if (items.isEmpty()) { handler.postDelayed(this, 400L); return }
-            tapItemsSequentially(items, 0) {
-                if (BotState.lootRunning) handler.postDelayed(this, 250L)
+            // Prende solo i 4 più vicini al personaggio (già ordinati per distanza)
+            val toTap = items.take(4)
+            if (toTap.isEmpty()) { handler.postDelayed(this, 500L); return }
+            tapItemsSequentially(toTap, 0) {
+                if (BotState.lootRunning) handler.postDelayed(this, 600L)
             }
         }
     }
@@ -307,17 +316,18 @@ class BotAccessibilityService : AccessibilityService() {
         gestureInProgress = true
         val dispatched = tapSingle(x, y, 55L)
         gestureInProgress = false
-        handler.postDelayed({ tapItemsSequentially(items, index + 1, onAllDone) }, if (dispatched) 100L else 130L)
+        // 220ms tra un tap e l'altro: abbastanza lento da non "impazzire"
+        handler.postDelayed({ tapItemsSequentially(items, index + 1, onAllDone) }, if (dispatched) 220L else 260L)
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // SCANNER LOOT — ogni 400ms
+    // SCANNER LOOT — ogni 600ms
     // ═══════════════════════════════════════════════════════════════════════════
     private val lootScanner = object : Runnable {
         override fun run() {
             if (!BotState.lootRunning) return
             if (!BotState.joystickActive && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) doLootScan()
-            handler.postDelayed(this, 400L)
+            handler.postDelayed(this, 600L)
         }
     }
 
@@ -329,27 +339,41 @@ class BotAccessibilityService : AccessibilityService() {
                     val hw = Bitmap.wrapHardwareBuffer(s.hardwareBuffer, s.colorSpace)
                     val bmp = hw?.copy(Bitmap.Config.ARGB_8888, false)
                     hw?.recycle(); s.hardwareBuffer.close()
-                    bmp?.let { b -> lootTargets = findLootItems(b); b.recycle() }
+                    bmp?.let { b -> lootTargets = findLootItems(b); b.recycle(); scanCount++ }
                 }
                 override fun onFailure(e: Int) {}
             })
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // RILEVAMENTO OGGETTI A TERRA
-    // Yang (oro): R>220, G>170, B<60    — moneta yang / drop dorato
-    // Testo verde: G>170, R<120, B<100  — nome oggetto comune
-    // Testo bianco: R>220, G>220, B>220 — yang testo bianco
-    // Cella 12px per separare oggetti vicini
+    // RILEVAMENTO OGGETTI A TERRA — criteri stretti per evitare falsi positivi
+    //
+    // Zona di ricerca: 32-68% x, 48-78% y (area sotto il personaggio,
+    // dove appaiono i drop. Esclude UI in alto, joystick in basso-sx,
+    // tasti skill/attacco a destra).
+    //
+    // Yang dorato: R>235, G>190, B<40, R-G>30 → giallo saturo intenso
+    //   Esclude: sabbia (B troppo alto), erba (G non abbastanza alto rispetto a R),
+    //            skin personaggio (B non abbastanza basso)
+    //
+    // Nome oggetto verde: G>200, R<100, B<120, G-R>120 → verde puro
+    //   Esclude: alberi/erba (troppo scuri, G<200), effetti particellari
+    //
+    // Cella 18px, campionamento step 3, minimo 6 hits su ~36 campioni.
+    // Distanza massima dal personaggio: 20% della larghezza schermo.
+    // Max 4 oggetti per ciclo, ordinati dal più vicino.
     // ═══════════════════════════════════════════════════════════════════════════
     private fun findLootItems(bmp: Bitmap): List<Pair<Float, Float>> {
         val w = bmp.width; val h = bmp.height
-        val x0 = (w * 0.20f).toInt(); val x1 = (w * 0.80f).toInt()
-        val y0 = (h * 0.25f).toInt(); val y1 = (h * 0.75f).toInt()
-        val cell = 12
+        // Zona ristretta: esclude bordi UI, joystick, tasti destra
+        val x0 = (w * 0.32f).toInt(); val x1 = (w * 0.68f).toInt()
+        val y0 = (h * 0.48f).toInt(); val y1 = (h * 0.78f).toInt()
+        val cell = 18
+        val step = 3
+        val charX = w * 0.50f; val charY = h * 0.58f
+        // Raggio 20% larghezza → solo ciò che è vicino al personaggio
+        val maxDist = w * 0.20f; val maxDistSq = maxDist * maxDist
         val found = mutableListOf<Pair<Float, Float>>()
-        val charX = w * 0.50f; val charY = h * 0.57f
-        val maxDist = w * 0.38f; val maxDistSq = maxDist * maxDist
 
         var cy = y0
         while (cy + cell <= y1) {
@@ -359,23 +383,32 @@ class BotAccessibilityService : AccessibilityService() {
                 val itemY = (cy + cell / 2).toFloat()
                 val ddx = itemX - charX; val ddy = itemY - charY
                 if (ddx * ddx + ddy * ddy > maxDistSq) { cx += cell; continue }
-                var hits = 0
-                for (dy2 in 0 until cell step 2) {
-                    for (dx2 in 0 until cell step 2) {
+                var hitsGold = 0; var hitsGreen = 0
+                var dy2 = 0
+                while (dy2 < cell) {
+                    var dx2 = 0
+                    while (dx2 < cell) {
                         val p = bmp.getPixel(cx + dx2, cy + dy2)
                         val r = Color.red(p); val g = Color.green(p); val b = Color.blue(p)
-                        val isWhite = r > 220 && g > 220 && b > 220
-                        val isGold  = r > 220 && g > 170 && b < 60 && r > g
-                        val isGreen = g > 170 && r < 120 && b < 100
-                        if (isWhite || isGold || isGreen) hits++
+                        // Yang dorato: giallo intenso e saturo
+                        if (r > 235 && g > 190 && b < 40 && r - g > 30) hitsGold++
+                        // Nome oggetto verde puro (testo a terra)
+                        else if (g > 200 && r < 100 && b < 120 && g - r > 120) hitsGreen++
+                        dx2 += step
                     }
+                    dy2 += step
                 }
-                if (hits >= 3) { found.add(itemX to itemY); if (found.size >= 12) break }
+                // Soglia 6 hit: filtra rumori singoli ma cattura cluster di testo
+                if (hitsGold >= 6 || hitsGreen >= 6) {
+                    found.add(itemX to itemY)
+                    if (found.size >= 8) break   // cap intermedio per performance
+                }
                 cx += cell
             }
-            if (found.size >= 12) break
+            if (found.size >= 8) break
             cy += cell
         }
+        // Ordina per distanza dal personaggio, prendi i più vicini
         return found.sortedBy { (fx, fy) ->
             val ddx = fx - charX; val ddy = fy - charY; ddx * ddx + ddy * ddy
         }
@@ -534,6 +567,7 @@ class BotAccessibilityService : AccessibilityService() {
         stopAttack()
         if (BotState.lootRunning) return
         lootTargets = emptyList(); BotState.lootItemsFound = 0; gestureInProgress = false
+        scanCount = 0
         BotState.lootRunning = true
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) handler.postDelayed(lootScanner, 200L)
         handler.postDelayed(lootLoop, 600L)
