@@ -82,13 +82,18 @@ APK scaricabile da **Actions › Artifacts**
 
 ## Changelog
 
-### v11 (attuale)
-- **Fix Yang**: rilevamento testo bianco brillante (R>230, G>230, B>230, saturazione<25) invece di pixel giallo-oro. Elimina falsi positivi da sabbia/UI.
-- **Fix oggetti personaggio**: raccoglie solo etichette verdi (G>180, R<110, B<110, G-R>80). Nomi "bashy" e "Anyasama" hardcoded + configurabili da app.
-- **Fix attacco con pozze**: dopo ogni tap pozione, l'attackLoop riparte dopo 50ms eliminando il gap causato dall'interruzione del gesto accessibility.
-- **Loot + attacco coesistono**: `startLoot()` non chiama più `stopAttack()`. Le due funzioni operano in parallelo.
-- **Campo nomi personaggio in MainActivity**: campo `etCharNames` per impostare i nick (default `bashy,Anyasama`), salvati in SharedPreferences.
-- **BotState.characterNames**: lista CopyOnWriteArrayList con i nomi in minuscolo per confronto case-insensitive.
+### v12 (attuale)
+- **BUG CRITICO RISOLTO — joystickActive=true permanente**: in Kotlin, `return` dentro `.let{}` e `.forEach{}` è un *local return* (esce solo dal lambda, non dalla funzione). In `onOutsideTouch()` ogni tap del bot (attacco, pozione, skill) resettava il timer joystick causando `joystickActive=true` per sempre e bloccando tutto. Fix: rimpiazzato con `any{}` e controlli booleani espliciti che restituiscono correttamente dalla funzione.
+- **Fix Yang colore**: dall'analisi dello screenshot reale il testo "Yang" è GIALLO-ORO (R≈215-240, G≈170-195, B≈35-70), NON bianco come erroneamente impostato in v11. Nuovi criteri: R>175, G>120, B<110, R-G>25, R-B>90.
+- **Fix item personaggio colore**: il tag "bashy"/"Anyasama" vicino agli item appare CIANO/TEAL (R≈70-130, G≈180-220, B≈190-230). Criteri: B>160, G>155, R<140, B-R>50.
+- **Item bianco aggiunto**: rileva anche nomi item bianchi (R>220, G>220, B>220, non saturi) che possono essere item del personaggio.
+- **Zona loot estesa**: 20-80% x, 40-85% y (era 25-75%, 45-82%). Distanza max dal personaggio 28% (era 22%). Cella 18px, step 3 (era 20px, step 4).
+- **Logging completo aggiunto**: `Log.d()` con tag `BotAtk`, `BotMob`, `BotLoot`, `BotJoy` in tutti i punti critici del bot. Debug via `adb logcat -s BotAtk BotMob BotLoot BotJoy`.
+
+### v11
+- **Fix attacco con pozze**: dopo ogni tap pozione, l'attackLoop riparte dopo 50ms.
+- **Loot + attacco coesistono**: `startLoot()` non chiama più `stopAttack()`.
+- **Campo nomi personaggio**: bashy, Anyasama configurabili da app.
 
 ---
 

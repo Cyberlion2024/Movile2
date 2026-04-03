@@ -8,6 +8,7 @@ import android.graphics.Path
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import android.view.Display
 import android.view.accessibility.AccessibilityEvent
 import androidx.annotation.RequiresApi
@@ -45,16 +46,28 @@ class BotAccessibilityService : AccessibilityService() {
     private val attackLoop = object : Runnable {
         override fun run() {
             if (!BotState.attackRunning) return
-            if (BotState.joystickActive) { scheduleNextAttack(); return }
-            val pos = BotState.attackPos ?: run { scheduleNextAttack(); return }
+            if (BotState.joystickActive) {
+                Log.d("BotAtk", "Attacco in pausa: joystickActive=true")
+                scheduleNextAttack(); return
+            }
+            val pos = BotState.attackPos ?: run {
+                Log.w("BotAtk", "attackPos non impostato!")
+                scheduleNextAttack(); return
+            }
             try {
                 val ok = dispatchGesture(
                     GestureDescription.Builder()
                         .addStroke(GestureDescription.StrokeDescription(
                             Path().apply { moveTo(pos.first, pos.second) }, 0L, ATTACK_TAP_MS))
                         .build(), attackCallback, handler)
-                if (!ok) scheduleNextAttack()
-            } catch (_: Exception) { scheduleNextAttack() }
+                if (!ok) {
+                    Log.w("BotAtk", "dispatchGesture=false (gesture in corso)")
+                    scheduleNextAttack()
+                }
+            } catch (e: Exception) {
+                Log.e("BotAtk", "Errore gesto attacco: ${e.message}")
+                scheduleNextAttack()
+            }
         }
     }
 
@@ -93,12 +106,14 @@ class BotAccessibilityService : AccessibilityService() {
                         val count = countMobClusters(b)
                         BotState.detectedMobCount = count
                         BotState.mobNearby = count > 0
+                        Log.d("BotMob", "Mob rilevati: $count (pullMode=${BotState.pullMode})")
                         if (BotState.pullMode && count > 0) updateMobDirection(b)
                         else if (BotState.pullMode) { BotState.mobDirX = 0f; BotState.mobDirY = -1f }
                         b.recycle()
                     }
                 }
                 override fun onFailure(e: Int) {
+                    Log.w("BotMob", "Screenshot fallito: $e")
                     BotState.mobNearby = false
                     BotState.detectedMobCount = 0
                 }
@@ -321,37 +336,40 @@ class BotAccessibilityService : AccessibilityService() {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // RILEVAMENTO OGGETTI A TERRA — v11
+    // RILEVAMENTO OGGETTI A TERRA — v12
     //
-    // Zona di ricerca: 25-75% x, 45-82% y (area drop intorno al personaggio).
+    // ANALISI SCREENSHOT REALE (18:41 03/04/2026):
     //
-    // YANG:
-    //   Il testo "Yang" a terra in Mobile2 appare come testo BIANCO BRILLANTE
-    //   su un fondo scuro (la moneta d'oro viene mostrata con l'etichetta bianca).
-    //   Colore: R>230, G>230, B>230 (bianco quasi puro, luminosità >230 su tutti i canali).
-    //   Escluso: pixel con colore di fondo (scuro) o colori saturi (R-G > 40).
-    //   FIX: il vecchio approccio pixel giallo-oro catturava falsi positivi (sabbia,
-    //   UI dorata, effetti). Il testo "Yang" è BIANCO come tutti i testi di moneta in Metin2.
+    // YANG — testo "Yang" appare in GIALLO ORO CALDO con ombra scura:
+    //   Pixel core:  R≈215-240, G≈170-195, B≈35-70
+    //   Criteri:     R > 175, G > 120, B < 110, R > G+25, R > B+90
+    //   Esclude sabbia (B troppo alto), erba (G > R), UI bianca (B alto)
     //
-    // OGGETTI CON NOME PERSONAGGIO (bashy / Anyasama):
-    //   In Mobile2 (clone Metin2), gli oggetti raccoglibili DAL TUO personaggio
-    //   mostrano un'etichetta VERDE CHIARO (G>180, R<110, B<110, G-R>80).
-    //   Gli oggetti di ALTRI giocatori (non tuoi) hanno l'etichetta grigia o invisibile.
-    //   Il bot scannerizza due colori: verde per gli item tuoi, bianco per i Yang.
+    // ITEM PERSONAGGIO — il tag "bashy"/"Anyasama" appare in CIANO/TEAL:
+    //   Pixel core:  R≈70-130, G≈180-220, B≈190-230
+    //   Criteri:     B > 160, G > 155, R < 140, B > R+50
+    //   Esclude: verde erba (B basso), rosso mob (R alto), bianco UI (R alto)
     //
-    // Cella 20px, campionamento step 4, minimo 5 hits per evitare rumore singolo.
-    // Distanza massima dal personaggio: 22% della larghezza schermo.
-    // Max 4 oggetti per ciclo, ordinati dal più vicino al personaggio.
+    // ITEM BIANCO — nome item "Spada Lunga+0" appare BIANCO:
+    //   Criteri:     R > 220, G > 220, B > 220, max-min < 30 (non saturo)
+    //   Raccoglie qualsiasi item bianco vicino (potrebbero essere tuoi)
+    //
+    // Zona: 20-80% x, 40-85% y (più ampia per catturare drop lontani).
+    // Cella 18px, step 3 (più denso = più hits per cella).
+    // Minimo 4 hits su ~36 campioni per confermare un'etichetta.
+    // Distanza max 28% larghezza (copre tutto il cerchio di drop vicini).
     // ═══════════════════════════════════════════════════════════════════════════
     private fun findLootItems(bmp: Bitmap): List<Pair<Float, Float>> {
         val w = bmp.width; val h = bmp.height
-        val x0 = (w * 0.25f).toInt(); val x1 = (w * 0.75f).toInt()
-        val y0 = (h * 0.45f).toInt(); val y1 = (h * 0.82f).toInt()
-        val cell = 20
-        val step = 4
+        val x0 = (w * 0.20f).toInt(); val x1 = (w * 0.80f).toInt()
+        val y0 = (h * 0.40f).toInt(); val y1 = (h * 0.85f).toInt()
+        val cell = 18
+        val step = 3
         val charX = w * 0.50f; val charY = h * 0.60f
-        val maxDist = w * 0.22f; val maxDistSq = maxDist * maxDist
+        val maxDist = w * 0.28f; val maxDistSq = maxDist * maxDist
         val found = mutableListOf<Pair<Float, Float>>()
+
+        var totalYangHits = 0; var totalItemHits = 0; var totalWhiteHits = 0
 
         var cy = y0
         while (cy + cell <= y1) {
@@ -362,8 +380,9 @@ class BotAccessibilityService : AccessibilityService() {
                 val ddx = itemX - charX; val ddy = itemY - charY
                 if (ddx * ddx + ddy * ddy > maxDistSq) { cx += cell; continue }
 
-                var hitsYang  = 0   // testo bianco brillante = Yang
-                var hitsItem  = 0   // testo verde chiaro = oggetto tuo personaggio
+                var hitsYang  = 0   // giallo-oro = Yang
+                var hitsItem  = 0   // ciano = item tuo personaggio
+                var hitsWhite = 0   // bianco = nome item (potrebbe essere tuo)
 
                 var dy2 = 0
                 while (dy2 < cell) {
@@ -372,25 +391,30 @@ class BotAccessibilityService : AccessibilityService() {
                         val p = bmp.getPixel(cx + dx2, cy + dy2)
                         val r = Color.red(p); val g = Color.green(p); val b = Color.blue(p)
 
-                        // Yang — testo bianco brillante (tutti i canali alti, non saturo)
-                        // In Metin2/Mobile2 il testo "Yang" e tutte le monete sono bianchi.
-                        // Escludiamo pixel con forte saturazione per evitare UI colorata.
-                        val minChannel = minOf(r, g, b)
-                        val maxChannel = maxOf(r, g, b)
-                        val saturation = maxChannel - minChannel
-                        if (r > 230 && g > 230 && b > 230 && saturation < 25) hitsYang++
-
-                        // Oggetto tuo personaggio — etichetta verde chiaro
-                        // G dominante, R e B bassi, verde abbastanza saturo.
-                        // Soglie strette per evitare vegetazione sullo sfondo.
-                        else if (g > 180 && r < 110 && b < 110 && g - r > 80 && g - b > 80) hitsItem++
-
+                        // Yang: giallo-oro caldo — R>G, R>>B, G non troppo basso
+                        if (r > 175 && g > 120 && b < 110 && r - g > 25 && r - b > 90) {
+                            hitsYang++; totalYangHits++
+                        }
+                        // Item personaggio: ciano/teal — B e G alti, R basso
+                        else if (b > 160 && g > 155 && r < 140 && b - r > 50) {
+                            hitsItem++; totalItemHits++
+                        }
+                        // Item bianco: testo nome item — tutti canali alti, non saturo
+                        else if (r > 220 && g > 220 && b > 220 && (maxOf(r, g, b) - minOf(r, g, b)) < 30) {
+                            hitsWhite++; totalWhiteHits++
+                        }
                         dx2 += step
                     }
                     dy2 += step
                 }
 
-                if (hitsYang >= 5 || hitsItem >= 5) {
+                if (hitsYang >= 4 || hitsItem >= 4 || hitsWhite >= 4) {
+                    val tipo = when {
+                        hitsYang >= 4  -> "Yang"
+                        hitsItem >= 4  -> "Item-cyan"
+                        else           -> "Item-white"
+                    }
+                    Log.d("BotLoot", "Trovato $tipo a ($itemX,$itemY) yang=$hitsYang cyan=$hitsItem white=$hitsWhite")
                     found.add(itemX to itemY)
                     if (found.size >= 8) break
                 }
@@ -398,6 +422,12 @@ class BotAccessibilityService : AccessibilityService() {
             }
             if (found.size >= 8) break
             cy += cell
+        }
+
+        if (found.isEmpty()) {
+            Log.d("BotLoot", "Nessun item. Hits totali: yang=$totalYangHits cyan=$totalItemHits white=$totalWhiteHits")
+        } else {
+            Log.d("BotLoot", "Trovati ${found.size} item da raccogliere")
         }
 
         return found.sortedBy { (fx, fy) ->

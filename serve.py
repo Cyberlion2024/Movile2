@@ -38,18 +38,27 @@ li{margin-bottom:8px;line-height:1.6;color:#ccc}
 <body>
 <div class="wrap">
   <h1>&#129302; Movile2 Bot</h1>
-  <p class="sub">Bot Android per MMORPG &mdash; Kotlin + Accessibility Service &mdash; <strong>v11</strong></p>
+  <p class="sub">Bot Android per MMORPG &mdash; Kotlin + Accessibility Service &mdash; <strong>v12</strong></p>
+
+  <div class="card">
+    <h2>&#10024; Novit&agrave; v12 &mdash; Fix Joystick Permanente + Yang Giallo + Logging</h2>
+    <ul>
+      <li><strong>FIX CRITICO: Joystick blocca tutto</strong> <span class="new">BUG CRITICO RISOLTO</span> &mdash; Bug Kotlin: <code>return</code> dentro <code>.let{}</code> e <code>.forEach{}</code> &egrave; un <em>local return</em> — esce solo dal lambda, non dalla funzione. Risultato: ogni tap del bot (attacco, pozione, skill) resettava il timer joystick e manteneva <code>joystickActive=true</code> per sempre, bloccando attacco, loot e pozze. Ora usa <code>.any{}</code> con controlli espliciti per uscire correttamente dalla funzione.</li>
+      <li><strong>FIX Yang: testo giallo-oro</strong> <span class="new">FIX</span> &mdash; dall&apos;analisi dello screenshot reale: il testo &ldquo;Yang&rdquo; &egrave; GIALLO ORO CALDO (R&asymp;215-240, G&asymp;170-195, B&asymp;35-70). v11 sbagliava usando rilevamento bianco. Nuovi criteri: R&gt;175, G&gt;120, B&lt;110, R-G&gt;25, R-B&gt;90</li>
+      <li><strong>FIX item personaggio: testo ciano</strong> <span class="new">FIX</span> &mdash; il tag &ldquo;bashy&rdquo;/&ldquo;Anyasama&rdquo; vicino agli item appare in CIANO/TEAL (R&asymp;70-130, G&asymp;180-220, B&asymp;190-230). Criteri: B&gt;160, G&gt;155, R&lt;140, B-R&gt;50</li>
+      <li><strong>Logging completo via logcat</strong> <span class="new">NEW</span> &mdash; tag <code>BotAtk</code>, <code>BotMob</code>, <code>BotLoot</code>, <code>BotJoy</code>: ogni azione del bot &egrave; ora tracciata in logcat per debug preciso</li>
+      <li><strong>Zona loot estesa</strong> <span class="new">NEW</span> &mdash; da 25-75% a 20-80% x, da 45-82% a 40-85% y. Distanza max da 22% a 28% larghezza. Cattura drop anche pi&ugrave; lontani dal personaggio</li>
+    </ul>
+    <div class="ok">&#9989; Joystick: ora blocca SOLO i tocchi umani reali, non i gesti del bot. Yang e item rilevati dai colori reali dello screenshot. Usa <code>adb logcat -s BotAtk BotMob BotLoot BotJoy</code> per debug in tempo reale.</div>
+  </div>
 
   <div class="card">
     <h2>&#10024; Novit&agrave; v11 &mdash; Fix Yang + Oggetti Personaggio + Attacco con Pozze</h2>
     <ul>
-      <li><strong>Fix Yang</strong> <span class="new">FIX</span> &mdash; i Yang a terra in Mobile2 vengono mostrati con testo BIANCO (R&gt;230, G&gt;230, B&gt;230, saturazione &lt;25). Il vecchio approccio cercava pixel giallo-oro e generava falsi positivi su sabbia e UI. Ora rileva solo il bianco brillante del testo &ldquo;Yang&rdquo;</li>
-      <li><strong>Oggetti solo del tuo personaggio</strong> <span class="new">FIX</span> &mdash; il bot raccoglie solo oggetti con etichetta verde chiaro (G&gt;180, R&lt;110, B&lt;110) che sono appunto gli item destinati al tuo personaggio in Mobile2. Nomi configurabili: <strong>bashy</strong> e <strong>Anyasama</strong> (modificabili nella schermata principale)</li>
-      <li><strong>Attacco continuo con pozze attive</strong> <span class="new">FIX</span> &mdash; risolto il problema del gap nell&apos;attacco quando scatta una pozione. Prima il gesto accessibility della pozione interrompeva il tap di attacco corrente. Ora dopo ogni pozione l&apos;attacco riparte immediatamente (50ms) senza pausa visibile</li>
-      <li><strong>Loot + Attacco coesistono</strong> <span class="new">FIX</span> &mdash; attivare il loot non ferma pi&ugrave; l&apos;attacco. Le due funzioni operano in parallelo indipendentemente</li>
-      <li><strong>Campo nomi personaggio in app</strong> <span class="new">NEW</span> &mdash; nella schermata principale &egrave; ora presente il campo &ldquo;Nomi personaggio&rdquo; dove inserire i tuoi nick separati da virgola. Default: <code>bashy,Anyasama</code></li>
+      <li><strong>Fix pozze con attacco</strong> &mdash; dopo ogni pozione l&apos;attacco riparte in 50ms</li>
+      <li><strong>Loot + Attacco coesistono</strong> &mdash; attivare il loot non ferma pi&ugrave; l&apos;attacco</li>
+      <li><strong>Campo nomi personaggio in app</strong> &mdash; bashy, Anyasama configurabili</li>
     </ul>
-    <div class="ok">&#9989; Yang = testo bianco a terra. Oggetti = etichetta verde del tuo personaggio. Pozze ON con Attacco ON = attacco continuo senza interruzioni.</div>
   </div>
 
   <div class="card">

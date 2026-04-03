@@ -12,6 +12,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.util.Log
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
@@ -60,31 +61,42 @@ class OverlayService : Service() {
     private val JOY_RESUME_DELAY_MS = 1500L
 
     private fun onOutsideTouch(rx: Float, ry: Float) {
-        // Se il bot sta guidando il joystick (walk mode) NON rileviamo joystick manuale:
-        // i gesti walk cadono DENTRO la zona joystick per definizione.
+        // Walk mode: i gesti walk arrivano nella zona joystick, ignoriamo tutto
         if (BotState.walkRunning) return
 
-        // Ignora ACTION_OUTSIDE generati dai gesti del bot stesso (dispatchGesture):
-        // filtriamo le coordinate vicine alle posizioni configurate del bot.
         val density = resources.displayMetrics.density
         val botRadius = 90f * density
-        BotState.attackPos?.let { (ax, ay) ->
-            if (abs(rx - ax) < botRadius && abs(ry - ay) < botRadius) return
+
+        // BUG FIX v12: i return dentro .let{} e .forEach{} in Kotlin sono "local return"
+        // (escono solo dal lambda, NON dalla funzione). Per uscire dalla funzione
+        // quando un gesto è del bot, usiamo controlli booleani espliciti con any().
+        val attackPos = BotState.attackPos
+        if (attackPos != null &&
+            abs(rx - attackPos.first) < botRadius &&
+            abs(ry - attackPos.second) < botRadius) {
+            Log.d("BotJoy", "Ignorato: gesto bot ATT a ($rx,$ry)")
+            return
         }
-        BotState.potionSlots.forEach { (px, py) ->
-            if (abs(rx - px) < botRadius && abs(ry - py) < botRadius) return
+        if (BotState.potionSlots.any { (px, py) ->
+                abs(rx - px) < botRadius && abs(ry - py) < botRadius }) {
+            Log.d("BotJoy", "Ignorato: gesto bot POZ a ($rx,$ry)")
+            return
         }
-        BotState.skillSlots.forEach { (sx, sy) ->
-            if (abs(rx - sx) < botRadius && abs(ry - sy) < botRadius) return
+        if (BotState.skillSlots.any { (sx, sy) ->
+                abs(rx - sx) < botRadius && abs(ry - sy) < botRadius }) {
+            Log.d("BotJoy", "Ignorato: gesto bot SKILL a ($rx,$ry)")
+            return
         }
 
         // Rilevamento tocco umano nella zona joystick
         val center = BotState.joystickPos ?: return
         val halfZone = 140f * density
         if (abs(rx - center.first) < halfZone && abs(ry - center.second) < halfZone) {
+            Log.d("BotJoy", "JOYSTICK MANUALE rilevato a ($rx,$ry) — pausa 1.5s")
             BotState.joystickActive = true
             joystickResumeRunnable?.let { handler.removeCallbacks(it) }
             val r = Runnable {
+                Log.d("BotJoy", "Ripresa dopo joystick manuale")
                 BotAccessibilityService.instance?.resumeAfterJoystick()
                     ?: run { BotState.joystickActive = false }
             }
