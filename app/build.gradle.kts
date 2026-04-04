@@ -11,8 +11,8 @@ android {
         applicationId = "com.movile2.bot"
         minSdk = 26
         targetSdk = 34
-        versionCode = 4
-        versionName = "8.2"
+        versionCode = 5
+        versionName = "15.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
