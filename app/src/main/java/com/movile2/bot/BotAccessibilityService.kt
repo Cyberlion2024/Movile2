@@ -58,6 +58,23 @@ class BotAccessibilityService : AccessibilityService() {
     //   - Quando detectedMobCount >= pullTargetCount: smette di camminare,
     //     attacca e le skill si attivano (skillLoop le controlla già)
     // ═══════════════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════════════════
+    // FIX v15 - FARM LOOP RISCRITTO
+    //
+    // Logica CORRETTA per Mobile2:
+    // 1. Se ci sono mob rilevati (mobNearby=true):
+    //    - Muove joystick VERSO i mob (usa mobDirX/Y dal scanner, NON dall'AI)
+    //    - Poi attacca per aggroare
+    // 2. Se NON ci sono mob:
+    //    - Muove in direzione SEARCH (rotazione ogni 3s)
+    //    - NON attacca (non c'è nulla da attaccare)
+    // 3. PULL MODE:
+    //    - PULL_GATHER: muove + attacca (per aggroare mob che poi ti seguono)
+    //    - PULL_HOLD: sta fermo + attacca + skill (abbastanza mob raggruppati)
+    //
+    // BUG PRECEDENTE: usava action.dirX/Y che in certi stati era (0,-1) fisso
+    // invece della direzione reale verso i mob dal pixel scanner.
+    // ═══════════════════════════════════════════════════════════════════════════
     private val farmLoop = object : Runnable {
         override fun run() {
             if (!BotState.attackRunning) return
@@ -65,24 +82,49 @@ class BotAccessibilityService : AccessibilityService() {
                 handler.postDelayed(this, 200L); return
             }
 
-            // ── Chiede all'AI cosa fare in questo ciclo ──────────────────
+            // ── Chiede all'AI lo stato corrente (per logging e shouldWalk) ──
             val action = BotDecisionEngine.decide()
+            val hasMobs = BotState.mobNearby && BotState.detectedMobCount > 0
+
+            // ── Direzione: USA SEMPRE mobDirX/Y dal scanner se ci sono mob ──
+            // L'AI decide solo SE camminare, non DOVE. La direzione viene dal pixel scan.
+            val dirX: Float
+            val dirY: Float
+            if (hasMobs) {
+                // Mob rilevati: vai verso di loro
+                dirX = BotState.mobDirX
+                dirY = BotState.mobDirY
+            } else {
+                // Nessun mob: usa direzione di ricerca dall'AI
+                dirX = action.dirX
+                dirY = action.dirY
+            }
+
             BotLogger.d("BotAtk", "[${action.stateLabel}] walk=${action.shouldWalk}" +
-                " dir=(${
-                    "%.2f".format(action.dirX)},${
-                    "%.2f".format(action.dirY)})" +
+                " hasMobs=$hasMobs dir=(${"%.2f".format(dirX)},${"%.2f".format(dirY)})" +
                 " mobs=${BotState.detectedMobCount}")
 
-            if (action.shouldWalk && BotState.joystickPos != null) {
-                // Sposta il joystick nella direzione decisa dall'AI (110ms)
-                pushJoystick(action.dirX, action.dirY, 110L)
-                // Dopo che la gesture finisce (110ms) + buffer 30ms → attacca
-                handler.postDelayed({
-                    if (BotState.attackRunning && !BotState.joystickActive) tapAttack()
-                }, 140L)
-            } else {
-                // Nessun movimento (pull-hold o joystick non configurato) → attacca direttamente
-                tapAttack()
+            when {
+                // PULL_HOLD: stai fermo e attacca (hai abbastanza mob)
+                !action.shouldWalk -> {
+                    tapAttack()
+                }
+                // Mob rilevati: muovi verso di loro E attacca per aggroare
+                hasMobs && BotState.joystickPos != null -> {
+                    pushJoystick(dirX, dirY, 110L)
+                    handler.postDelayed({
+                        if (BotState.attackRunning && !BotState.joystickActive) tapAttack()
+                    }, 140L)
+                }
+                // Nessun mob ma devo camminare (SEARCH): muovi ma NON attaccare
+                BotState.joystickPos != null -> {
+                    pushJoystick(dirX, dirY, 110L)
+                    // Non attacchiamo: non c'è nulla da colpire
+                }
+                // Joystick non configurato: attacca e basta
+                else -> {
+                    if (hasMobs) tapAttack()
+                }
             }
 
             handler.postDelayed(this, 380L)
@@ -131,7 +173,9 @@ class BotAccessibilityService : AccessibilityService() {
     // ═══════════════════════════════════════════════════════════════════════════
     private val mobScanner = object : Runnable {
         override fun run() {
-            if (!BotState.attackRunning && !BotState.pullMode) return
+            // FIX v15: mobScanner gira se attackRunning OR pullMode OR walkRunning
+            // Prima si fermava troppo presto, ora continua finché serve movimento/attacco.
+            if (!BotState.attackRunning && !BotState.pullMode && !BotState.walkRunning) return
             // Scatta screenshot e aggiorna mobCount + direzione solo se il bot non è in pausa
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !BotState.joystickActive) {
                 doMobScan()
@@ -307,7 +351,7 @@ class BotAccessibilityService : AccessibilityService() {
     //
     // In PULL MODE: ogni abilità viene premuta solo se ci sono abbastanza mob
     // raggruppati (detectedMobCount >= pullTargetCount).
-    // ═══════════════════════════════════════════════════════════════════════════
+    // ═════════════════════════════════════════════════════��═════════════════════
     private val skillLoops: Array<Runnable> = Array(5) { idx ->
         object : Runnable {
             override fun run() {
@@ -591,9 +635,11 @@ class BotAccessibilityService : AccessibilityService() {
         BotState.detectedMobCount = 0
         BotState.mobDirX = 0f; BotState.mobDirY = -1f
         BotDecisionEngine.reset()
+        // FIX v15: avvia mobScanner PRIMA e aspetta 600ms per il primo scan
+        // prima di avviare farmLoop. Così farmLoop avrà dati di direzione mob.
         handler.post(mobScanner)
-        handler.post(farmLoop)
-        BotLogger.d("BotAtk", "farmLoop+AI avviati")
+        handler.postDelayed(farmLoop, 600L)
+        BotLogger.d("BotAtk", "mobScanner avviato, farmLoop parte tra 600ms")
     }
 
     fun stopAttack() {

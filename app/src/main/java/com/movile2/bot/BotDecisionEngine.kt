@@ -12,10 +12,11 @@ import kotlin.math.sqrt
 // che descrive cosa fare.
 //
 // STATI:
-//   SEARCH      → nessun mob visibile → cammina ruotando direzione ogni 3s
-//   APPROACH    → mob rilevati → cammina verso di loro
-//   PULL_GATHER → pull mode, mob insufficienti → cammina attraendo mob
-//   PULL_HOLD   → pull mode, N mob raggiunti → stai fermo e combatti
+//   SEARCH      → nessun mob visibile → cammina ruotando direzione ogni 3s, NON attacca
+//   APPROACH    → mob rilevati → cammina verso di loro E attacca
+//   PULL_GATHER → pull mode, mob insufficienti → cammina + attacca per aggroare
+//                 (in Mobile2 devi ATTACCARE i mob per farli aggroare, non basta avvicinarsi)
+//   PULL_HOLD   → pull mode, N mob raggiunti → stai fermo e combatti con skill
 //
 // ANTI-STUCK:
 //   Se in APPROACH per >5s e la direzione mob non cambia significativamente
