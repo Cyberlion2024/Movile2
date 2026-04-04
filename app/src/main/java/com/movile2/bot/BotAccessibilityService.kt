@@ -240,14 +240,17 @@ class BotAccessibilityService : AccessibilityService() {
     // countMobClusters: conta quanti mob distinti (con nome rosso) sono
     // visibili nella zona centrale dello schermo.
     //
-    // Zona di ricerca: 15%..85% x, 10%..65% y (area nomi mob in UE4)
+    // Zona di ricerca: 10%..90% x, 5%..80% y (espansa: i mob appaiono anche
+    // a y > 65% quando il personaggio è vicino al bordo inferiore dello schermo).
     // Colore nome nemico (UmobNamer.nameColor con medusman=true):
-    //   R > 160, G < 115, B < 115, R-G > 60
+    //   R > 150, G < 130, B < 140, R-G > 40
+    // Soglie allargate rispetto alla v17 per catturare varianti cromatiche
+    // (rosso-arancio, rosso-rosa) usate in Mobile2 per mob di diverso rank.
     // ───────────────────────────────────────────────────────────────────────────
     private fun countMobClusters(bmp: Bitmap): Int {
         val w = bmp.width; val h = bmp.height
-        val x0 = (w * 0.15f).toInt(); val x1 = (w * 0.85f).toInt()
-        val y0 = (h * 0.10f).toInt(); val y1 = (h * 0.65f).toInt()
+        val x0 = (w * 0.10f).toInt(); val x1 = (w * 0.90f).toInt()
+        val y0 = (h * 0.05f).toInt(); val y1 = (h * 0.80f).toInt()
         val cellPx = 40
         val sampleStep = 4
 
@@ -267,7 +270,7 @@ class BotAccessibilityService : AccessibilityService() {
                     while (sy < cy0 + cellPx && sy < y1) {
                         val p = bmp.getPixel(sx, sy)
                         val r = Color.red(p); val g = Color.green(p); val b = Color.blue(p)
-                        if (r > 160 && g < 115 && b < 115 && r - g > 60) hits++
+                        if (r > 150 && g < 130 && b < 140 && r - g > 40) hits++
                         sy += sampleStep
                     }
                     sx += sampleStep
@@ -311,8 +314,8 @@ class BotAccessibilityService : AccessibilityService() {
     // ───────────────────────────────────────────────────────────────────────────
     private fun updateMobDirection(bmp: Bitmap) {
         val w = bmp.width; val h = bmp.height
-        val x0 = (w * 0.12f).toInt(); val x1 = (w * 0.88f).toInt()
-        val y0 = (h * 0.08f).toInt(); val y1 = (h * 0.68f).toInt()
+        val x0 = (w * 0.10f).toInt(); val x1 = (w * 0.90f).toInt()
+        val y0 = (h * 0.05f).toInt(); val y1 = (h * 0.80f).toInt()
         val step = 5
         var sumX = 0L; var sumY = 0L; var n = 0L
         var sx = x0
@@ -321,7 +324,7 @@ class BotAccessibilityService : AccessibilityService() {
             while (sy < y1) {
                 val p = bmp.getPixel(sx, sy)
                 val r = Color.red(p); val g = Color.green(p); val b = Color.blue(p)
-                if (r > 160 && g < 115 && b < 115 && r - g > 60) {
+                if (r > 150 && g < 130 && b < 140 && r - g > 40) {
                     sumX += sx; sumY += sy; n++
                 }
                 sy += step

@@ -83,9 +83,11 @@ object BotDecisionEngine {
         return when (currentState) {
 
             BotAIState.SEARCH -> {
-                // Ruota la direzione ogni 3s per scandire l'area invece di
-                // procedere sempre dritto e uscire dalla zona dei mob.
-                if (now - lastSearchRotateAt > 3_000L) {
+                // Ruota la direzione ogni 2s per scandire l'area in modo
+                // più dinamico. Con 60° per passo, 6 passi = 360° = ciclo completo
+                // ogni 12s. Ridotto da 3s a 2s: il bot cambia prima direzione
+                // invece di sembrare bloccato in linea retta.
+                if (now - lastSearchRotateAt > 2_000L) {
                     searchAngleDeg     = (searchAngleDeg + 60f) % 360f
                     lastSearchRotateAt = now
                 }
@@ -132,7 +134,7 @@ object BotDecisionEngine {
                 if (hasMobs) {
                     BotAction(true, BotState.mobDirX, BotState.mobDirY, "PULL-RACCOGLI")
                 } else {
-                    if (now - lastSearchRotateAt > 3_000L) {
+                    if (now - lastSearchRotateAt > 2_000L) {
                         searchAngleDeg     = (searchAngleDeg + 60f) % 360f
                         lastSearchRotateAt = now
                     }
