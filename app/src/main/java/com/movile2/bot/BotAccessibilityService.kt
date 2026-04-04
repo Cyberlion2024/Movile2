@@ -76,26 +76,28 @@ class BotAccessibilityService : AccessibilityService() {
             val atkPos = BotState.attackPos
             
             when {
-                // PULL_HOLD: stai fermo, solo attacco
+                // PULL_HOLD: stai fermo, solo attacco.
+                // 250ms invece di 350ms: in modalità statica non c'è swipe che compete
+                // con il tap → possiamo attaccare più spesso senza conflitti gesture.
                 !action.shouldWalk && atkPos != null -> {
                     tapAttack()
-                    handler.postDelayed(this, 350L)
+                    handler.postDelayed(this, 250L)
                 }
                 
                 // Cammina + attacca (se mob presenti)
                 action.shouldWalk && joyPos != null -> {
-                    // STEP 1: Swipe joystick (250ms)
-                    doJoystickSwipe(joyPos, dirX, dirY, 250L) {
-                        // STEP 2: Dopo swipe finito, aspetta 30ms poi attacca
-                        if (hasMobs && atkPos != null) {
-                            handler.postDelayed({
-                                if (BotState.attackRunning && !BotState.joystickActive) {
-                                    tapAttack()
-                                }
-                            }, 30L)
+                    // STEP 1: Swipe joystick (350ms) — duty cycle 87.5% → movimento quasi continuo.
+                    // Aumentato da 250ms: personaggio tiene il joystick premuto più a lungo,
+                    // riducendo il gap tra swipe consecutive e l'effetto jitter/stop-go.
+                    doJoystickSwipe(joyPos, dirX, dirY, 350L) {
+                        // STEP 2: Swipe terminato → attacca subito (no delay — l'attack tap da
+                        // 40ms finisce ~10ms prima del prossimo swipe a 400ms, zero conflitti)
+                        if (hasMobs && atkPos != null && BotState.attackRunning && !BotState.joystickActive) {
+                            tapAttack()
                         }
                     }
-                    // Prossimo ciclo tra 400ms
+                    // Prossimo ciclo tra 400ms (safety net: garantisce la ripresa anche se
+                    // il callback non arriva per un bug del framework Android)
                     handler.postDelayed(this, 400L)
                 }
                 
@@ -317,7 +319,7 @@ class BotAccessibilityService : AccessibilityService() {
     // con un breve delay (50ms) per compensare la cancellazione del gesto
     // corrente da parte dell'accessibility framework. Questo elimina il "buco"
     // nell'attacco durante l'uso delle pozze.
-    // ═���═════════════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════════════════
     private val potionLoop = object : Runnable {
         override fun run() {
             if (!BotState.potionRunning) return
@@ -445,7 +447,7 @@ class BotAccessibilityService : AccessibilityService() {
             })
     }
 
-    // ═════════════════���═════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════════════════
     // RILEVAMENTO OGGETTI A TERRA — v13: ML Kit Text Recognition
     //
     // ML Kit riconosce il testo sullo screenshot e restituisce ogni blocco
@@ -619,7 +621,7 @@ class BotAccessibilityService : AccessibilityService() {
         }
     }
 
-    // ═══���═══════════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════════════════
     // API PUBBLICA
     // ═══════════════════════════════════════════════════════════════════════════
     fun startAttack() {
@@ -643,6 +645,13 @@ class BotAccessibilityService : AccessibilityService() {
         if (!BotState.pullMode) {
             handler.removeCallbacks(mobScanner)
             BotState.detectedMobCount = 0
+        }
+        // FIX: se la camminata standalone era attiva, riavviarla ora che il farmLoop
+        // (che la gestiva internamente) è stato fermato. Senza questo la camminata
+        // si bloccava silenziosamente ogni volta che l'attacco veniva disattivato.
+        if (BotState.walkRunning) {
+            walkPending = false
+            handler.post { dispatchWalk() }
         }
         BotLogger.d("BotAtk", "farmLoop fermato")
     }
