@@ -65,27 +65,23 @@ class BotAccessibilityService : AccessibilityService() {
                 handler.postDelayed(this, 200L); return
             }
 
-            val mobCount   = BotState.detectedMobCount
-            val hasMobs    = mobCount > 0
-            // Pull hold: abbastanza mob raggruppati → stai fermo e combatti
-            val pullHold   = BotState.pullMode && mobCount >= BotState.pullTargetCount
-            val hasJoy     = BotState.joystickPos != null
-            val shouldWalk = hasJoy && !pullHold
+            // ── Chiede all'AI cosa fare in questo ciclo ──────────────────
+            val action = BotDecisionEngine.decide()
+            BotLogger.d("BotAtk", "[${action.stateLabel}] walk=${action.shouldWalk}" +
+                " dir=(${
+                    "%.2f".format(action.dirX)},${
+                    "%.2f".format(action.dirY)})" +
+                " mobs=${BotState.detectedMobCount}")
 
-            BotLogger.d("BotAtk", "farm: mobs=$mobCount pull=$pullHold walk=$shouldWalk dir=(${
-                "%.2f".format(BotState.mobDirX)},${
-                "%.2f".format(BotState.mobDirY)})")
-
-            if (shouldWalk) {
-                // Spingi il joystick verso i mob (o avanti se non ne vedi)
-                val dirX = if (hasMobs) BotState.mobDirX else 0f
-                val dirY = if (hasMobs) BotState.mobDirY else -1f
-                pushJoystick(dirX, dirY, 110L)
-                // Dopo che la gesture di movimento finisce (110ms) + buffer 30ms → attacca
+            if (action.shouldWalk && BotState.joystickPos != null) {
+                // Sposta il joystick nella direzione decisa dall'AI (110ms)
+                pushJoystick(action.dirX, action.dirY, 110L)
+                // Dopo che la gesture finisce (110ms) + buffer 30ms → attacca
                 handler.postDelayed({
                     if (BotState.attackRunning && !BotState.joystickActive) tapAttack()
                 }, 140L)
             } else {
+                // Nessun movimento (pull-hold o joystick non configurato) → attacca direttamente
                 tapAttack()
             }
 
@@ -594,9 +590,10 @@ class BotAccessibilityService : AccessibilityService() {
         BotState.mobNearby = false
         BotState.detectedMobCount = 0
         BotState.mobDirX = 0f; BotState.mobDirY = -1f
+        BotDecisionEngine.reset()
         handler.post(mobScanner)
         handler.post(farmLoop)
-        BotLogger.d("BotAtk", "farmLoop avviato — attack+mob seeking attivi")
+        BotLogger.d("BotAtk", "farmLoop+AI avviati")
     }
 
     fun stopAttack() {
