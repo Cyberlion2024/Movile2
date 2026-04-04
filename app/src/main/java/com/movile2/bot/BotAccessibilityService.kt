@@ -30,7 +30,6 @@ class BotAccessibilityService : AccessibilityService() {
     private var gestureInProgress = false
 
     private val ATTACK_TAP_MS      = 40L
-    private val ATTACK_GAP_MS      = 280L
     private val POTION_TAP_MS      = 35L
     private val SKILL_TAP_MS       = 40L
     // Dopo ogni pozione, ripristina immediatamente il loop di attacco
@@ -38,45 +37,87 @@ class BotAccessibilityService : AccessibilityService() {
     private val ATTACK_RESTART_AFTER_POTION_MS = 50L
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // LOOP ATTACCO — tappa continuamente; nessun check mobNearby.
-    // Ciclo: tap 40ms → callback → gap 280ms → tap 40ms → ...
+    // FARM LOOP — integra movimento verso i mob + attacco in un unico ciclo.
+    //
+    // Logica per ciclo (~400ms totali):
+    //   1. Legge mob count e direzione dal BotState (aggiornati dal mobScanner)
+    //   2. Decide se camminare:
+    //      - SÌ se joystick configurato E non siamo in pull-hold (abbastanza mob)
+    //      - NO se pull mode ha già raggruppato N mob (si sta fermo e combatte)
+    //   3. Se camminare: spinge joystick 110ms in direzione mob (o avanti se no mob)
+    //      Poi dopo 140ms tappa il tasto attacco
+    //   4. Se non camminare: tappa subito il tasto attacco
+    //   5. Pianifica il prossimo ciclo a 380ms dall'inizio
+    //
+    // Questo rimpiazza sia il vecchio attackLoop (che tappava un punto fisso)
+    // sia il vecchio walkLoop (che era completamente separato dall'attacco).
+    // Il personaggio ora CERCA i mob, si avvicina e li attacca.
+    //
+    // PULL MODE:
+    //   - Finché detectedMobCount < pullTargetCount: cammina attraendo mob
+    //   - Quando detectedMobCount >= pullTargetCount: smette di camminare,
+    //     attacca e le skill si attivano (skillLoop le controlla già)
     // ═══════════════════════════════════════════════════════════════════════════
-    private val attackCallback = object : GestureResultCallback() {
-        override fun onCompleted(g: GestureDescription?) { scheduleNextAttack() }
-        override fun onCancelled(g: GestureDescription?)  { scheduleNextAttack() }
-    }
-
-    private fun scheduleNextAttack() {
-        if (!BotState.attackRunning) return
-        handler.postDelayed(attackLoop, ATTACK_GAP_MS)
-    }
-
-    private val attackLoop = object : Runnable {
+    private val farmLoop = object : Runnable {
         override fun run() {
             if (!BotState.attackRunning) return
             if (BotState.joystickActive) {
-                BotLogger.d("BotAtk", "Pausa: joystickActive=true")
-                scheduleNextAttack(); return
+                handler.postDelayed(this, 200L); return
             }
-            val pos = BotState.attackPos ?: run {
-                BotLogger.w("BotAtk", "attackPos non impostato!")
-                scheduleNextAttack(); return
+
+            val mobCount   = BotState.detectedMobCount
+            val hasMobs    = mobCount > 0
+            // Pull hold: abbastanza mob raggruppati → stai fermo e combatti
+            val pullHold   = BotState.pullMode && mobCount >= BotState.pullTargetCount
+            val hasJoy     = BotState.joystickPos != null
+            val shouldWalk = hasJoy && !pullHold
+
+            BotLogger.d("BotAtk", "farm: mobs=$mobCount pull=$pullHold walk=$shouldWalk dir=(${
+                "%.2f".format(BotState.mobDirX)},${
+                "%.2f".format(BotState.mobDirY)})")
+
+            if (shouldWalk) {
+                // Spingi il joystick verso i mob (o avanti se non ne vedi)
+                val dirX = if (hasMobs) BotState.mobDirX else 0f
+                val dirY = if (hasMobs) BotState.mobDirY else -1f
+                pushJoystick(dirX, dirY, 110L)
+                // Dopo che la gesture di movimento finisce (110ms) + buffer 30ms → attacca
+                handler.postDelayed({
+                    if (BotState.attackRunning && !BotState.joystickActive) tapAttack()
+                }, 140L)
+            } else {
+                tapAttack()
             }
-            try {
-                val ok = dispatchGesture(
-                    GestureDescription.Builder()
-                        .addStroke(GestureDescription.StrokeDescription(
-                            Path().apply { moveTo(pos.first, pos.second) }, 0L, ATTACK_TAP_MS))
-                        .build(), attackCallback, handler)
-                if (!ok) {
-                    BotLogger.w("BotAtk", "dispatchGesture=false (gesture in corso)")
-                    scheduleNextAttack()
-                }
-            } catch (e: Exception) {
-                BotLogger.e("BotAtk", "Errore gesto: ${e.message}")
-                scheduleNextAttack()
-            }
+
+            handler.postDelayed(this, 380L)
         }
+    }
+
+    private fun tapAttack() {
+        val pos = BotState.attackPos ?: return
+        try {
+            dispatchGesture(
+                GestureDescription.Builder()
+                    .addStroke(GestureDescription.StrokeDescription(
+                        Path().apply { moveTo(pos.first, pos.second) }, 0L, ATTACK_TAP_MS))
+                    .build(), null, null)
+        } catch (_: Exception) {}
+    }
+
+    private fun pushJoystick(dirX: Float, dirY: Float, durationMs: Long) {
+        val pos = BotState.joystickPos ?: return
+        val r = if (BotState.joystickRadius > 0f) BotState.joystickRadius * 0.65f
+                else resources.displayMetrics.widthPixels * 0.07f
+        try {
+            dispatchGesture(
+                GestureDescription.Builder()
+                    .addStroke(GestureDescription.StrokeDescription(
+                        Path().apply {
+                            moveTo(pos.first, pos.second)
+                            lineTo(pos.first + dirX * r, pos.second + dirY * r)
+                        }, 0L, durationMs))
+                    .build(), null, null)
+        } catch (_: Exception) {}
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -95,6 +136,7 @@ class BotAccessibilityService : AccessibilityService() {
     private val mobScanner = object : Runnable {
         override fun run() {
             if (!BotState.attackRunning && !BotState.pullMode) return
+            // Scatta screenshot e aggiorna mobCount + direzione solo se il bot non è in pausa
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !BotState.joystickActive) {
                 doMobScan()
             }
@@ -114,9 +156,12 @@ class BotAccessibilityService : AccessibilityService() {
                         val count = countMobClusters(b)
                         BotState.detectedMobCount = count
                         BotState.mobNearby = count > 0
-                        BotLogger.d("BotMob", "Mob: $count (pull=${BotState.pullMode})")
-                        if (BotState.pullMode && count > 0) updateMobDirection(b)
-                        else if (BotState.pullMode) { BotState.mobDirX = 0f; BotState.mobDirY = -1f }
+                        // Aggiorna sempre la direzione mob (serve al farmLoop per camminare verso i nemici)
+                        if (count > 0) updateMobDirection(b)
+                        else { BotState.mobDirX = 0f; BotState.mobDirY = -1f }
+                        BotLogger.d("BotMob", "Mob: $count dir=(${
+                            "%.2f".format(BotState.mobDirX)},${
+                            "%.2f".format(BotState.mobDirY)})")
                         b.recycle()
                     }
                 }
@@ -251,8 +296,8 @@ class BotAccessibilityService : AccessibilityService() {
                     // FIX: dopo la pozione, riavvia subito l'attacco se è attivo
                     // per eliminare il gap causato dall'interruzione del gesto precedente.
                     if (BotState.attackRunning) {
-                        handler.removeCallbacks(attackLoop)
-                        handler.postDelayed(attackLoop, ATTACK_RESTART_AFTER_POTION_MS)
+                        handler.removeCallbacks(farmLoop)
+                        handler.postDelayed(farmLoop, ATTACK_RESTART_AFTER_POTION_MS)
                     }
                 }, delay)
                 delay += 350L
@@ -447,7 +492,7 @@ class BotAccessibilityService : AccessibilityService() {
 
     private fun resumeAll() {
         if (BotState.attackRunning) {
-            handler.removeCallbacks(attackLoop); handler.post(attackLoop)
+            handler.removeCallbacks(farmLoop); handler.post(farmLoop)
             handler.removeCallbacks(mobScanner); handler.post(mobScanner)
         }
         if (BotState.potionRunning) {
@@ -485,36 +530,56 @@ class BotAccessibilityService : AccessibilityService() {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // CAMMINATA — il bot spinge il joystick in avanti continuamente
+    // CAMMINATA STANDALONE — solo quando Walk è ON senza Attack.
+    //
+    // FIX freeze v14: il vecchio sistema usava gesture da 400ms con callback
+    // immediato. Su molti dispositivi (MIUI, OneUI) questo loop ininterrotto di
+    // gesture lunghe satura la coda input del sistema → freeze che richiede
+    // riavvio del telefono.
+    //
+    // Soluzione: gesture più brevi (150ms) + guard flag `walkPending` per
+    // impedire doppio dispatch (callback + timer simultanei). Il personaggio
+    // si muove identicamente — la frequenza compensa la durata minore.
     // ═══════════════════════════════════════════════════════════════════════════
+    @Volatile private var walkPending = false
+
     private val walkCallback = object : GestureResultCallback() {
-        override fun onCompleted(g: GestureDescription?) { dispatchWalk() }
-        override fun onCancelled(g: GestureDescription?) { if (BotState.walkRunning) dispatchWalk() }
+        override fun onCompleted(g: GestureDescription?) {
+            walkPending = false
+            if (BotState.walkRunning) handler.postDelayed({ dispatchWalk() }, 30L)
+        }
+        override fun onCancelled(g: GestureDescription?) {
+            walkPending = false
+            if (BotState.walkRunning) handler.postDelayed({ dispatchWalk() }, 100L)
+        }
     }
 
     private fun dispatchWalk() {
-        if (!BotState.walkRunning || BotState.joystickActive) {
-            if (BotState.walkRunning) handler.postDelayed({ dispatchWalk() }, 300L)
+        if (!BotState.walkRunning || BotState.joystickActive || walkPending) {
+            if (BotState.walkRunning && !walkPending && !BotState.joystickActive)
+                handler.postDelayed({ dispatchWalk() }, 200L)
             return
         }
         val pos = BotState.joystickPos ?: return
         val r = if (BotState.joystickRadius > 0f) BotState.joystickRadius * 0.65f
-                else resources.displayMetrics.widthPixels * 0.07f * 0.65f
-        val (dirX, dirY) = if (BotState.pullMode && BotState.detectedMobCount > 0) {
-            BotState.mobDirX to BotState.mobDirY
-        } else {
-            0f to -1f
-        }
-        val endX = pos.first  + dirX * r
-        val endY = pos.second + dirY * r
+                else resources.displayMetrics.widthPixels * 0.07f
+        // Walk standalone: sempre in avanti (0, -1). Non usa mobDir — quella è per farmLoop.
+        val endX = pos.first
+        val endY = pos.second - r
+        walkPending = true
         try {
-            dispatchGesture(
+            val ok = dispatchGesture(
                 GestureDescription.Builder()
                     .addStroke(GestureDescription.StrokeDescription(
                         Path().apply { moveTo(pos.first, pos.second); lineTo(endX, endY) },
-                        0L, 400L))
+                        0L, 150L))   // 150ms: abbastanza per muovere il personaggio senza freeze
                     .build(), walkCallback, handler)
+            if (!ok) {
+                walkPending = false
+                if (BotState.walkRunning) handler.postDelayed({ dispatchWalk() }, 100L)
+            }
         } catch (_: Exception) {
+            walkPending = false
             if (BotState.walkRunning) handler.postDelayed({ dispatchWalk() }, 150L)
         }
     }
@@ -527,18 +592,22 @@ class BotAccessibilityService : AccessibilityService() {
         if (BotState.attackRunning) stopAttack()
         BotState.attackRunning = true
         BotState.mobNearby = false
+        BotState.detectedMobCount = 0
+        BotState.mobDirX = 0f; BotState.mobDirY = -1f
         handler.post(mobScanner)
-        handler.post(attackLoop)
+        handler.post(farmLoop)
+        BotLogger.d("BotAtk", "farmLoop avviato — attack+mob seeking attivi")
     }
 
     fun stopAttack() {
         BotState.attackRunning = false
         BotState.mobNearby = false
-        handler.removeCallbacks(attackLoop)
+        handler.removeCallbacks(farmLoop)
         if (!BotState.pullMode) {
             handler.removeCallbacks(mobScanner)
             BotState.detectedMobCount = 0
         }
+        BotLogger.d("BotAtk", "farmLoop fermato")
     }
 
     fun startPotion(intervalMs: Long = BotState.potionIntervalMs) {
@@ -594,22 +663,24 @@ class BotAccessibilityService : AccessibilityService() {
 
     fun stopWalk() {
         BotState.walkRunning = false
+        walkPending = false
     }
 
     fun startPullMode() {
         BotState.pullMode = true
+        // Il mobScanner serve anche senza attack per sapere quanti mob ci sono
         if (!BotState.attackRunning) {
             handler.removeCallbacks(mobScanner)
             handler.post(mobScanner)
         }
+        BotLogger.d("BotAtk", "Pull mode ON — target: ${BotState.pullTargetCount} mob")
     }
 
     fun stopPullMode() {
         BotState.pullMode = false
         BotState.detectedMobCount = 0
-        if (!BotState.attackRunning) {
-            handler.removeCallbacks(mobScanner)
-        }
+        if (!BotState.attackRunning) handler.removeCallbacks(mobScanner)
+        BotLogger.d("BotAtk", "Pull mode OFF")
     }
 
     fun stopAll() {
