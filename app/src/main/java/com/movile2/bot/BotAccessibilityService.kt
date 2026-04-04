@@ -95,7 +95,12 @@ class BotAccessibilityService : AccessibilityService() {
                 // CAMMINA (joystick configurato): ciclo callback-driven.
                 // Il prossimo ciclo parte quando lo swipe finisce, non da un timer fisso.
                 // → duty cycle ~93%: 380ms premuto, 20-55ms rilasciato tra i cicli.
+                // Nota: usiamo `val self = this` per catturare il Runnable prima di
+                // entrare nel lambda: dentro un lambda `this` non punta più all'oggetto
+                // esterno, e referenziare `farmLoop` per nome causerebbe "not initialized"
+                // perché il Kotlin compiler vede una auto-referenza durante l'init del val.
                 action.shouldWalk && joyPos != null -> {
+                    val self = this
                     handler.removeCallbacks(farmLoopSafety)
                     doJoystickSwipe(joyPos, dirX, dirY, 380L) {
                         handler.removeCallbacks(farmLoopSafety)
@@ -104,10 +109,10 @@ class BotAccessibilityService : AccessibilityService() {
                             // Mob presenti: attacca e poi riprendi il walk dopo 55ms
                             // (tempo sufficiente per completare il tap da 40ms + buffer 15ms)
                             tapAttack()
-                            handler.postDelayed(farmLoop, 55L)
+                            handler.postDelayed(self, 55L)
                         } else {
                             // Nessun mob: riprendi il walk quasi subito (SEARCH fluido)
-                            handler.postDelayed(farmLoop, 20L)
+                            handler.postDelayed(self, 20L)
                         }
                     }
                     // Safety: se il callback non arriva, riprendi entro 600ms
