@@ -37,22 +37,29 @@ class BotAccessibilityService : AccessibilityService() {
     private val ATTACK_RESTART_AFTER_POTION_MS = 50L
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // v17 - FARM LOOP SEMPLIFICATO
+    // v18 - FARM LOOP CALLBACK-DRIVEN
     //
-    // PROBLEMA v16: Android Accessibility permette SOLO UNA gesture alla volta.
-    // Quando tapAttack() partiva, CANCELLAVA la gesture del joystick.
-    // Risultato: il personaggio non camminava.
+    // PROBLEMA v17: il loop usava un timer fisso a 400ms come driver principale.
+    // Swipe da 350ms ogni 400ms = 87.5% duty cycle → ancora 50ms di pausa.
     //
-    // SOLUZIONE v17:
-    // 1. UN SOLO loop (farmLoop) che alterna WALK e ATTACK in sequenza
-    // 2. Walk: swipe lungo (250ms) verso i mob
-    // 3. Pausa breve (30ms)
-    // 4. Attack: tap (40ms)
-    // 5. Ciclo ogni 400ms totali
-    //
-    // Questo garantisce che le gesture non si sovrappongono MAI.
+    // SOLUZIONE v18:
+    // 1. Il prossimo ciclo parte dal CALLBACK del swipe, non da un timer fisso.
+    //    → swipe 380ms: dopo il completamento, pausa di soli 20ms (no mob)
+    //      oppure 55ms (mob: 40ms attack tap + 15ms buffer). Duty cycle ~93-95%.
+    // 2. Un safety runnable a 600ms copre il caso rarissimo in cui Android
+    //    non invoca il callback (gesture dropped sotto carico di sistema).
+    // 3. L'attacco scatta SOLO se hasMobs=true: niente tap "a vuoto" in SEARCH.
+    // 4. PULL_HOLD: attacco rapido ogni 200ms, anch'esso con check hasMobs.
     // ═══════════════════════════════════════════════════════════════════════════
-    
+
+    // Safety net: se il callback del swipe non arriva, riavvia entro 600ms.
+    private val farmLoopSafety = Runnable {
+        if (BotState.attackRunning && !BotState.joystickActive) {
+            handler.removeCallbacks(farmLoop)
+            handler.post(farmLoop)
+        }
+    }
+
     private val farmLoop = object : Runnable {
         override fun run() {
             if (!BotState.attackRunning) return
@@ -60,53 +67,61 @@ class BotAccessibilityService : AccessibilityService() {
                 handler.postDelayed(this, 200L)
                 return
             }
-            
+
             val action = BotDecisionEngine.decide()
             val hasMobs = BotState.mobNearby && BotState.detectedMobCount > 0
-            
-            // Log stato
+
             BotLogger.d("BotAtk", "[${action.stateLabel}] mobs=${BotState.detectedMobCount}" +
                 " walk=${action.shouldWalk} dir=(${"%.2f".format(BotState.mobDirX)},${"%.2f".format(BotState.mobDirY)})")
-            
-            // Direzione: mob se presenti, altrimenti search dall'AI
+
             val dirX = if (hasMobs) BotState.mobDirX else action.dirX
             val dirY = if (hasMobs) BotState.mobDirY else action.dirY
-            
+
             val joyPos = BotState.joystickPos
             val atkPos = BotState.attackPos
-            
+
             when {
-                // PULL_HOLD: stai fermo, solo attacco.
-                // 250ms invece di 350ms: in modalità statica non c'è swipe che compete
-                // con il tap → possiamo attaccare più spesso senza conflitti gesture.
-                !action.shouldWalk && atkPos != null -> {
+                // PULL_HOLD: fermo + attacco rapido.
+                // Check hasMobs difensivo: PULL_HOLD richiede mob per definizione,
+                // ma se il scanner è in ritardo evitiamo tap inutili.
+                !action.shouldWalk && hasMobs && atkPos != null -> {
                     tapAttack()
-                    handler.postDelayed(this, 250L)
+                    handler.postDelayed(this, 200L)
                 }
-                
-                // Cammina + attacca (se mob presenti)
+
+                // PULL_HOLD senza mob ancora rilevati: aspetta il prossimo scan
+                !action.shouldWalk && !hasMobs -> {
+                    handler.postDelayed(this, 300L)
+                }
+
+                // CAMMINA (joystick configurato): ciclo callback-driven.
+                // Il prossimo ciclo parte quando lo swipe finisce, non da un timer fisso.
+                // → duty cycle ~93%: 380ms premuto, 20-55ms rilasciato tra i cicli.
                 action.shouldWalk && joyPos != null -> {
-                    // STEP 1: Swipe joystick (350ms) — duty cycle 87.5% → movimento quasi continuo.
-                    // Aumentato da 250ms: personaggio tiene il joystick premuto più a lungo,
-                    // riducendo il gap tra swipe consecutive e l'effetto jitter/stop-go.
-                    doJoystickSwipe(joyPos, dirX, dirY, 350L) {
-                        // STEP 2: Swipe terminato → attacca subito (no delay — l'attack tap da
-                        // 40ms finisce ~10ms prima del prossimo swipe a 400ms, zero conflitti)
-                        if (hasMobs && atkPos != null && BotState.attackRunning && !BotState.joystickActive) {
+                    handler.removeCallbacks(farmLoopSafety)
+                    doJoystickSwipe(joyPos, dirX, dirY, 380L) {
+                        handler.removeCallbacks(farmLoopSafety)
+                        if (!BotState.attackRunning || BotState.joystickActive) return@doJoystickSwipe
+                        if (hasMobs && atkPos != null) {
+                            // Mob presenti: attacca e poi riprendi il walk dopo 55ms
+                            // (tempo sufficiente per completare il tap da 40ms + buffer 15ms)
                             tapAttack()
+                            handler.postDelayed(farmLoop, 55L)
+                        } else {
+                            // Nessun mob: riprendi il walk quasi subito (SEARCH fluido)
+                            handler.postDelayed(farmLoop, 20L)
                         }
                     }
-                    // Prossimo ciclo tra 400ms (safety net: garantisce la ripresa anche se
-                    // il callback non arriva per un bug del framework Android)
-                    handler.postDelayed(this, 400L)
+                    // Safety: se il callback non arriva, riprendi entro 600ms
+                    handler.postDelayed(farmLoopSafety, 600L)
                 }
-                
-                // Nessun joystick configurato ma attacco si
+
+                // Nessun joystick configurato: attacca solo se ci sono mob
                 atkPos != null -> {
                     if (hasMobs) tapAttack()
-                    handler.postDelayed(this, 350L)
+                    handler.postDelayed(this, 300L)
                 }
-                
+
                 // Nulla configurato
                 else -> {
                     handler.postDelayed(this, 400L)
@@ -331,8 +346,10 @@ class BotAccessibilityService : AccessibilityService() {
                     tapSingle(px, py, POTION_TAP_MS)
                     // FIX: dopo la pozione, riavvia subito il farmLoop se è attivo
                     // per eliminare il gap causato dall'interruzione del gesto precedente.
+                    // Cancella anche il safety per evitare doppio avvio.
                     if (BotState.attackRunning) {
                         handler.removeCallbacks(farmLoop)
+                        handler.removeCallbacks(farmLoopSafety)
                         handler.postDelayed(farmLoop, ATTACK_RESTART_AFTER_POTION_MS)
                     }
                 }, delay)
@@ -345,15 +362,27 @@ class BotAccessibilityService : AccessibilityService() {
     // ═══════════════════════════════════════════════════════════════════════════
     // LOOP ABILITÀ — 5 timer indipendenti.
     //
-    // In PULL MODE: ogni abilità viene premuta solo se ci sono abbastanza mob
-    // raggruppati (detectedMobCount >= pullTargetCount).
-    // ═════════════════════════════════════════════════════��═════════════════════
+    // Senza PULL MODE: ogni skill scatta sempre (canFire=true) al suo intervallo.
+    // Con PULL MODE: scatta solo se detectedMobCount >= pullTargetCount.
+    //
+    // FIX joystickActive: se l'utente sta usando il joystick manualmente,
+    // invece di saltare la skill e attendere tutto l'intervallo (es. 5s),
+    // la riprogrammiamo dopo 300ms. Appena il joystick si libera, la skill
+    // viene premuta senza aspettare il prossimo ciclo completo.
+    // ═══════════════════════════════════════════════════════════════════════════
     private val skillLoops: Array<Runnable> = Array(5) { idx ->
         object : Runnable {
             override fun run() {
                 if (!BotState.skillsRunning) return
                 val slots = BotState.skillSlots
-                if (idx < slots.size && !BotState.joystickActive) {
+                val interval = BotState.skillIntervals.getOrElse(idx) { 5000L }.coerceAtLeast(500L)
+
+                if (idx < slots.size) {
+                    if (BotState.joystickActive) {
+                        // Joystick manuale: riprova tra 300ms invece di perdere il ciclo
+                        handler.postDelayed(this, 300L)
+                        return
+                    }
                     val canFire = if (BotState.pullMode) {
                         BotState.detectedMobCount >= BotState.pullTargetCount
                     } else {
@@ -364,7 +393,6 @@ class BotAccessibilityService : AccessibilityService() {
                         tapSingle(sx, sy, SKILL_TAP_MS)
                     }
                 }
-                val interval = BotState.skillIntervals.getOrElse(idx) { 5000L }.coerceAtLeast(500L)
                 handler.postDelayed(this, interval)
             }
         }
@@ -528,7 +556,9 @@ class BotAccessibilityService : AccessibilityService() {
 
     private fun resumeAll() {
         if (BotState.attackRunning) {
-            handler.removeCallbacks(farmLoop); handler.post(farmLoop)
+            handler.removeCallbacks(farmLoop)
+            handler.removeCallbacks(farmLoopSafety)
+            handler.post(farmLoop)
             handler.removeCallbacks(mobScanner); handler.post(mobScanner)
         }
         if (BotState.potionRunning) {
@@ -632,23 +662,24 @@ class BotAccessibilityService : AccessibilityService() {
         BotState.detectedMobCount = 0
         BotState.mobDirX = 0f; BotState.mobDirY = -1f
         BotDecisionEngine.reset()
-        // v17: mobScanner parte subito, farmLoop dopo 600ms (tempo per primo scan)
+        // v18: mobScanner parte subito. farmLoop parte dopo 600ms così il primo scan
+        // (ogni 500ms) è già pronto: il loop conosce i mob prima del primo ciclo.
         handler.post(mobScanner)
         handler.postDelayed(farmLoop, 600L)
-        BotLogger.d("BotAtk", "v17: mobScanner + farmLoop avviati")
+        BotLogger.d("BotAtk", "v18: mobScanner + farmLoop (callback-driven) avviati")
     }
 
     fun stopAttack() {
         BotState.attackRunning = false
         BotState.mobNearby = false
         handler.removeCallbacks(farmLoop)
+        handler.removeCallbacks(farmLoopSafety)
         if (!BotState.pullMode) {
             handler.removeCallbacks(mobScanner)
             BotState.detectedMobCount = 0
         }
-        // FIX: se la camminata standalone era attiva, riavviarla ora che il farmLoop
-        // (che la gestiva internamente) è stato fermato. Senza questo la camminata
-        // si bloccava silenziosamente ogni volta che l'attacco veniva disattivato.
+        // Se la camminata standalone era attiva, riavviarla: il farmLoop la gestiva
+        // internamente e ora che è fermato il personaggio si bloccherebbe altrimenti.
         if (BotState.walkRunning) {
             walkPending = false
             handler.post { dispatchWalk() }

@@ -31,7 +31,7 @@ class OverlayService : Service() {
     private var captureView: View? = null
     private var captureTimeoutRunnable: Runnable? = null
     private var slotsAddedDuringCapture = 0
-    private val MAX_POT_SLOTS = 3
+    private val MAX_POT_SLOTS = 7
     private val MAX_SKILL_SLOTS = 5
 
     private var tvStatus: TextView? = null
@@ -419,7 +419,7 @@ class OverlayService : Service() {
         BotState.potionSlots.clear(); BotState.potionRunning = false
         BotAccessibilityService.instance?.stopPotion()
         slotsAddedDuringCapture = 0
-        showStatus("Tocca slot 1/$MAX_POT_SLOTS... (5s)", Color.YELLOW)
+        showStatus("Tocca slot 1/$MAX_POT_SLOTS... (10s)", Color.YELLOW)
         val cv = makeCaptureOverlay()
         cv.setOnTouchListener { _, e ->
             if (e.action == MotionEvent.ACTION_DOWN && captureMode == CaptureMode.POTION) {
@@ -434,7 +434,7 @@ class OverlayService : Service() {
             true
         }
         wm.addView(cv, captureOverlayParams()); captureView = cv
-        scheduleCaptureTimeout()
+        scheduleCaptureTimeout(10_000L)
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -548,10 +548,10 @@ class OverlayService : Service() {
         if (panelCollapsed) handler.postDelayed({ if (panelCollapsed) tvStatus?.visibility = View.GONE }, 2500L)
     }
 
-    private fun scheduleCaptureTimeout() {
+    private fun scheduleCaptureTimeout(delayMs: Long = 5_000L) {
         val timeout = Runnable { if (captureView != null) finishCapture(null) }
         captureTimeoutRunnable = timeout
-        handler.postDelayed(timeout, 5000L)
+        handler.postDelayed(timeout, delayMs)
     }
 
     private fun makeCaptureOverlay() = View(this).apply { setBackgroundColor(Color.argb(1, 0, 0, 0)) }
