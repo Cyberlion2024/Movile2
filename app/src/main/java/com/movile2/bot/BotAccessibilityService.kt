@@ -37,123 +37,108 @@ class BotAccessibilityService : AccessibilityService() {
     private val ATTACK_RESTART_AFTER_POTION_MS = 50L
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // v16 - SISTEMA MOVIMENTO + ATTACCO COMPLETAMENTE RISCRITTO
+    // v17 - FARM LOOP SEMPLIFICATO
     //
-    // PROBLEMA v15: gesture corte (110ms) con gap (270ms) causavano movimento a scatti.
-    // Android vuole una gesture CONTINUA per tenere il joystick premuto.
+    // PROBLEMA v16: Android Accessibility permette SOLO UNA gesture alla volta.
+    // Quando tapAttack() partiva, CANCELLAVA la gesture del joystick.
+    // Risultato: il personaggio non camminava.
     //
-    // SOLUZIONE v16:
-    // 1. attackLoop: SOLO attacco, ciclo ogni 350ms
-    // 2. continuousWalkLoop: gesture LUNGHE (280ms) con callback che rilancia SUBITO
-    //    -> movimento FLUIDO senza interruzioni
-    // 3. Direzione aggiornata da mobScanner ogni 500ms
-    // 4. In SEARCH (no mob): cammina cercando; In APPROACH/PULL_GATHER: vai verso mob + attacca
-    // 5. In PULL_HOLD: FERMO (no walk) + attacca + skill
+    // SOLUZIONE v17:
+    // 1. UN SOLO loop (farmLoop) che alterna WALK e ATTACK in sequenza
+    // 2. Walk: swipe lungo (250ms) verso i mob
+    // 3. Pausa breve (30ms)
+    // 4. Attack: tap (40ms)
+    // 5. Ciclo ogni 400ms totali
+    //
+    // Questo garantisce che le gesture non si sovrappongono MAI.
     // ═══════════════════════════════════════════════════════════════════════════
     
-    // ── ATTACK LOOP: solo attacco, indipendente dal movimento ─────────────────
-    private val attackLoop = object : Runnable {
+    private val farmLoop = object : Runnable {
         override fun run() {
             if (!BotState.attackRunning) return
             if (BotState.joystickActive) {
-                handler.postDelayed(this, 200L); return
+                handler.postDelayed(this, 200L)
+                return
             }
             
             val action = BotDecisionEngine.decide()
             val hasMobs = BotState.mobNearby && BotState.detectedMobCount > 0
             
-            // Logga stato corrente
+            // Log stato
             BotLogger.d("BotAtk", "[${action.stateLabel}] mobs=${BotState.detectedMobCount}" +
-                " dir=(${"%.2f".format(BotState.mobDirX)},${"%.2f".format(BotState.mobDirY)})")
+                " walk=${action.shouldWalk} dir=(${"%.2f".format(BotState.mobDirX)},${"%.2f".format(BotState.mobDirY)})")
             
-            // Attacca solo se:
-            // - Ci sono mob visibili (APPROACH, PULL_GATHER)
-            // - Oppure siamo in PULL_HOLD (abbastanza mob raggruppati)
-            if (hasMobs || !action.shouldWalk) {
-                tapAttack()
-            }
+            // Direzione: mob se presenti, altrimenti search dall'AI
+            val dirX = if (hasMobs) BotState.mobDirX else action.dirX
+            val dirY = if (hasMobs) BotState.mobDirY else action.dirY
             
-            handler.postDelayed(this, 350L)
-        }
-    }
-    
-    // ── CONTINUOUS WALK LOOP: movimento fluido verso mob ──────────────────────
-    @Volatile private var walkGesturePending = false
-    
-    private val walkGestureCallback = object : GestureResultCallback() {
-        override fun onCompleted(g: GestureDescription?) {
-            walkGesturePending = false
-            // Rilancia SUBITO per movimento continuo
-            if (shouldContinueWalking()) {
-                handler.post { dispatchContinuousWalk() }
+            val joyPos = BotState.joystickPos
+            val atkPos = BotState.attackPos
+            
+            when {
+                // PULL_HOLD: stai fermo, solo attacco
+                !action.shouldWalk && atkPos != null -> {
+                    tapAttack()
+                    handler.postDelayed(this, 350L)
+                }
+                
+                // Cammina + attacca (se mob presenti)
+                action.shouldWalk && joyPos != null -> {
+                    // STEP 1: Swipe joystick (250ms)
+                    doJoystickSwipe(joyPos, dirX, dirY, 250L) {
+                        // STEP 2: Dopo swipe finito, aspetta 30ms poi attacca
+                        if (hasMobs && atkPos != null) {
+                            handler.postDelayed({
+                                if (BotState.attackRunning && !BotState.joystickActive) {
+                                    tapAttack()
+                                }
+                            }, 30L)
+                        }
+                    }
+                    // Prossimo ciclo tra 400ms
+                    handler.postDelayed(this, 400L)
+                }
+                
+                // Nessun joystick configurato ma attacco si
+                atkPos != null -> {
+                    if (hasMobs) tapAttack()
+                    handler.postDelayed(this, 350L)
+                }
+                
+                // Nulla configurato
+                else -> {
+                    handler.postDelayed(this, 400L)
+                }
             }
         }
-        override fun onCancelled(g: GestureDescription?) {
-            walkGesturePending = false
-            if (shouldContinueWalking()) {
-                handler.postDelayed({ dispatchContinuousWalk() }, 50L)
-            }
-        }
     }
     
-    private fun shouldContinueWalking(): Boolean {
-        if (BotState.joystickActive) return false
-        if (!BotState.attackRunning && !BotState.walkRunning) return false
-        // In PULL_HOLD non camminare
-        val action = BotDecisionEngine.decide()
-        return action.shouldWalk
-    }
-    
-    private fun dispatchContinuousWalk() {
-        if (!shouldContinueWalking() || walkGesturePending) return
-        
-        val pos = BotState.joystickPos ?: return
-        val r = if (BotState.joystickRadius > 0f) BotState.joystickRadius * 0.70f
-                else resources.displayMetrics.widthPixels * 0.08f
-        
-        // Direzione: usa mobDir se ci sono mob, altrimenti direzione search dall'AI
-        val hasMobs = BotState.mobNearby && BotState.detectedMobCount > 0
-        val dirX: Float
-        val dirY: Float
-        if (hasMobs) {
-            dirX = BotState.mobDirX
-            dirY = BotState.mobDirY
-        } else {
-            val action = BotDecisionEngine.decide()
-            dirX = action.dirX
-            dirY = action.dirY
-        }
+    private fun doJoystickSwipe(pos: Pair<Float, Float>, dirX: Float, dirY: Float, 
+                                 durationMs: Long, onComplete: () -> Unit) {
+        val r = if (BotState.joystickRadius > 0f) BotState.joystickRadius * 0.75f
+                else resources.displayMetrics.widthPixels * 0.09f
         
         val endX = pos.first + dirX * r
         val endY = pos.second + dirY * r
         
-        walkGesturePending = true
         try {
-            val ok = dispatchGesture(
+            dispatchGesture(
                 GestureDescription.Builder()
                     .addStroke(GestureDescription.StrokeDescription(
                         Path().apply {
                             moveTo(pos.first, pos.second)
                             lineTo(endX, endY)
-                        }, 0L, 280L))  // 280ms: abbastanza lungo per movimento fluido
-                    .build(), walkGestureCallback, handler)
-            if (!ok) {
-                walkGesturePending = false
-                if (shouldContinueWalking()) handler.postDelayed({ dispatchContinuousWalk() }, 100L)
-            }
+                        }, 0L, durationMs))
+                    .build(),
+                object : GestureResultCallback() {
+                    override fun onCompleted(g: GestureDescription?) { onComplete() }
+                    override fun onCancelled(g: GestureDescription?) { onComplete() }
+                },
+                handler
+            )
         } catch (_: Exception) {
-            walkGesturePending = false
-            if (shouldContinueWalking()) handler.postDelayed({ dispatchContinuousWalk() }, 100L)
+            onComplete()
         }
-    }
-    
-    private fun startContinuousWalk() {
-        walkGesturePending = false
-        handler.post { dispatchContinuousWalk() }
-    }
-    
-    private fun stopContinuousWalk() {
-        walkGesturePending = false
     }
 
     private fun tapAttack() {
@@ -332,7 +317,7 @@ class BotAccessibilityService : AccessibilityService() {
     // con un breve delay (50ms) per compensare la cancellazione del gesto
     // corrente da parte dell'accessibility framework. Questo elimina il "buco"
     // nell'attacco durante l'uso delle pozze.
-    // ═══════════════════════════════════════════════════════════════════════════
+    // ═���═════════════════════════════════════════════════════════════════════════
     private val potionLoop = object : Runnable {
         override fun run() {
             if (!BotState.potionRunning) return
@@ -342,11 +327,11 @@ class BotAccessibilityService : AccessibilityService() {
                 handler.postDelayed({
                     if (!BotState.potionRunning || BotState.joystickActive) return@postDelayed
                     tapSingle(px, py, POTION_TAP_MS)
-                    // FIX: dopo la pozione, riavvia subito l'attacco se è attivo
+                    // FIX: dopo la pozione, riavvia subito il farmLoop se è attivo
                     // per eliminare il gap causato dall'interruzione del gesto precedente.
                     if (BotState.attackRunning) {
-                        handler.removeCallbacks(attackLoop)
-                        handler.postDelayed(attackLoop, ATTACK_RESTART_AFTER_POTION_MS)
+                        handler.removeCallbacks(farmLoop)
+                        handler.postDelayed(farmLoop, ATTACK_RESTART_AFTER_POTION_MS)
                     }
                 }, delay)
                 delay += 350L
@@ -541,10 +526,8 @@ class BotAccessibilityService : AccessibilityService() {
 
     private fun resumeAll() {
         if (BotState.attackRunning) {
-            handler.removeCallbacks(attackLoop); handler.post(attackLoop)
+            handler.removeCallbacks(farmLoop); handler.post(farmLoop)
             handler.removeCallbacks(mobScanner); handler.post(mobScanner)
-            // v16: riavvia camminata continua
-            startContinuousWalk()
         }
         if (BotState.potionRunning) {
             handler.removeCallbacks(potionLoop); handler.post(potionLoop)
@@ -636,7 +619,7 @@ class BotAccessibilityService : AccessibilityService() {
         }
     }
 
-    // ═══════════════════════════════════════════════════════════════════════════
+    // ═══���═══════════════════════════════════════════════════════════════════════
     // API PUBBLICA
     // ═══════════════════════════════════════════════════════════════════════════
     fun startAttack() {
@@ -647,26 +630,21 @@ class BotAccessibilityService : AccessibilityService() {
         BotState.detectedMobCount = 0
         BotState.mobDirX = 0f; BotState.mobDirY = -1f
         BotDecisionEngine.reset()
-        // v16: mobScanner parte subito, attackLoop dopo 500ms, walk continuo dopo 600ms
+        // v17: mobScanner parte subito, farmLoop dopo 600ms (tempo per primo scan)
         handler.post(mobScanner)
-        handler.postDelayed(attackLoop, 500L)
-        // Se WALK e ON, avvia il movimento continuo verso i mob
-        if (BotState.walkRunning || BotState.joystickPos != null) {
-            handler.postDelayed({ startContinuousWalk() }, 600L)
-        }
-        BotLogger.d("BotAtk", "v16: mobScanner + attackLoop + continuousWalk avviati")
+        handler.postDelayed(farmLoop, 600L)
+        BotLogger.d("BotAtk", "v17: mobScanner + farmLoop avviati")
     }
 
     fun stopAttack() {
         BotState.attackRunning = false
         BotState.mobNearby = false
-        handler.removeCallbacks(attackLoop)
-        stopContinuousWalk()
+        handler.removeCallbacks(farmLoop)
         if (!BotState.pullMode) {
             handler.removeCallbacks(mobScanner)
             BotState.detectedMobCount = 0
         }
-        BotLogger.d("BotAtk", "attackLoop fermato")
+        BotLogger.d("BotAtk", "farmLoop fermato")
     }
 
     fun startPotion(intervalMs: Long = BotState.potionIntervalMs) {
