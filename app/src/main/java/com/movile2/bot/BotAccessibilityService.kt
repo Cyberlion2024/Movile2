@@ -53,14 +53,12 @@ class BotAccessibilityService : AccessibilityService() {
     // ═══════════════════════════════════════════════════════════════════════════
 
     // Safety net: se il callback del swipe non arriva, riavvia entro 600ms.
-    private val farmLoopSafety = Runnable {
-        if (BotState.attackRunning && !BotState.joystickActive) {
-            handler.removeCallbacks(farmLoop)
-            handler.post(farmLoop)
-        }
-    }
+    // Dichiarato come lateinit per evitare il forward reference circolare con farmLoop:
+    // farmLoopSafety referenzia farmLoop e farmLoop referenzia farmLoopSafety.
+    // L'init{} block inizializza farmLoopSafety dopo che farmLoop è già definito.
+    private lateinit var farmLoopSafety: Runnable
 
-    private val farmLoop = object : Runnable {
+    private val farmLoop: Runnable = object : Runnable {
         override fun run() {
             if (!BotState.attackRunning) return
             if (BotState.joystickActive) {
@@ -130,7 +128,16 @@ class BotAccessibilityService : AccessibilityService() {
         }
     }
     
-    private fun doJoystickSwipe(pos: Pair<Float, Float>, dirX: Float, dirY: Float, 
+    init {
+        farmLoopSafety = Runnable {
+            if (BotState.attackRunning && !BotState.joystickActive) {
+                handler.removeCallbacks(farmLoop)
+                handler.post(farmLoop)
+            }
+        }
+    }
+
+    private fun doJoystickSwipe(pos: Pair<Float, Float>, dirX: Float, dirY: Float,
                                  durationMs: Long, onComplete: () -> Unit) {
         val r = if (BotState.joystickRadius > 0f) BotState.joystickRadius * 0.75f
                 else resources.displayMetrics.widthPixels * 0.09f
