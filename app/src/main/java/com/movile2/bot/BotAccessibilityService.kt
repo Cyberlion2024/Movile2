@@ -66,52 +66,32 @@ class BotAccessibilityService : AccessibilityService() {
                 return
             }
 
-            val action = BotDecisionEngine.decide()
-            val hasMobs = BotState.mobNearby && BotState.detectedMobCount > 0
-
-            BotLogger.d("BotAtk", "[${action.stateLabel}] mobs=${BotState.detectedMobCount}" +
-                " walk=${action.shouldWalk} dir=(${"%.2f".format(BotState.mobDirX)},${"%.2f".format(BotState.mobDirY)})")
-
-            val dirX = if (hasMobs) BotState.mobDirX else action.dirX
-            val dirY = if (hasMobs) BotState.mobDirY else action.dirY
-
+            val state  = BotState.lastGameState
+            val action = AIPlayerEngine.decide(state)
             val joyPos = BotState.joystickPos
             val atkPos = BotState.attackPos
 
-            when {
-                // PULL_HOLD: fermo + attacco rapido.
-                // Check hasMobs difensivo: PULL_HOLD richiede mob per definizione,
-                // ma se il scanner è in ritardo evitiamo tap inutili.
-                !action.shouldWalk && hasMobs && atkPos != null -> {
-                    tapAttack()
-                    handler.postDelayed(this, 200L)
-                }
+            BotLogger.d("BotAtk", "[${AIPlayerEngine.currentState}] ${action::class.simpleName}" +
+                " hp=${"%.0f".format(state.hpPercent * 100)}% mobs=${state.mobCount}" +
+                " melee=${state.nearestMobInMeleeRange}")
 
-                // PULL_HOLD senza mob ancora rilevati: aspetta il prossimo scan
-                !action.shouldWalk && !hasMobs -> {
-                    handler.postDelayed(this, 300L)
-                }
+            // Nota: `val self = this` cattura il Runnable esterno prima di entrare
+            // nei lambda, dove `this` non punta più all'oggetto esterno.
+            val self = this
 
-                // CAMMINA (joystick configurato): ciclo callback-driven.
-                // Il prossimo ciclo parte quando lo swipe finisce, non da un timer fisso.
-                // → duty cycle ~93%: 380ms premuto, 20-55ms rilasciato tra i cicli.
-                // Nota: usiamo `val self = this` per catturare il Runnable prima di
-                // entrare nel lambda: dentro un lambda `this` non punta più all'oggetto
-                // esterno, e referenziare `farmLoop` per nome causerebbe "not initialized"
-                // perché il Kotlin compiler vede una auto-referenza durante l'init del val.
-                action.shouldWalk && joyPos != null -> {
-                    val self = this
+            when (action) {
+                // MOVE: cammina nella direzione indicata dall'AI (SEARCH/APPROACH/PULL_GATHER)
+                is AIPlayerEngine.AIAction.Move -> {
+                    if (joyPos == null) { handler.postDelayed(self, 300L); return }
                     handler.removeCallbacks(farmLoopSafety)
-                    doJoystickSwipe(joyPos, dirX, dirY, 380L) {
+                    doJoystickSwipe(joyPos, action.dirX, action.dirY, action.durationMs) {
                         handler.removeCallbacks(farmLoopSafety)
                         if (!BotState.attackRunning || BotState.joystickActive) return@doJoystickSwipe
-                        if (hasMobs && atkPos != null) {
-                            // Mob presenti: attacca e poi riprendi il walk dopo 55ms
-                            // (tempo sufficiente per completare il tap da 40ms + buffer 15ms)
+                        // Dopo ogni movimento: attacca se ci sono mob, poi riprendi
+                        if (state.mobCount > 0 && atkPos != null) {
                             tapAttack()
                             handler.postDelayed(self, 55L)
                         } else {
-                            // Nessun mob: riprendi il walk quasi subito (SEARCH fluido)
                             handler.postDelayed(self, 20L)
                         }
                     }
@@ -119,15 +99,34 @@ class BotAccessibilityService : AccessibilityService() {
                     handler.postDelayed(farmLoopSafety, 600L)
                 }
 
-                // Nessun joystick configurato: attacca solo se ci sono mob
-                atkPos != null -> {
-                    if (hasMobs) tapAttack()
-                    handler.postDelayed(this, 300L)
+                // ATTACK: mob in melee → tappa attacco (ATTACK / PULL_HOLD)
+                AIPlayerEngine.AIAction.Attack -> {
+                    if (atkPos != null) tapAttack()
+                    handler.postDelayed(self, 200L)
                 }
 
-                // Nulla configurato
-                else -> {
-                    handler.postDelayed(this, 400L)
+                // USE_SKILL: AI ha rilevato skill pronta e mob presenti
+                is AIPlayerEngine.AIAction.UseSkill -> {
+                    val slots = BotState.skillSlots
+                    if (action.slot < slots.size) {
+                        val (sx, sy) = slots[action.slot]
+                        tapSingle(sx, sy, SKILL_TAP_MS)
+                    }
+                    handler.postDelayed(self, 100L)
+                }
+
+                // USE_POTION: HP sotto soglia — scatta potionLoop subito
+                AIPlayerEngine.AIAction.UsePotion -> {
+                    if (BotState.potionRunning) {
+                        handler.removeCallbacks(potionLoop)
+                        handler.post(potionLoop)
+                    }
+                    handler.postDelayed(self, 200L)
+                }
+
+                // WAIT: nessuna azione utile in questo ciclo
+                is AIPlayerEngine.AIAction.Wait -> {
+                    handler.postDelayed(self, action.ms)
                 }
             }
         }
@@ -182,233 +181,146 @@ class BotAccessibilityService : AccessibilityService() {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // SCANNER MOB — ogni 500ms conta i cluster di nomi rossi sullo schermo
+    // GAME STATE SCANNER — ogni 200ms produce un GameState completo tramite
+    // GameStateAnalyzer: HP barra, mob (posizione + rank), melee range, skill cooldown.
     //
-    // Algoritmo (da analisi libUE4.so):
-    //   UmobNamer.ismob=true + medusman=true → nome ROSSO (mob nemico).
-    //   UmobNamer.group=true                  → nome VERDE (membro gruppo) — ignorato.
-    //   isLocal=true / isPlayer               → nome BIANCO (proprio char) — ignorato.
-    //
-    // La detection divide lo schermo in una griglia di celle 40×40px.
-    // Ogni cella con almeno 3 pixel rossi vivaci viene marcata come "calda".
-    // Un BFS sulle celle calde conta i cluster contigui → numero di mob distinti.
-    // Il risultato viene salvato in BotState.detectedMobCount.
+    // Sostituisce il vecchio mobScanner (500ms, solo pixel scan rossi) con
+    // un'analisi visiva completa usata da AIPlayerEngine per tutte le decisioni.
+    // I campi legacy (detectedMobCount, mobNearby, mobDirX/Y) vengono aggiornati
+    // per retrocompatibilità con OverlayService ticker e lootScanner.
     // ═══════════════════════════════════════════════════════════════════════════
-    private val mobScanner = object : Runnable {
+    private val gameStateScanner = object : Runnable {
         override fun run() {
-            // FIX v15: mobScanner gira se attackRunning OR pullMode OR walkRunning
-            // Prima si fermava troppo presto, ora continua finché serve movimento/attacco.
             if (!BotState.attackRunning && !BotState.pullMode && !BotState.walkRunning) return
-            // Scatta screenshot e aggiorna mobCount + direzione solo se il bot non è in pausa
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !BotState.joystickActive) {
-                doMobScan()
+                doGameStateScan()
             }
-            handler.postDelayed(this, 500L)
+            handler.postDelayed(this, 200L)
         }
     }
 
     @RequiresApi(Build.VERSION_CODES.R)
-    private fun doMobScan() {
+    private fun doGameStateScan() {
         takeScreenshot(Display.DEFAULT_DISPLAY, ContextCompat.getMainExecutor(this),
             object : TakeScreenshotCallback {
                 override fun onSuccess(s: ScreenshotResult) {
-                    val hw = Bitmap.wrapHardwareBuffer(s.hardwareBuffer, s.colorSpace)
+                    val hw  = Bitmap.wrapHardwareBuffer(s.hardwareBuffer, s.colorSpace)
                     val bmp = hw?.copy(Bitmap.Config.ARGB_8888, false)
                     hw?.recycle(); s.hardwareBuffer.close()
                     bmp?.let { b ->
-                        val count = countMobClusters(b)
-                        BotState.detectedMobCount = count
-                        BotState.mobNearby = count > 0
-                        // Aggiorna sempre la direzione mob (serve al continuousWalk per camminare verso i nemici)
-                        if (count > 0) updateMobDirection(b)
-                        else { BotState.mobDirX = 0f; BotState.mobDirY = -1f }
-                        BotLogger.d("BotMob", "Mob: $count dir=(${
-                            "%.2f".format(BotState.mobDirX)},${
-                            "%.2f".format(BotState.mobDirY)})")
+                        val state = GameStateAnalyzer.analyze(b, BotState.skillSlots)
+                        BotState.lastGameState  = state
+                        // Mantieni campi legacy in sync per OverlayService e lootScanner
+                        BotState.detectedMobCount = state.mobCount
+                        BotState.mobNearby        = state.mobCount > 0
+                        BotState.mobDirX          = state.nearestMobDir.first
+                        BotState.mobDirY          = state.nearestMobDir.second
+                        BotLogger.d("BotScan", "hp=${"%.0f".format(state.hpPercent * 100)}%" +
+                            " mobs=${state.mobCount} melee=${state.nearestMobInMeleeRange}" +
+                            " skills=${state.skillsReady.count { it }}/${state.skillsReady.size} ready")
                         b.recycle()
                     }
                 }
                 override fun onFailure(e: Int) {
-                    BotLogger.w("BotMob", "Screenshot fallito: $e")
-                    BotState.mobNearby = false
+                    BotLogger.w("BotScan", "Screenshot fallito: $e")
+                    BotState.mobNearby        = false
                     BotState.detectedMobCount = 0
                 }
             })
     }
 
-    // ───────────────────────────────────────────────────────────────────────────
-    // countMobClusters: conta quanti mob distinti (con nome rosso) sono
-    // visibili nella zona centrale dello schermo.
-    //
-    // Zona di ricerca: 10%..90% x, 5%..80% y (espansa: i mob appaiono anche
-    // a y > 65% quando il personaggio è vicino al bordo inferiore dello schermo).
-    // Colore nome nemico (UmobNamer.nameColor con medusman=true):
-    //   R > 150, G < 130, B < 140, R-G > 40
-    // Soglie allargate rispetto alla v17 per catturare varianti cromatiche
-    // (rosso-arancio, rosso-rosa) usate in Mobile2 per mob di diverso rank.
-    // ───────────────────────────────────────────────────────────────────────────
-    private fun countMobClusters(bmp: Bitmap): Int {
-        val w = bmp.width; val h = bmp.height
-        val x0 = (w * 0.10f).toInt(); val x1 = (w * 0.90f).toInt()
-        val y0 = (h * 0.05f).toInt(); val y1 = (h * 0.80f).toInt()
-        val cellPx = 40
-        val sampleStep = 4
-
-        val cols = (x1 - x0) / cellPx
-        val rows = (y1 - y0) / cellPx
-        if (cols <= 0 || rows <= 0) return 0
-
-        val hot = Array(rows) { BooleanArray(cols) }
-        for (row in 0 until rows) {
-            for (col in 0 until cols) {
-                val cx0 = x0 + col * cellPx
-                val cy0 = y0 + row * cellPx
-                var hits = 0
-                var sx = cx0
-                while (sx < cx0 + cellPx && sx < x1) {
-                    var sy = cy0
-                    while (sy < cy0 + cellPx && sy < y1) {
-                        val p = bmp.getPixel(sx, sy)
-                        val r = Color.red(p); val g = Color.green(p); val b = Color.blue(p)
-                        if (r > 150 && g < 130 && b < 140 && r - g > 40) hits++
-                        sy += sampleStep
-                    }
-                    sx += sampleStep
-                }
-                hot[row][col] = hits >= 3
-            }
-        }
-
-        val visited = Array(rows) { BooleanArray(cols) }
-        var clusters = 0
-        val dr = intArrayOf(-1, 1, 0, 0)
-        val dc = intArrayOf(0, 0, -1, 1)
-        for (startRow in 0 until rows) {
-            for (startCol in 0 until cols) {
-                if (!hot[startRow][startCol] || visited[startRow][startCol]) continue
-                val queue = ArrayDeque<Pair<Int, Int>>()
-                queue.add(startRow to startCol)
-                visited[startRow][startCol] = true
-                var clusterSize = 0
-                while (queue.isNotEmpty()) {
-                    val (r, c) = queue.removeFirst()
-                    clusterSize++
-                    for (d in 0 until 4) {
-                        val nr = r + dr[d]; val nc = c + dc[d]
-                        if (nr in 0 until rows && nc in 0 until cols &&
-                            hot[nr][nc] && !visited[nr][nc]) {
-                            visited[nr][nc] = true
-                            queue.add(nr to nc)
-                        }
-                    }
-                }
-                if (clusterSize >= 2) clusters++
-            }
-        }
-        return clusters
-    }
-
-    // ───────────────────────────────────────────────────────────────────────────
-    // updateMobDirection: calcola il vettore normalizzato dal centro dello
-    // schermo verso il centroide di tutti i pixel rossi (mob).
-    // ───────────────────────────────────────────────────────────────────────────
-    private fun updateMobDirection(bmp: Bitmap) {
-        val w = bmp.width; val h = bmp.height
-        val x0 = (w * 0.10f).toInt(); val x1 = (w * 0.90f).toInt()
-        val y0 = (h * 0.05f).toInt(); val y1 = (h * 0.80f).toInt()
-        val step = 5
-        var sumX = 0L; var sumY = 0L; var n = 0L
-        var sx = x0
-        while (sx < x1) {
-            var sy = y0
-            while (sy < y1) {
-                val p = bmp.getPixel(sx, sy)
-                val r = Color.red(p); val g = Color.green(p); val b = Color.blue(p)
-                if (r > 150 && g < 130 && b < 140 && r - g > 40) {
-                    sumX += sx; sumY += sy; n++
-                }
-                sy += step
-            }
-            sx += step
-        }
-        if (n == 0L) { BotState.mobDirX = 0f; BotState.mobDirY = -1f; return }
-        val centX = (sumX / n).toFloat()
-        val centY = (sumY / n).toFloat()
-        val charX  = w * 0.50f
-        val charY  = h * 0.55f
-        val dx = centX - charX; val dy = centY - charY
-        val len = kotlin.math.sqrt(dx * dx + dy * dy).coerceAtLeast(1f)
-        BotState.mobDirX = dx / len
-        BotState.mobDirY = dy / len
-    }
-
     // ═══════════════════════════════════════════════════════════════════════════
-    // LOOP POZIONE — indipendente dall'attacco.
+    // LOOP POZIONE — HP-threshold driven (AI Vision).
     //
-    // FIX: dopo ogni tap pozione, se l'attacco è attivo, lo riavviamo subito
-    // con un breve delay (50ms) per compensare la cancellazione del gesto
-    // corrente da parte dell'accessibility framework. Questo elimina il "buco"
-    // nell'attacco durante l'uso delle pozze.
+    // Invece di scattare a timer fisso, controlla ogni 500ms se
+    // hpPercent < autoPotionHpThreshold (default 60%). Se sì, usa tutte le
+    // slot pozione configurate in sequenza (350ms tra slot).
+    //
+    // Dopo ogni tap, riavvia subito il farmLoop per colmare il gap causato
+    // dall'interruzione del gesto corrente dall'accessibility framework.
+    //
+    // BotState.potionIntervalMs viene usato come cooldown minimo post-uso
+    // per evitare spam di pozione (es. HP ancora bassa dopo il tap).
     // ═══════════════════════════════════════════════════════════════════════════
     private val potionLoop = object : Runnable {
         override fun run() {
             if (!BotState.potionRunning) return
-            val slots = BotState.potionSlots
-            var delay = 0L
-            for ((px, py) in slots) {
-                handler.postDelayed({
-                    if (!BotState.potionRunning || BotState.joystickActive) return@postDelayed
-                    tapSingle(px, py, POTION_TAP_MS)
-                    // FIX: dopo la pozione, riavvia subito il farmLoop se è attivo
-                    // per eliminare il gap causato dall'interruzione del gesto precedente.
-                    // Cancella anche il safety per evitare doppio avvio.
-                    if (BotState.attackRunning) {
-                        handler.removeCallbacks(farmLoop)
-                        handler.removeCallbacks(farmLoopSafety)
-                        handler.postDelayed(farmLoop, ATTACK_RESTART_AFTER_POTION_MS)
-                    }
-                }, delay)
-                delay += 350L
+
+            val state = BotState.lastGameState
+            // HP rilevata è > 0 (scan completato) e sotto la soglia configurata
+            val needsPotion = state.hpPercent > 0f &&
+                              state.hpPercent < BotState.autoPotionHpThreshold
+
+            if (needsPotion && !BotState.joystickActive) {
+                val slots = BotState.potionSlots
+                var delay = 0L
+                for ((px, py) in slots) {
+                    handler.postDelayed({
+                        if (!BotState.potionRunning || BotState.joystickActive) return@postDelayed
+                        tapSingle(px, py, POTION_TAP_MS)
+                        // Riavvia il farmLoop per eliminare il gap dopo il tap
+                        if (BotState.attackRunning) {
+                            handler.removeCallbacks(farmLoop)
+                            handler.removeCallbacks(farmLoopSafety)
+                            handler.postDelayed(farmLoop, ATTACK_RESTART_AFTER_POTION_MS)
+                        }
+                    }, delay)
+                    delay += 350L
+                }
+                // Cooldown post-uso: aspetta almeno potionIntervalMs prima di riscattare
+                handler.postDelayed(this, BotState.potionIntervalMs.coerceAtLeast(500L) + delay)
+            } else {
+                // HP OK o joystick attivo: ricontrolla tra 500ms
+                handler.postDelayed(this, 500L)
             }
-            handler.postDelayed(this, BotState.potionIntervalMs.coerceAtLeast(500L) + delay)
         }
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // LOOP ABILITÀ — 5 timer indipendenti.
+    // LOOP ABILITÀ — 5 timer vision-driven con fallback a timer.
     //
-    // Senza PULL MODE: ogni skill scatta sempre (canFire=true) al suo intervallo.
-    // Con PULL MODE: scatta solo se detectedMobCount >= pullTargetCount.
+    // Strategia ibrida:
+    //   - Primario: controlla state.skillsReady[idx] (analisi visiva cooldown)
+    //     ogni 500ms. Se ready → scatta subito.
+    //   - Fallback: se il tempo trascorso dall'ultimo sparo supera l'intervallo
+    //     configurato, scatta comunque (copre eventuali falsi negativi vision).
     //
-    // FIX joystickActive: se l'utente sta usando il joystick manualmente,
-    // invece di saltare la skill e attendere tutto l'intervallo (es. 5s),
-    // la riprogrammiamo dopo 300ms. Appena il joystick si libera, la skill
-    // viene premuta senza aspettare il prossimo ciclo completo.
+    // Con PULL MODE: scatta solo se mobCount >= pullTargetCount.
+    // Joystick attivo: riprova dopo 300ms senza perdere il ciclo.
     // ═══════════════════════════════════════════════════════════════════════════
     private val skillLoops: Array<Runnable> = Array(5) { idx ->
         object : Runnable {
+            var lastFiredAt = 0L
             override fun run() {
                 if (!BotState.skillsRunning) return
-                val slots = BotState.skillSlots
+                val slots    = BotState.skillSlots
                 val interval = BotState.skillIntervals.getOrElse(idx) { 5000L }.coerceAtLeast(500L)
 
-                if (idx < slots.size) {
-                    if (BotState.joystickActive) {
-                        // Joystick manuale: riprova tra 300ms invece di perdere il ciclo
-                        handler.postDelayed(this, 300L)
-                        return
-                    }
-                    val canFire = if (BotState.pullMode) {
-                        BotState.detectedMobCount >= BotState.pullTargetCount
-                    } else {
-                        true
-                    }
-                    if (canFire) {
-                        val (sx, sy) = slots[idx]
-                        tapSingle(sx, sy, SKILL_TAP_MS)
-                    }
+                if (idx >= slots.size) { handler.postDelayed(this, interval); return }
+                if (BotState.joystickActive) { handler.postDelayed(this, 300L); return }
+
+                val state = BotState.lastGameState
+                val now   = System.currentTimeMillis()
+
+                // Pronta da visione O timer scaduto (fallback)
+                val visionReady  = idx < state.skillsReady.size && state.skillsReady[idx]
+                val timerElapsed = (now - lastFiredAt) >= interval
+
+                val canFire = (visionReady || timerElapsed) && when {
+                    BotState.pullMode -> state.mobCount >= BotState.pullTargetCount
+                    else              -> BotState.attackRunning  // tira solo durante attacco
                 }
-                handler.postDelayed(this, interval)
+
+                if (canFire) {
+                    val (sx, sy) = slots[idx]
+                    tapSingle(sx, sy, SKILL_TAP_MS)
+                    lastFiredAt = now
+                    // Dopo il fire: aspetta almeno 1s prima del prossimo check
+                    handler.postDelayed(this, interval.coerceAtLeast(1000L))
+                } else {
+                    // Non pronta: controlla di nuovo in 500ms (polling veloce vision)
+                    handler.postDelayed(this, 500L)
+                }
             }
         }
     }
@@ -574,7 +486,7 @@ class BotAccessibilityService : AccessibilityService() {
             handler.removeCallbacks(farmLoop)
             handler.removeCallbacks(farmLoopSafety)
             handler.post(farmLoop)
-            handler.removeCallbacks(mobScanner); handler.post(mobScanner)
+            handler.removeCallbacks(gameStateScanner); handler.post(gameStateScanner)
         }
         if (BotState.potionRunning) {
             handler.removeCallbacks(potionLoop); handler.post(potionLoop)
@@ -594,7 +506,7 @@ class BotAccessibilityService : AccessibilityService() {
             dispatchWalk()
         }
         if (BotState.pullMode && !BotState.attackRunning) {
-            handler.removeCallbacks(mobScanner); handler.post(mobScanner)
+            handler.removeCallbacks(gameStateScanner); handler.post(gameStateScanner)
         }
     }
 
@@ -672,29 +584,29 @@ class BotAccessibilityService : AccessibilityService() {
     fun startAttack() {
         if (BotState.attackPos == null) return
         if (BotState.attackRunning) stopAttack()
-        BotState.attackRunning = true
-        BotState.mobNearby = false
+        BotState.attackRunning    = true
+        BotState.mobNearby        = false
         BotState.detectedMobCount = 0
-        BotState.mobDirX = 0f; BotState.mobDirY = -1f
-        BotDecisionEngine.reset()
-        // v18: mobScanner parte subito. farmLoop parte dopo 600ms così il primo scan
-        // (ogni 500ms) è già pronto: il loop conosce i mob prima del primo ciclo.
-        handler.post(mobScanner)
-        handler.postDelayed(farmLoop, 600L)
-        BotLogger.d("BotAtk", "v18: mobScanner + farmLoop (callback-driven) avviati")
+        BotState.mobDirX          = 0f; BotState.mobDirY = -1f
+        BotState.lastGameState    = GameState.EMPTY
+        AIPlayerEngine.reset()
+        // gameStateScanner parte subito (200ms). farmLoop parte dopo 400ms così il
+        // primo scan è già pronto prima del primo ciclo di decisione dell'AI.
+        handler.post(gameStateScanner)
+        handler.postDelayed(farmLoop, 400L)
+        BotLogger.d("BotAtk", "AI v1: gameStateScanner + farmLoop avviati")
     }
 
     fun stopAttack() {
         BotState.attackRunning = false
-        BotState.mobNearby = false
+        BotState.mobNearby     = false
         handler.removeCallbacks(farmLoop)
         handler.removeCallbacks(farmLoopSafety)
         if (!BotState.pullMode) {
-            handler.removeCallbacks(mobScanner)
+            handler.removeCallbacks(gameStateScanner)
             BotState.detectedMobCount = 0
         }
-        // Se la camminata standalone era attiva, riavviarla: il farmLoop la gestiva
-        // internamente e ora che è fermato il personaggio si bloccherebbe altrimenti.
+        // Se la camminata standalone era attiva, riavviarla
         if (BotState.walkRunning) {
             walkPending = false
             handler.post { dispatchWalk() }
@@ -760,18 +672,18 @@ class BotAccessibilityService : AccessibilityService() {
 
     fun startPullMode() {
         BotState.pullMode = true
-        // Il mobScanner serve anche senza attack per sapere quanti mob ci sono
+        // gameStateScanner serve anche senza attack per sapere quanti mob ci sono
         if (!BotState.attackRunning) {
-            handler.removeCallbacks(mobScanner)
-            handler.post(mobScanner)
+            handler.removeCallbacks(gameStateScanner)
+            handler.post(gameStateScanner)
         }
         BotLogger.d("BotAtk", "Pull mode ON — target: ${BotState.pullTargetCount} mob")
     }
 
     fun stopPullMode() {
-        BotState.pullMode = false
+        BotState.pullMode         = false
         BotState.detectedMobCount = 0
-        if (!BotState.attackRunning) handler.removeCallbacks(mobScanner)
+        if (!BotState.attackRunning) handler.removeCallbacks(gameStateScanner)
         BotLogger.d("BotAtk", "Pull mode OFF")
     }
 
