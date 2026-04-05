@@ -308,7 +308,7 @@ class BotAccessibilityService : AccessibilityService() {
 
                 val canFire = (visionReady || timerElapsed) && when {
                     BotState.pullMode -> state.mobCount >= BotState.pullTargetCount
-                    else              -> BotState.attackRunning  // tira solo durante attacco
+                    else              -> true  // fire sempre (come il vecchio sistema)
                 }
 
                 if (canFire) {
@@ -629,9 +629,10 @@ class BotAccessibilityService : AccessibilityService() {
         if (BotState.skillSlots.isEmpty()) return
         if (BotState.skillsRunning) stopSkills()
         BotState.skillsRunning = true
+        // Primo check a 500ms: la vision rileva subito se la skill è pronta.
+        // Il loop poi gestisce autonomamente il timing vision+fallback timer.
         BotState.skillSlots.forEachIndexed { idx, _ ->
-            val interval = BotState.skillIntervals.getOrElse(idx) { 5000L }.coerceAtLeast(500L)
-            handler.postDelayed(skillLoops[idx], interval)
+            handler.postDelayed(skillLoops[idx], 500L)
         }
     }
 
