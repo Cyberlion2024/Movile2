@@ -125,12 +125,13 @@ class OverlayService : Service() {
             val hasJoy  = BotState.joystickPos != null
             val mobNear = BotState.mobNearby
             val walkOn  = BotState.walkRunning
+            val hpPct   = (BotState.lastGameState.hpPercent * 100).toInt()
 
             val parts = mutableListOf<String>()
             if (BotState.joystickActive) parts.add("🕹️ PAUSA JOY")
             else {
                 if (walkOn)  parts.add("🚶 WALK")
-                if (attOn)   parts.add(if (mobNear) "⚔️ ATT🔴[$mobCount]" else "⚔️ ATT…")
+                if (attOn)   parts.add(if (mobNear) "⚔️ ATT🔴[$mobCount] HP$hpPct%" else "⚔️ ATT… HP$hpPct%")
                 if (potOn)   parts.add("💊 POZ")
                 if (skillOn) {
                     if (pullOn) parts.add("✨ PULL[$mobCount/${pullTarget}]")
@@ -327,6 +328,19 @@ class OverlayService : Service() {
             if (BotState.lootRunning) bot.stopLoot() else bot.startLoot()
         }
 
+        // HP Threshold — AI Vision auto-pozione
+        val btnHpThreshold = makeSmallButton(
+            "💊 HP SOGLIA: ${(BotState.autoPotionHpThreshold * 100).toInt()}%",
+            Color.argb(200, 80, 20, 60))
+        btnHpThreshold.setOnClickListener {
+            // Cicla tra 40% / 50% / 60% / 70% / 80%
+            val steps = floatArrayOf(0.40f, 0.50f, 0.60f, 0.70f, 0.80f)
+            val cur   = steps.indexOfFirst { it >= BotState.autoPotionHpThreshold - 0.01f }
+            val next  = steps[(cur + 1) % steps.size]
+            BotState.autoPotionHpThreshold = next
+            btnHpThreshold.text = "💊 HP SOGLIA: ${(next * 100).toInt()}%"
+        }
+
         // ── Layout a 2 colonne ────────────────────────────────────────────────
         // Ogni coppia di bottoni per riga: peso 1+1 = 50%/50%
         fun twoCol(left: TextView, right: TextView): LinearLayout {
@@ -345,7 +359,8 @@ class OverlayService : Service() {
         content.addView(twoCol(btnSetSkill!!, btnSkill!!)); content.addView(space(5))
         content.addView(twoCol(btnPullCount!!, btnPull!!)); content.addView(space(5))
         content.addView(twoCol(btnSetPoz!!, btnPot!!)); content.addView(space(5))
-        content.addView(btnLoot)
+        content.addView(btnLoot);                      content.addView(space(5))
+        content.addView(btnHpThreshold)
         contentLayout = content
 
         root.addView(topBar); root.addView(tvStatus); root.addView(content)
