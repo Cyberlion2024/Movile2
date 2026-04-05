@@ -22,6 +22,23 @@ import kotlin.math.sqrt
 object GameStateAnalyzer {
 
     // ───────────────────────────────────────────────────────────────────────
+    // Costanti pubbliche
+    // ───────────────────────────────────────────────────────────────────────
+    /** Valore sentinella: barra HP non trovata nello screenshot. */
+    const val HP_NOT_DETECTED = 2f
+
+    // ── Auto-calibrazione barra HP ────────────────────────────────────────
+    // Aggiornati al volo: al primo avvio con HP piena vengono impostati i
+    // valori di riferimento e poi rimangono stabili finché non si chiama reset.
+    @Volatile private var hpBarStart = -1   // colonna X del bordo sinistro barra
+    @Volatile private var hpBarFull  = -1   // colonna X massima osservata (= HP 100%)
+
+    fun resetCalibration() {
+        hpBarStart = -1
+        hpBarFull  = -1
+    }
+
+    // ───────────────────────────────────────────────────────────────────────
     // Analisi unica: una sola passata produce GameState completo.
     // Chiamato da gameStateScanner nel service con il bitmap dello screenshot.
     // ───────────────────────────────────────────────────────────────────────
@@ -46,29 +63,36 @@ object GameStateAnalyzer {
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    // 1. HP DEL PERSONAGGIO
+    // 1. HP DEL PERSONAGGIO — auto-calibrante
     //
-    // La barra HP di Mobile2 (UE4 UMG) è in alto a sinistra.
-    // Dal libUE4.so: CFhp/TFhp = rapporto HP. La barra è rossa (R>200,G<60,B<60).
-    // Strategia: scansione orizzontale colonna per colonna nella zona HP.
-    // L'ultima colonna con densità di pixel rossi > 30% = bordo destro HP.
-    // hpPercent = (bordo_destro - inizio_barra) / larghezza_barra
+    // Dal libUE4.so: CFhp/TFhp = rapporto HP visualizzato come barra rossa.
     //
-    // Zona calibrata su Mobile2 Global 2.23 (screenshot 2400x1080):
-    //   X: 5%-38% schermo (barra può estendersi fino al 38% a HP pieno)
-    //   Y: 2.5%-5.5% schermo (banda sottile in alto)
+    // Zona ampia (coprire varianti di schermo/risoluzione/DPI):
+    //   X: 2%-60%  Y: 0%-14%
+    // Soglie permissive: cattura rosso vivace, rosso scuro, rosso-arancio.
+    //   R > 130  AND  R - G > 50  AND  R - B > 50
+    //
+    // Auto-calibrazione:
+    //   - hpBarStart = prima colonna con pixel rossi (bordo sinistro fisso)
+    //   - hpBarFull  = massima colonna destra mai osservata ≈ posizione a HP 100%
+    //   Aggiornati a ogni scan, si stabilizzano dopo il primo ciclo a HP piena.
+    //   La funzione restituisce HP_NOT_DETECTED (2f) se nessun rosso trovato,
+    //   così il potionLoop può distinguere "HP piena" da "rilevazione fallita".
     // ═══════════════════════════════════════════════════════════════════════
     fun detectHpPercent(bmp: Bitmap, w: Int, h: Int): Float {
-        val x0 = (w * 0.05f).toInt()
-        val x1 = (w * 0.38f).toInt()
-        val y0 = (h * 0.025f).toInt()
-        val y1 = (h * 0.055f).toInt()
+        val x0 = (w * 0.02f).toInt().coerceAtLeast(1)
+        val x1 = (w * 0.60f).toInt()
+        val y0 = (h * 0.00f).toInt().coerceAtLeast(1)
+        val y1 = (h * 0.14f).toInt()
         val step = 2
 
-        var lastRedX = x0
-        var hasAnyRed = false
-        val colHeight = ((y1 - y0) / step).coerceAtLeast(1)
-        val minRedDensity = 0.30f  // almeno 30% pixel rossi in colonna
+        if (x1 <= x0 || y1 <= y0) return HP_NOT_DETECTED
+
+        var firstRedX = -1
+        var lastRedX  = -1
+        val colSamples = ((y1 - y0) / step).coerceAtLeast(1)
+        // Basta 15% della colonna per evitare falsi negativi su schermi con barra sottile
+        val minRedDensity = 0.15f
 
         var sx = x0
         while (sx < x1) {
@@ -77,19 +101,26 @@ object GameStateAnalyzer {
             while (sy < y1) {
                 val p = bmp.getPixel(sx.coerceAtMost(w - 1), sy.coerceAtMost(h - 1))
                 val r = Color.red(p); val g = Color.green(p); val b = Color.blue(p)
-                // Rosso HP: R forte, G e B bassi
-                if (r > 180 && g < 80 && b < 80) redCount++
+                // Rosso dominante: cattura vivace, scuro, arancio-rosso
+                if (r > 130 && r - g > 50 && r - b > 50) redCount++
                 sy += step
             }
-            if (redCount.toFloat() / colHeight >= minRedDensity) {
+            if (redCount.toFloat() / colSamples >= minRedDensity) {
+                if (firstRedX < 0) firstRedX = sx
                 lastRedX = sx
-                hasAnyRed = true
             }
             sx += step
         }
 
-        if (!hasAnyRed) return 1f  // default pieno se non rilevato
-        return ((lastRedX - x0).toFloat() / (x1 - x0).toFloat()).coerceIn(0.01f, 1f)
+        if (firstRedX < 0 || lastRedX < 0) return HP_NOT_DETECTED
+
+        // Aggiorna calibrazione auto: primo run a HP piena setta i valori di riferimento
+        if (hpBarStart < 0 || firstRedX < hpBarStart) hpBarStart = firstRedX
+        if (lastRedX > hpBarFull)                      hpBarFull  = lastRedX
+
+        val barRange = (hpBarFull - hpBarStart).coerceAtLeast(1)
+        val filled   = (lastRedX  - hpBarStart).coerceAtLeast(0)
+        return (filled.toFloat() / barRange.toFloat()).coerceIn(0.01f, 1f)
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -233,7 +264,9 @@ object GameStateAnalyzer {
     // ═══════════════════════════════════════════════════════════════════════
     fun detectSkillsReady(bmp: Bitmap, skillSlots: List<Pair<Float, Float>>): BooleanArray {
         val ready = BooleanArray(skillSlots.size) { true }
-        val sampleRadius = 18
+        // Raggio adattivo: 1.5% larghezza schermo, min 12px max 32px
+        // Copre icon size variabile su schermi di diverse densità
+        val sampleRadius = (bmp.width * 0.015f).toInt().coerceIn(12, 32)
 
         for ((idx, slot) in skillSlots.withIndex()) {
             val cx = slot.first.toInt()
@@ -260,12 +293,14 @@ object GameStateAnalyzer {
             val avgB = (sumB / n).toInt()
             val avg  = (avgR + avgG + avgB) / 3
 
-            // Grigio = tutti i canali vicini alla media
-            val isGray = abs(avgR - avg) < 25 && abs(avgG - avg) < 25 && abs(avgB - avg) < 25
-            // Scuro = probabilmente overlay cooldown
-            val isDark = avg < 90
+            // In cooldown (overlay scuro UE4 UMG):
+            //   grigio → tutti i canali vicini alla media (saturazione bassa)
+            //   scuro  → overlay semi-trasparente molto scuro
+            // Soglie leggermente più permissive per varianti di look dell'icona
+            val isGray = abs(avgR - avg) < 30 && abs(avgG - avg) < 30 && abs(avgB - avg) < 30
+            val isDark = avg < 100
 
-            ready[idx] = !(isGray || isDark)
+            ready[idx] = !(isGray && isDark)   // solo se ENTRAMBE le condizioni → cooldown
         }
         return ready
     }

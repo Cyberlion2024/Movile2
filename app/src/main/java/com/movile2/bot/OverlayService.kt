@@ -125,13 +125,15 @@ class OverlayService : Service() {
             val hasJoy  = BotState.joystickPos != null
             val mobNear = BotState.mobNearby
             val walkOn  = BotState.walkRunning
-            val hpPct   = (BotState.lastGameState.hpPercent * 100).toInt()
+            val rawHp   = BotState.lastGameState.hpPercent
+            val hpStr   = if (rawHp >= GameStateAnalyzer.HP_NOT_DETECTED) "HP?"
+                          else "HP${(rawHp * 100).toInt()}%"
 
             val parts = mutableListOf<String>()
             if (BotState.joystickActive) parts.add("🕹️ PAUSA JOY")
             else {
                 if (walkOn)  parts.add("🚶 WALK")
-                if (attOn)   parts.add(if (mobNear) "⚔️ ATT🔴[$mobCount] HP$hpPct%" else "⚔️ ATT… HP$hpPct%")
+                if (attOn)   parts.add(if (mobNear) "⚔️ ATT🔴[$mobCount] $hpStr" else "⚔️ ATT… $hpStr")
                 if (potOn)   parts.add("💊 POZ")
                 if (skillOn) {
                     if (pullOn) parts.add("✨ PULL[$mobCount/${pullTarget}]")
