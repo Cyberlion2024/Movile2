@@ -215,8 +215,10 @@ class BotAccessibilityService : AccessibilityService() {
                         BotState.mobNearby        = state.mobCount > 0
                         BotState.mobDirX          = state.nearestMobDir.first
                         BotState.mobDirY          = state.nearestMobDir.second
-                        BotLogger.d("BotScan", "hp=${"%.0f".format(state.hpPercent * 100)}%" +
-                            " mobs=${state.mobCount} melee=${state.nearestMobInMeleeRange}" +
+                        val hpStr = if (state.hpPercent >= GameStateAnalyzer.HP_NOT_DETECTED)
+                            "N/A" else "${"%.0f".format(state.hpPercent * 100)}%"
+                        BotLogger.d("BotScan", "hp=$hpStr mobs=${state.mobCount}" +
+                            " melee=${state.nearestMobInMeleeRange}" +
                             " skills=${state.skillsReady.count { it }}/${state.skillsReady.size} ready")
                         b.recycle()
                     }
@@ -230,35 +232,46 @@ class BotAccessibilityService : AccessibilityService() {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // LOOP POZIONE — HP-threshold driven (AI Vision).
+    // LOOP POZIONE — timer primario + early trigger HP vision
     //
-    // Invece di scattare a timer fisso, controlla ogni 500ms se
-    // hpPercent < autoPotionHpThreshold (default 60%). Se sì, usa tutte le
-    // slot pozione configurate in sequenza (350ms tra slot).
+    // Strategia ibrida per massima affidabilità:
     //
-    // Dopo ogni tap, riavvia subito il farmLoop per colmare il gap causato
-    // dall'interruzione del gesto corrente dall'accessibility framework.
+    //   PRIMARIO (timer): scatta ogni potionIntervalMs esattamente come il
+    //     sistema precedente. Funziona anche se la vision non rileva HP.
     //
-    // BotState.potionIntervalMs viene usato come cooldown minimo post-uso
-    // per evitare spam di pozione (es. HP ancora bassa dopo il tap).
+    //   EARLY TRIGGER (vision): se hpPercent < autoPotionHpThreshold E la
+    //     barra è stata effettivamente rilevata (≠ HP_NOT_DETECTED), scatta
+    //     subito senza aspettare il timer.
+    //
+    // Questo garantisce che le pozioni vengano sempre usate indipendentemente
+    // dal successo della vision, eliminando la regressione introdotta dal
+    // sistema puramente HP-driven.
     // ═══════════════════════════════════════════════════════════════════════════
     private val potionLoop = object : Runnable {
+        // Timestamp del prossimo uso programmato (timer fallback)
+        private var nextUseAt = 0L
+
         override fun run() {
             if (!BotState.potionRunning) return
+            if (BotState.joystickActive) { handler.postDelayed(this, 500L); return }
 
-            val state = BotState.lastGameState
-            // HP rilevata è > 0 (scan completato) e sotto la soglia configurata
-            val needsPotion = state.hpPercent > 0f &&
-                              state.hpPercent < BotState.autoPotionHpThreshold
+            val now   = System.currentTimeMillis()
+            val hp    = BotState.lastGameState.hpPercent
+            val interval = BotState.potionIntervalMs.coerceAtLeast(500L)
 
-            if (needsPotion && !BotState.joystickActive) {
+            // HP rilevata (non sentinella) e sotto soglia → early trigger
+            val hpLow       = hp < GameStateAnalyzer.HP_NOT_DETECTED &&
+                              hp < BotState.autoPotionHpThreshold
+            // Timer scaduto → fallback (come il vecchio sistema)
+            val timerExpired = now >= nextUseAt
+
+            if (hpLow || timerExpired) {
                 val slots = BotState.potionSlots
                 var delay = 0L
                 for ((px, py) in slots) {
                     handler.postDelayed({
                         if (!BotState.potionRunning || BotState.joystickActive) return@postDelayed
                         tapSingle(px, py, POTION_TAP_MS)
-                        // Riavvia il farmLoop per eliminare il gap dopo il tap
                         if (BotState.attackRunning) {
                             handler.removeCallbacks(farmLoop)
                             handler.removeCallbacks(farmLoopSafety)
@@ -267,12 +280,11 @@ class BotAccessibilityService : AccessibilityService() {
                     }, delay)
                     delay += 350L
                 }
-                // Cooldown post-uso: aspetta almeno potionIntervalMs prima di riscattare
-                handler.postDelayed(this, BotState.potionIntervalMs.coerceAtLeast(500L) + delay)
-            } else {
-                // HP OK o joystick attivo: ricontrolla tra 500ms
-                handler.postDelayed(this, 500L)
+                nextUseAt = now + interval + delay
             }
+
+            // Poll ogni 500ms: risponde rapidamente sia a HP bassa che al timer
+            handler.postDelayed(this, 500L)
         }
     }
 
@@ -308,7 +320,7 @@ class BotAccessibilityService : AccessibilityService() {
 
                 val canFire = (visionReady || timerElapsed) && when {
                     BotState.pullMode -> state.mobCount >= BotState.pullTargetCount
-                    else              -> BotState.attackRunning  // tira solo durante attacco
+                    else              -> true  // fire sempre (come il vecchio sistema)
                 }
 
                 if (canFire) {
@@ -590,6 +602,7 @@ class BotAccessibilityService : AccessibilityService() {
         BotState.mobDirX          = 0f; BotState.mobDirY = -1f
         BotState.lastGameState    = GameState.EMPTY
         AIPlayerEngine.reset()
+        GameStateAnalyzer.resetCalibration()   // re-calibra la barra HP a ogni avvio
         // gameStateScanner parte subito (200ms). farmLoop parte dopo 400ms così il
         // primo scan è già pronto prima del primo ciclo di decisione dell'AI.
         handler.post(gameStateScanner)
@@ -618,7 +631,9 @@ class BotAccessibilityService : AccessibilityService() {
         if (BotState.potionSlots.isEmpty()) return
         if (BotState.potionRunning) stopPotion()
         BotState.potionIntervalMs = intervalMs.coerceAtLeast(500L)
-        BotState.potionRunning = true; handler.post(potionLoop)
+        BotState.potionRunning = true
+        // Prima pozione dopo il primo intervallo (come il vecchio sistema)
+        handler.postDelayed(potionLoop, BotState.potionIntervalMs)
     }
 
     fun stopPotion() {
@@ -629,9 +644,10 @@ class BotAccessibilityService : AccessibilityService() {
         if (BotState.skillSlots.isEmpty()) return
         if (BotState.skillsRunning) stopSkills()
         BotState.skillsRunning = true
+        // Primo check a 500ms: la vision rileva subito se la skill è pronta.
+        // Il loop poi gestisce autonomamente il timing vision+fallback timer.
         BotState.skillSlots.forEachIndexed { idx, _ ->
-            val interval = BotState.skillIntervals.getOrElse(idx) { 5000L }.coerceAtLeast(500L)
-            handler.postDelayed(skillLoops[idx], interval)
+            handler.postDelayed(skillLoops[idx], 500L)
         }
     }
 
