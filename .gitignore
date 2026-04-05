@@ -1,0 +1,24 @@
+# Gradle build cache and wrapper
+.gradle/
+build/
+app/build/
+
+# Local properties (SDK paths, signing keys)
+local.properties
+
+# IDE files
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Android Studio captures
+captures/
+
+# Signing configs (never commit keystores)
+*.jks
+*.keystore
+
+# OS files
+.DS_Store
+Thumbs.db
