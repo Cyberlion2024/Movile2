@@ -67,4 +67,13 @@ object BotState {
     // anche dopo che joystickActive è già tornato false (copertura camminata continua).
     @Volatile var lastManualJoystickMs: Long = 0L
     const val LOOT_JOY_PAUSE_MS = 3000L   // ms senza tocchi joystick prima di tappare
+
+    // ── AI Vision Player ──────────────────────────────────────────────────────
+    // Ultimo GameState prodotto dal gameStateScanner (ogni 200ms).
+    // Consumato da AIPlayerEngine.decide() e dai loop pozione/skill.
+    @Volatile var lastGameState: GameState = GameState.EMPTY
+
+    // Soglia HP per uso automatico pozione. Esempio: 0.60 = usa pozione sotto 60% HP.
+    // Configurabile dall'utente nell'overlay (default 60%).
+    @Volatile var autoPotionHpThreshold: Float = 0.60f
 }
