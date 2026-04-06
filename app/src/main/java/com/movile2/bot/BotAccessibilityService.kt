@@ -71,9 +71,10 @@ class BotAccessibilityService : AccessibilityService() {
             val joyPos = BotState.joystickPos
             val atkPos = BotState.attackPos
 
+            val hpLog = if (state.hpPercent >= GameStateAnalyzer.HP_NOT_DETECTED) "N/A"
+                        else "${"%.0f".format(state.hpPercent * 100)}%"
             BotLogger.d("BotAtk", "[${AIPlayerEngine.currentState}] ${action::class.simpleName}" +
-                " hp=${"%.0f".format(state.hpPercent * 100)}% mobs=${state.mobCount}" +
-                " melee=${state.nearestMobInMeleeRange}")
+                " hp=$hpLog mobs=${state.mobCount} melee=${state.nearestMobInMeleeRange}")
 
             // Nota: `val self = this` cattura il Runnable esterno prima di entrare
             // nei lambda, dove `this` non punta più all'oggetto esterno.
@@ -100,27 +101,20 @@ class BotAccessibilityService : AccessibilityService() {
                 }
 
                 // ATTACK: mob in melee → tappa attacco (ATTACK / PULL_HOLD)
+                // Jitter 180-230ms: evita pattern regolare rilevabile dall'anti-cheat
                 AIPlayerEngine.AIAction.Attack -> {
                     if (atkPos != null) tapAttack()
-                    handler.postDelayed(self, 200L)
+                    handler.postDelayed(self, 180L + (Math.random() * 50).toLong())
                 }
 
-                // USE_SKILL: AI ha rilevato skill pronta e mob presenti
-                is AIPlayerEngine.AIAction.UseSkill -> {
-                    val slots = BotState.skillSlots
-                    if (action.slot < slots.size) {
-                        val (sx, sy) = slots[action.slot]
-                        tapSingle(sx, sy, SKILL_TAP_MS)
-                    }
-                    handler.postDelayed(self, 100L)
-                }
-
-                // USE_POTION: HP sotto soglia — scatta potionLoop subito
+                // USE_SKILL / USE_POTION: già gestiti da skillLoops e potionLoop
+                // indipendentemente. farmLoop NON duplica queste azioni per evitare
+                // double-tap e per mantenere il ritmo di movimento fluido.
+                // Fallback: se l'AI lo chiede ma siamo nel ciclo di attacco,
+                // comportarsi come Attack (se mob in range) o Wait.
+                is AIPlayerEngine.AIAction.UseSkill,
                 AIPlayerEngine.AIAction.UsePotion -> {
-                    if (BotState.potionRunning) {
-                        handler.removeCallbacks(potionLoop)
-                        handler.post(potionLoop)
-                    }
+                    if (atkPos != null && state.mobCount > 0) tapAttack()
                     handler.postDelayed(self, 200L)
                 }
 
@@ -195,7 +189,9 @@ class BotAccessibilityService : AccessibilityService() {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !BotState.joystickActive) {
                 doGameStateScan()
             }
-            handler.postDelayed(this, 200L)
+            // 430-480ms: più lento del 200ms originale, riduce carico bitmap e CPU
+            // Il jitter ±25ms rende il pattern meno prevedibile per l'anti-cheat
+            handler.postDelayed(this, 430L + (Math.random() * 50).toLong())
         }
     }
 
@@ -283,22 +279,23 @@ class BotAccessibilityService : AccessibilityService() {
                 nextUseAt = now + interval + delay
             }
 
-            // Poll ogni 500ms: risponde rapidamente sia a HP bassa che al timer
-            handler.postDelayed(this, 500L)
+            // Poll ogni 800-1000ms con jitter: bilanciamento tra reattività HP e carico CPU
+            handler.postDelayed(this, 800L + (Math.random() * 200).toLong())
         }
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // LOOP ABILITÀ — 5 timer vision-driven con fallback a timer.
     //
-    // Strategia ibrida:
-    //   - Primario: controlla state.skillsReady[idx] (analisi visiva cooldown)
-    //     ogni 500ms. Se ready → scatta subito.
-    //   - Fallback: se il tempo trascorso dall'ultimo sparo supera l'intervallo
-    //     configurato, scatta comunque (copre eventuali falsi negativi vision).
+    // Strategia ibrida (vision primary + timer fallback):
+    //   - Se state.skillsReady[idx] = true E timer > metà intervallo → scatta subito
+    //   - Se timer >= intervallo completo → scatta comunque (fallback)
     //
-    // Con PULL MODE: scatta solo se mobCount >= pullTargetCount.
-    // Joystick attivo: riprova dopo 300ms senza perdere il ciclo.
+    // Poll quando non pronta: 900-1100ms con jitter (era 500ms, troppo aggressivo).
+    // Il jitter ±100ms rende il pattern meno rilevabile.
+    //
+    // IMPORTANTE: le skill vengono sparate SOLO da questo loop, NON da farmLoop,
+    // per evitare double-tap e sovraccarico di gesture sull'accessibilità.
     // ═══════════════════════════════════════════════════════════════════════════
     private val skillLoops: Array<Runnable> = Array(5) { idx ->
         object : Runnable {
@@ -306,32 +303,38 @@ class BotAccessibilityService : AccessibilityService() {
             override fun run() {
                 if (!BotState.skillsRunning) return
                 val slots    = BotState.skillSlots
-                val interval = BotState.skillIntervals.getOrElse(idx) { 5000L }.coerceAtLeast(500L)
+                val interval = BotState.skillIntervals.getOrElse(idx) { 5000L }.coerceAtLeast(1000L)
 
-                if (idx >= slots.size) { handler.postDelayed(this, interval); return }
-                if (BotState.joystickActive) { handler.postDelayed(this, 300L); return }
+                if (idx >= slots.size) {
+                    handler.postDelayed(this, interval + (Math.random() * 200).toLong())
+                    return
+                }
+                if (BotState.joystickActive) { handler.postDelayed(this, 500L); return }
 
                 val state = BotState.lastGameState
                 val now   = System.currentTimeMillis()
+                val elapsed = now - lastFiredAt
 
-                // Pronta da visione O timer scaduto (fallback)
-                val visionReady  = idx < state.skillsReady.size && state.skillsReady[idx]
-                val timerElapsed = (now - lastFiredAt) >= interval
+                // Vision dice pronta E almeno metà del cooldown è passato → early fire
+                val visionReady  = elapsed > interval / 2 &&
+                                   idx < state.skillsReady.size && state.skillsReady[idx]
+                // Timer pieno scaduto → fallback garantito
+                val timerElapsed = elapsed >= interval
 
                 val canFire = (visionReady || timerElapsed) && when {
                     BotState.pullMode -> state.mobCount >= BotState.pullTargetCount
-                    else              -> true  // fire sempre (come il vecchio sistema)
+                    else              -> true
                 }
 
                 if (canFire) {
                     val (sx, sy) = slots[idx]
                     tapSingle(sx, sy, SKILL_TAP_MS)
                     lastFiredAt = now
-                    // Dopo il fire: aspetta almeno 1s prima del prossimo check
-                    handler.postDelayed(this, interval.coerceAtLeast(1000L))
+                    // Aspetta il prossimo intervallo completo + piccolo jitter
+                    handler.postDelayed(this, interval + (Math.random() * 150).toLong())
                 } else {
-                    // Non pronta: controlla di nuovo in 500ms (polling veloce vision)
-                    handler.postDelayed(this, 500L)
+                    // Non pronta: controlla in ~1s con jitter ±100ms
+                    handler.postDelayed(this, 900L + (Math.random() * 200).toLong())
                 }
             }
         }
