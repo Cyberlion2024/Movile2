@@ -61,19 +61,19 @@ class BotAccessibilityService : AccessibilityService() {
     private val farmLoop: Runnable = object : Runnable {
         override fun run() {
             if (!BotState.attackRunning) return
-            if (BotState.joystickActive) {
-                handler.postDelayed(this, 200L)
-                return
-            }
+            if (BotState.joystickActive) { handler.postDelayed(this, 200L); return }
+            // Pausa umana: il bot si "ferma" periodicamente come un vero giocatore
+            if (isHumanBreak()) { handler.postDelayed(this, 400L); return }
 
             val state  = BotState.lastGameState
             val action = AIPlayerEngine.decide(state)
             val joyPos = BotState.joystickPos
             val atkPos = BotState.attackPos
 
+            val hpLog = if (state.hpPercent >= GameStateAnalyzer.HP_NOT_DETECTED) "N/A"
+                        else "${"%.0f".format(state.hpPercent * 100)}%"
             BotLogger.d("BotAtk", "[${AIPlayerEngine.currentState}] ${action::class.simpleName}" +
-                " hp=${"%.0f".format(state.hpPercent * 100)}% mobs=${state.mobCount}" +
-                " melee=${state.nearestMobInMeleeRange}")
+                " hp=$hpLog mobs=${state.mobCount} melee=${state.nearestMobInMeleeRange}")
 
             // Nota: `val self = this` cattura il Runnable esterno prima di entrare
             // nei lambda, dove `this` non punta più all'oggetto esterno.
@@ -100,27 +100,20 @@ class BotAccessibilityService : AccessibilityService() {
                 }
 
                 // ATTACK: mob in melee → tappa attacco (ATTACK / PULL_HOLD)
+                // Jitter 180-230ms: evita pattern regolare rilevabile dall'anti-cheat
                 AIPlayerEngine.AIAction.Attack -> {
                     if (atkPos != null) tapAttack()
-                    handler.postDelayed(self, 200L)
+                    handler.postDelayed(self, 180L + (Math.random() * 50).toLong())
                 }
 
-                // USE_SKILL: AI ha rilevato skill pronta e mob presenti
-                is AIPlayerEngine.AIAction.UseSkill -> {
-                    val slots = BotState.skillSlots
-                    if (action.slot < slots.size) {
-                        val (sx, sy) = slots[action.slot]
-                        tapSingle(sx, sy, SKILL_TAP_MS)
-                    }
-                    handler.postDelayed(self, 100L)
-                }
-
-                // USE_POTION: HP sotto soglia — scatta potionLoop subito
+                // USE_SKILL / USE_POTION: già gestiti da skillLoops e potionLoop
+                // indipendentemente. farmLoop NON duplica queste azioni per evitare
+                // double-tap e per mantenere il ritmo di movimento fluido.
+                // Fallback: se l'AI lo chiede ma siamo nel ciclo di attacco,
+                // comportarsi come Attack (se mob in range) o Wait.
+                is AIPlayerEngine.AIAction.UseSkill,
                 AIPlayerEngine.AIAction.UsePotion -> {
-                    if (BotState.potionRunning) {
-                        handler.removeCallbacks(potionLoop)
-                        handler.post(potionLoop)
-                    }
+                    if (atkPos != null && state.mobCount > 0) tapAttack()
                     handler.postDelayed(self, 200L)
                 }
 
@@ -141,22 +134,84 @@ class BotAccessibilityService : AccessibilityService() {
         }
     }
 
+    // ═══════════════════════════════════════════════════════════════════════════
+    // HUMANIZER — simulazione comportamento umano per evitare anti-cheat
+    //
+    // L'anti-cheat rileva bot tramite:
+    //   1. Timing perfettamente regolare (meccanico vs umano)
+    //   2. Traiettorie rette (il pollice umano descrive archi, non linee)
+    //   3. Posizioni identiche ripetute all'infinito (±0px)
+    //   4. Nessuna pausa naturale (un umano si distrae, guarda lo schermo ecc.)
+    //   5. Direzione di movimento sempre esatta (0°, 60°, 120° ecc.)
+    //
+    // Contromisure implementate:
+    //   A. doJoystickSwipe: traiettoria quadratica (bezier) + jitter direzione ±6°
+    //   B. tapAttack/humanTap: jitter posizione ±4px + durata ±15%
+    //   C. humanBreakLoop: pausa 3-6s ogni 65-130s
+    //   D. Tutti i timer: jitter già presente nei loop
+    // ═══════════════════════════════════════════════════════════════════════════
+    @Volatile private var humanBreakUntil = 0L
+
+    private val humanBreakLoop = object : Runnable {
+        override fun run() {
+            if (!BotState.attackRunning && !BotState.skillsRunning) return
+            // Pausa 3-6s: simula distrazione umana (guarda messaggio, aggiusta posizione ecc.)
+            val breakMs = 3_000L + (Math.random() * 3_000).toLong()
+            humanBreakUntil = System.currentTimeMillis() + breakMs
+            BotLogger.d("BotHuman", "Pausa umana: ${breakMs}ms")
+            // Prossima pausa tra 65-130s
+            val nextMs = 65_000L + (Math.random() * 65_000).toLong()
+            handler.postDelayed(this, nextMs + breakMs)
+        }
+    }
+
+    private fun isHumanBreak() = System.currentTimeMillis() < humanBreakUntil
+
+    /** Tap con jitter posizione ±4px e durata ±15% */
+    private fun humanTap(x: Float, y: Float, baseDurationMs: Long) {
+        val jx = ((Math.random() * 8) - 4).toFloat()
+        val jy = ((Math.random() * 8) - 4).toFloat()
+        val dur = (baseDurationMs * (0.87 + Math.random() * 0.26)).toLong().coerceAtLeast(20L)
+        tapSingle(x + jx, y + jy, dur)
+    }
+
     private fun doJoystickSwipe(pos: Pair<Float, Float>, dirX: Float, dirY: Float,
                                  durationMs: Long, onComplete: () -> Unit) {
         val r = if (BotState.joystickRadius > 0f) BotState.joystickRadius * 0.75f
                 else resources.displayMetrics.widthPixels * 0.09f
-        
-        val endX = pos.first + dirX * r
-        val endY = pos.second + dirY * r
-        
+
+        // Jitter direzione ±6°: il pollice umano non è mai perfettamente preciso
+        val baseAngle = Math.atan2(dirY.toDouble(), dirX.toDouble())
+        val angleJitter = Math.toRadians((Math.random() * 12.0) - 6.0)
+        val finalAngle = baseAngle + angleJitter
+        val jDirX = Math.cos(finalAngle).toFloat()
+        val jDirY = Math.sin(finalAngle).toFloat()
+
+        // Jitter posizione di partenza ±3px
+        val sJx = ((Math.random() * 6) - 3).toFloat()
+        val sJy = ((Math.random() * 6) - 3).toFloat()
+
+        val startX = pos.first  + sJx
+        val startY = pos.second + sJy
+        val endX   = pos.first  + jDirX * r + ((Math.random() * 8) - 4).toFloat()
+        val endY   = pos.second + jDirY * r + ((Math.random() * 8) - 4).toFloat()
+
+        // Punto di controllo bezier: perpendicolare alla direzione ±8px
+        // Riproduce l'arco naturale del pollice che scivola sul vetro
+        val midX = (startX + endX) / 2f + ((Math.random() * 16) - 8).toFloat()
+        val midY = (startY + endY) / 2f + ((Math.random() * 16) - 8).toFloat()
+
+        // Durata ±15%
+        val dur = (durationMs * (0.87 + Math.random() * 0.26)).toLong().coerceAtLeast(100L)
+
         try {
             dispatchGesture(
                 GestureDescription.Builder()
                     .addStroke(GestureDescription.StrokeDescription(
                         Path().apply {
-                            moveTo(pos.first, pos.second)
-                            lineTo(endX, endY)
-                        }, 0L, durationMs))
+                            moveTo(startX, startY)
+                            quadTo(midX, midY, endX, endY)   // curva bezier, non linea retta
+                        }, 0L, dur))
                     .build(),
                 object : GestureResultCallback() {
                     override fun onCompleted(g: GestureDescription?) { onComplete() }
@@ -171,11 +226,15 @@ class BotAccessibilityService : AccessibilityService() {
 
     private fun tapAttack() {
         val pos = BotState.attackPos ?: return
+        // Jitter ±4px + durata ±15%: ogni tap sembra leggermente diverso
+        val jx  = ((Math.random() * 8) - 4).toFloat()
+        val jy  = ((Math.random() * 8) - 4).toFloat()
+        val dur = (ATTACK_TAP_MS * (0.87 + Math.random() * 0.26)).toLong().coerceAtLeast(20L)
         try {
             dispatchGesture(
                 GestureDescription.Builder()
                     .addStroke(GestureDescription.StrokeDescription(
-                        Path().apply { moveTo(pos.first, pos.second) }, 0L, ATTACK_TAP_MS))
+                        Path().apply { moveTo(pos.first + jx, pos.second + jy) }, 0L, dur))
                     .build(), null, null)
         } catch (_: Exception) {}
     }
@@ -195,7 +254,9 @@ class BotAccessibilityService : AccessibilityService() {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !BotState.joystickActive) {
                 doGameStateScan()
             }
-            handler.postDelayed(this, 200L)
+            // 430-480ms: più lento del 200ms originale, riduce carico bitmap e CPU
+            // Il jitter ±25ms rende il pattern meno prevedibile per l'anti-cheat
+            handler.postDelayed(this, 430L + (Math.random() * 50).toLong())
         }
     }
 
@@ -253,7 +314,10 @@ class BotAccessibilityService : AccessibilityService() {
 
         override fun run() {
             if (!BotState.potionRunning) return
-            if (BotState.joystickActive) { handler.postDelayed(this, 500L); return }
+            if (BotState.joystickActive || isHumanBreak()) {
+                handler.postDelayed(this, 800L + (Math.random() * 200).toLong())
+                return
+            }
 
             val now   = System.currentTimeMillis()
             val hp    = BotState.lastGameState.hpPercent
@@ -271,7 +335,7 @@ class BotAccessibilityService : AccessibilityService() {
                 for ((px, py) in slots) {
                     handler.postDelayed({
                         if (!BotState.potionRunning || BotState.joystickActive) return@postDelayed
-                        tapSingle(px, py, POTION_TAP_MS)
+                        humanTap(px, py, POTION_TAP_MS)   // jitter ±4px
                         if (BotState.attackRunning) {
                             handler.removeCallbacks(farmLoop)
                             handler.removeCallbacks(farmLoopSafety)
@@ -283,22 +347,23 @@ class BotAccessibilityService : AccessibilityService() {
                 nextUseAt = now + interval + delay
             }
 
-            // Poll ogni 500ms: risponde rapidamente sia a HP bassa che al timer
-            handler.postDelayed(this, 500L)
+            // Poll ogni 800-1000ms con jitter: bilanciamento tra reattività HP e carico CPU
+            handler.postDelayed(this, 800L + (Math.random() * 200).toLong())
         }
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // LOOP ABILITÀ — 5 timer vision-driven con fallback a timer.
     //
-    // Strategia ibrida:
-    //   - Primario: controlla state.skillsReady[idx] (analisi visiva cooldown)
-    //     ogni 500ms. Se ready → scatta subito.
-    //   - Fallback: se il tempo trascorso dall'ultimo sparo supera l'intervallo
-    //     configurato, scatta comunque (copre eventuali falsi negativi vision).
+    // Strategia ibrida (vision primary + timer fallback):
+    //   - Se state.skillsReady[idx] = true E timer > metà intervallo → scatta subito
+    //   - Se timer >= intervallo completo → scatta comunque (fallback)
     //
-    // Con PULL MODE: scatta solo se mobCount >= pullTargetCount.
-    // Joystick attivo: riprova dopo 300ms senza perdere il ciclo.
+    // Poll quando non pronta: 900-1100ms con jitter (era 500ms, troppo aggressivo).
+    // Il jitter ±100ms rende il pattern meno rilevabile.
+    //
+    // IMPORTANTE: le skill vengono sparate SOLO da questo loop, NON da farmLoop,
+    // per evitare double-tap e sovraccarico di gesture sull'accessibilità.
     // ═══════════════════════════════════════════════════════════════════════════
     private val skillLoops: Array<Runnable> = Array(5) { idx ->
         object : Runnable {
@@ -306,32 +371,41 @@ class BotAccessibilityService : AccessibilityService() {
             override fun run() {
                 if (!BotState.skillsRunning) return
                 val slots    = BotState.skillSlots
-                val interval = BotState.skillIntervals.getOrElse(idx) { 5000L }.coerceAtLeast(500L)
+                val interval = BotState.skillIntervals.getOrElse(idx) { 5000L }.coerceAtLeast(1000L)
 
-                if (idx >= slots.size) { handler.postDelayed(this, interval); return }
-                if (BotState.joystickActive) { handler.postDelayed(this, 300L); return }
+                if (idx >= slots.size) {
+                    handler.postDelayed(this, interval + (Math.random() * 200).toLong())
+                    return
+                }
+                if (BotState.joystickActive || isHumanBreak()) {
+                    handler.postDelayed(this, 600L + (Math.random() * 300).toLong())
+                    return
+                }
 
                 val state = BotState.lastGameState
                 val now   = System.currentTimeMillis()
+                val elapsed = now - lastFiredAt
 
-                // Pronta da visione O timer scaduto (fallback)
-                val visionReady  = idx < state.skillsReady.size && state.skillsReady[idx]
-                val timerElapsed = (now - lastFiredAt) >= interval
+                // Vision dice pronta E almeno metà del cooldown è passato → early fire
+                val visionReady  = elapsed > interval / 2 &&
+                                   idx < state.skillsReady.size && state.skillsReady[idx]
+                // Timer pieno scaduto → fallback garantito
+                val timerElapsed = elapsed >= interval
 
                 val canFire = (visionReady || timerElapsed) && when {
                     BotState.pullMode -> state.mobCount >= BotState.pullTargetCount
-                    else              -> true  // fire sempre (come il vecchio sistema)
+                    else              -> true
                 }
 
                 if (canFire) {
                     val (sx, sy) = slots[idx]
-                    tapSingle(sx, sy, SKILL_TAP_MS)
+                    humanTap(sx, sy, SKILL_TAP_MS)   // jitter ±4px + durata ±15%
                     lastFiredAt = now
-                    // Dopo il fire: aspetta almeno 1s prima del prossimo check
-                    handler.postDelayed(this, interval.coerceAtLeast(1000L))
+                    // Aspetta il prossimo intervallo completo + piccolo jitter
+                    handler.postDelayed(this, interval + (Math.random() * 150).toLong())
                 } else {
-                    // Non pronta: controlla di nuovo in 500ms (polling veloce vision)
-                    handler.postDelayed(this, 500L)
+                    // Non pronta: controlla in ~1s con jitter ±100ms
+                    handler.postDelayed(this, 900L + (Math.random() * 200).toLong())
                 }
             }
         }
@@ -602,17 +676,22 @@ class BotAccessibilityService : AccessibilityService() {
         BotState.mobDirX          = 0f; BotState.mobDirY = -1f
         BotState.lastGameState    = GameState.EMPTY
         AIPlayerEngine.reset()
-        GameStateAnalyzer.resetCalibration()   // re-calibra la barra HP a ogni avvio
-        // gameStateScanner parte subito (200ms). farmLoop parte dopo 400ms così il
-        // primo scan è già pronto prima del primo ciclo di decisione dell'AI.
+        GameStateAnalyzer.resetCalibration()
+        humanBreakUntil = 0L
+        // Prima pausa umana tra 80-145s dall'avvio (non subito)
+        val firstBreak = 80_000L + (Math.random() * 65_000).toLong()
+        handler.removeCallbacks(humanBreakLoop)
+        handler.postDelayed(humanBreakLoop, firstBreak)
         handler.post(gameStateScanner)
-        handler.postDelayed(farmLoop, 400L)
-        BotLogger.d("BotAtk", "AI v1: gameStateScanner + farmLoop avviati")
+        handler.postDelayed(farmLoop, 400L + (Math.random() * 200).toLong())
+        BotLogger.d("BotAtk", "AI v1 avviato — prima pausa umana tra ${firstBreak/1000}s")
     }
 
     fun stopAttack() {
         BotState.attackRunning = false
         BotState.mobNearby     = false
+        humanBreakUntil = 0L
+        handler.removeCallbacks(humanBreakLoop)
         handler.removeCallbacks(farmLoop)
         handler.removeCallbacks(farmLoopSafety)
         if (!BotState.pullMode) {
@@ -644,10 +723,11 @@ class BotAccessibilityService : AccessibilityService() {
         if (BotState.skillSlots.isEmpty()) return
         if (BotState.skillsRunning) stopSkills()
         BotState.skillsRunning = true
-        // Primo check a 500ms: la vision rileva subito se la skill è pronta.
-        // Il loop poi gestisce autonomamente il timing vision+fallback timer.
+        // Scaglionato: ogni skill parte in un momento diverso (non tutte a 500ms)
+        // per evitare raffiche sincronizzate rilevabili dall'anti-cheat.
         BotState.skillSlots.forEachIndexed { idx, _ ->
-            handler.postDelayed(skillLoops[idx], 500L)
+            val stagger = 600L + (idx * 300L) + (Math.random() * 400).toLong()
+            handler.postDelayed(skillLoops[idx], stagger)
         }
     }
 
