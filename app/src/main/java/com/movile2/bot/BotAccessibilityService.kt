@@ -99,11 +99,27 @@ class BotAccessibilityService : AccessibilityService() {
                     handler.postDelayed(farmLoopSafety, 600L)
                 }
 
-                // ATTACK: mob in melee → tappa attacco (ATTACK / PULL_HOLD)
-                // Jitter 180-230ms: evita pattern regolare rilevabile dall'anti-cheat
+                // ATTACK: mob in melee → attacca.
+                // Se Walk è ON: swipe corto verso il mob + attacco nel callback.
+                //   Il personaggio si "sposta" verso il mob invece di stare fermo.
+                //   Comportamento umano: un giocatore non è mai completamente fermo.
+                // Se Walk è OFF: tap attacco puro (vecchio comportamento).
                 AIPlayerEngine.AIAction.Attack -> {
-                    if (atkPos != null) tapAttack()
-                    handler.postDelayed(self, 180L + (Math.random() * 50).toLong())
+                    if (BotState.walkRunning && joyPos != null) {
+                        // Swipe breve verso il mob (o direzione corrente se nessun mob)
+                        val dir = if (state.mobCount > 0) state.nearestMobDir else (0f to -1f)
+                        handler.removeCallbacks(farmLoopSafety)
+                        doJoystickSwipe(joyPos, dir.first, dir.second, 160L) {
+                            handler.removeCallbacks(farmLoopSafety)
+                            if (!BotState.attackRunning || BotState.joystickActive) return@doJoystickSwipe
+                            if (atkPos != null) tapAttack()
+                            handler.postDelayed(self, 60L)
+                        }
+                        handler.postDelayed(farmLoopSafety, 600L)
+                    } else {
+                        if (atkPos != null) tapAttack()
+                        handler.postDelayed(self, 180L + (Math.random() * 50).toLong())
+                    }
                 }
 
                 // USE_SKILL / USE_POTION: già gestiti da skillLoops e potionLoop
@@ -113,8 +129,19 @@ class BotAccessibilityService : AccessibilityService() {
                 // comportarsi come Attack (se mob in range) o Wait.
                 is AIPlayerEngine.AIAction.UseSkill,
                 AIPlayerEngine.AIAction.UsePotion -> {
-                    if (atkPos != null && state.mobCount > 0) tapAttack()
-                    handler.postDelayed(self, 200L)
+                    if (BotState.walkRunning && joyPos != null && state.mobCount > 0) {
+                        val dir = state.nearestMobDir
+                        handler.removeCallbacks(farmLoopSafety)
+                        doJoystickSwipe(joyPos, dir.first, dir.second, 160L) {
+                            handler.removeCallbacks(farmLoopSafety)
+                            if (atkPos != null && BotState.attackRunning) tapAttack()
+                            handler.postDelayed(self, 60L)
+                        }
+                        handler.postDelayed(farmLoopSafety, 600L)
+                    } else {
+                        if (atkPos != null && state.mobCount > 0) tapAttack()
+                        handler.postDelayed(self, 200L)
+                    }
                 }
 
                 // WAIT: nessuna azione utile in questo ciclo
