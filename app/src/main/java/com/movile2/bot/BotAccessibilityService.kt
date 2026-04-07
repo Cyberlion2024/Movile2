@@ -588,7 +588,9 @@ class BotAccessibilityService : AccessibilityService() {
             handler.removeCallbacks(lootLoop); handler.post(lootLoop)
         }
         if (BotState.walkRunning && !BotState.attackRunning) {
-            // Walk standalone (senza attack): usa dispatchWalk
+            // Walk standalone: riavvia scanner e dispatcha
+            handler.removeCallbacks(gameStateScanner)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) handler.post(gameStateScanner)
             dispatchWalk()
         }
         if (BotState.pullMode && !BotState.attackRunning) {
@@ -612,47 +614,77 @@ class BotAccessibilityService : AccessibilityService() {
     // ═══════════════════════════════════════════════════════════════════════════
     // CAMMINATA STANDALONE — solo quando Walk è ON senza Attack.
     //
-    // FIX freeze v14: il vecchio sistema usava gesture da 400ms con callback
-    // immediato. Su molti dispositivi (MIUI, OneUI) questo loop ininterrotto di
-    // gesture lunghe satura la coda input del sistema → freeze che richiede
-    // riavvio del telefono.
+    // BUG v14-v18 (FIXATO):
+    //   1. Direzione fissa (0,-1 = sempre su) → non insegue mob, non esplora
+    //   2. Walk + Attack: farmLoop E dispatchWalk sparavano gesture simultanee
+    //   3. Scanner mai avviato per walk standalone → AI senza dati
     //
-    // Soluzione: gesture più brevi (150ms) + guard flag `walkPending` per
-    // impedire doppio dispatch (callback + timer simultanei). Il personaggio
-    // si muove identicamente — la frequenza compensa la durata minore.
+    // SOLUZIONE v19:
+    //   1. dispatchWalk usa AIPlayerEngine.decide() per direzione AI
+    //      (SEARCH ruota ogni 2s, APPROACH va verso mob, ecc.)
+    //   2. Se attackRunning=true, farmLoop gestisce il movimento → return
+    //   3. startWalk() avvia gameStateScanner se non già attivo
     // ═══════════════════════════════════════════════════════════════════════════
     @Volatile private var walkPending = false
 
     private val walkCallback = object : GestureResultCallback() {
         override fun onCompleted(g: GestureDescription?) {
             walkPending = false
-            if (BotState.walkRunning) handler.postDelayed({ dispatchWalk() }, 30L)
+            if (BotState.walkRunning && !BotState.attackRunning)
+                handler.postDelayed({ dispatchWalk() }, 30L)
         }
         override fun onCancelled(g: GestureDescription?) {
             walkPending = false
-            if (BotState.walkRunning) handler.postDelayed({ dispatchWalk() }, 100L)
+            if (BotState.walkRunning && !BotState.attackRunning)
+                handler.postDelayed({ dispatchWalk() }, 100L)
         }
     }
 
     private fun dispatchWalk() {
         if (!BotState.walkRunning || BotState.joystickActive || walkPending) {
-            if (BotState.walkRunning && !walkPending && !BotState.joystickActive)
+            if (BotState.walkRunning && !walkPending && !BotState.joystickActive
+                && !BotState.attackRunning)
                 handler.postDelayed({ dispatchWalk() }, 200L)
             return
         }
+        // farmLoop gestisce il movimento via AI quando attack è attivo
+        if (BotState.attackRunning) return
+
         val pos = BotState.joystickPos ?: return
         val r = if (BotState.joystickRadius > 0f) BotState.joystickRadius * 0.65f
                 else resources.displayMetrics.widthPixels * 0.07f
-        // Walk standalone: sempre in avanti (0, -1). Non usa mobDir — quella è per continuousWalk.
-        val endX = pos.first
-        val endY = pos.second - r
+
+        // Direzione AI: SEARCH ruota ogni 2s, APPROACH va verso mob
+        val state  = BotState.lastGameState
+        val action = AIPlayerEngine.decide(state)
+        val rawDirX: Float; val rawDirY: Float
+        when (action) {
+            is AIPlayerEngine.AIAction.Move -> { rawDirX = action.dirX; rawDirY = action.dirY }
+            else -> { rawDirX = 0f; rawDirY = -1f }   // fallback: avanti
+        }
+
+        // Jitter ±6° direzione (comportamento umano)
+        val baseAngle  = Math.atan2(rawDirY.toDouble(), rawDirX.toDouble())
+        val finalAngle = baseAngle + Math.toRadians((Math.random() * 12.0) - 6.0)
+        val jDirX = Math.cos(finalAngle).toFloat()
+        val jDirY = Math.sin(finalAngle).toFloat()
+
+        val startX = pos.first  + ((Math.random() * 6) - 3).toFloat()
+        val startY = pos.second + ((Math.random() * 6) - 3).toFloat()
+        val endX   = pos.first  + jDirX * r + ((Math.random() * 6) - 3).toFloat()
+        val endY   = pos.second + jDirY * r + ((Math.random() * 6) - 3).toFloat()
+        val midX   = (startX + endX) / 2f + ((Math.random() * 14) - 7).toFloat()
+        val midY   = (startY + endY) / 2f + ((Math.random() * 14) - 7).toFloat()
+
         walkPending = true
         try {
             val ok = dispatchGesture(
                 GestureDescription.Builder()
                     .addStroke(GestureDescription.StrokeDescription(
-                        Path().apply { moveTo(pos.first, pos.second); lineTo(endX, endY) },
-                        0L, 150L))   // 150ms: abbastanza per muovere il personaggio senza freeze
+                        Path().apply {
+                            moveTo(startX, startY)
+                            quadTo(midX, midY, endX, endY)   // curva bezier, non linea retta
+                        }, 0L, 150L))
                     .build(), walkCallback, handler)
             if (!ok) {
                 walkPending = false
@@ -758,12 +790,23 @@ class BotAccessibilityService : AccessibilityService() {
     fun startWalk() {
         if (BotState.joystickPos == null || BotState.walkRunning) return
         BotState.walkRunning = true
+        if (!BotState.attackRunning) {
+            // Walk standalone: avvia scanner e AI (farmLoop non gira senza attack)
+            AIPlayerEngine.reset()
+            GameStateAnalyzer.resetCalibration()
+            handler.removeCallbacks(gameStateScanner)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) handler.post(gameStateScanner)
+        }
         dispatchWalk()
     }
 
     fun stopWalk() {
         BotState.walkRunning = false
         walkPending = false
+        // Ferma lo scanner se non serve ad altri loop
+        if (!BotState.attackRunning && !BotState.pullMode) {
+            handler.removeCallbacks(gameStateScanner)
+        }
     }
 
     fun startPullMode() {
