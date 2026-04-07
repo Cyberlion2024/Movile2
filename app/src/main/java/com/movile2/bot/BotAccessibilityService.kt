@@ -87,13 +87,10 @@ class BotAccessibilityService : AccessibilityService() {
                     doJoystickSwipe(joyPos, action.dirX, action.dirY, action.durationMs) {
                         handler.removeCallbacks(farmLoopSafety)
                         if (!BotState.attackRunning || BotState.joystickActive) return@doJoystickSwipe
-                        // Dopo ogni movimento: attacca se ci sono mob, poi riprendi
-                        if (state.mobCount > 0 && atkPos != null) {
-                            tapAttack()
-                            handler.postDelayed(self, 55L)
-                        } else {
-                            handler.postDelayed(self, 20L)
-                        }
+                        // Durante l'avvicinamento NON si attacca: si cammina verso il mob
+                        // e si attacca solo quando si è in melee range (stato ATTACK).
+                        // Attaccare mentre si cammina è un comportamento tipico da bot.
+                        handler.postDelayed(self, 20L)
                     }
                     // Safety: se il callback non arriva, riprendi entro 600ms
                     handler.postDelayed(farmLoopSafety, 600L)
